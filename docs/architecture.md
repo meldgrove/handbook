@@ -114,8 +114,10 @@ permissions, then call it inside a transaction with a page locked by
 `lockPage`:
 
 - `saveLivePage`: canonical form; when the page changed since
-  `baseRevision`, a three-way merge (`packages/shared/src/merge.ts`) combines
-  both changes; overlapping changes throw `PageConflictError` (409
+  `baseRevision`, a three-way merge (`packages/shared/src/merge.ts`, diff3
+  over a Myers line diff with a work limit: past it, all lines between the
+  first and the last change count as changed) combines both changes;
+  overlapping changes throw `PageConflictError` (409
   `page_changed`, with the current file and a merged text with conflict
   blocks). Saving the same file again changes nothing.
 - `createLivePage`, `moveLivePage` (with sub-pages; old paths redirect; each

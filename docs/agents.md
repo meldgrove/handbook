@@ -62,6 +62,8 @@ Pages are named `<space>/<path>`, e.g. `it/onboarding/laptop`.
 3. Change pages with `edit_page` (copy `old_text` exactly from `read_page`),
    `write_page`, `create_page`, `move_page`, `delete_page`. The frontmatter
    must fit the space (`get_space_schema`); a tool error says what to fix.
+   One `edit_page` call replaces at most 100,000 places, and a page has at
+   most 500,000 characters.
 4. `submit_change_set`. An editor reviews the diffs, comments, asks for
    changes or merges. `get_change_set` shows the comments; answer with
    `comment_on_change_set`, change pages again, and submit again.
