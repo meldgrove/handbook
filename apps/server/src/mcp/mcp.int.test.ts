@@ -62,6 +62,15 @@ describe("MCP server", () => {
     );
     expect(missing.headers.get("access-control-allow-origin")).toBe("*");
     expect((await rpc("kn_pat_not-a-real-token", "initialize")).status).toBe(401);
+    // Bearer tokens only: a signed-in browser's session does not count.
+    const { reader } = await setup();
+    const withSession = await request("POST", "/mcp", {
+      userId: reader.id,
+      body: { jsonrpc: "2.0", id: ++sequence, method: "tools/list", params: {} },
+      headers: MCP_HEADERS,
+    });
+    expect(withSession.status).toBe(401);
+    expect(withSession.headers.get("www-authenticate")).toBe(missing.headers.get("www-authenticate"));
     expect((await request("GET", "/mcp", { headers: MCP_HEADERS })).status).toBe(405);
   });
 

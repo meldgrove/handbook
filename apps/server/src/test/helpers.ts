@@ -17,7 +17,10 @@ export async function resetDatabase() {
   `);
 }
 
-export async function createUser(options: { email?: string; name?: string; isAdmin?: boolean } = {}) {
+/** A person who signed in just now (`lastSignInAt`), unless told otherwise. */
+export async function createUser(
+  options: { email?: string; name?: string; isAdmin?: boolean; lastSignInAt?: Date | null } = {},
+) {
   const email = options.email ?? `person-${Math.random().toString(36).slice(2, 8)}@example.org`;
   const [user] = await getDb()
     .insert(users)
@@ -26,6 +29,7 @@ export async function createUser(options: { email?: string; name?: string; isAdm
       name: options.name ?? email.split("@")[0]!,
       isAdmin: options.isAdmin ?? false,
       adminSource: options.isAdmin ? "app" : null,
+      lastSignInAt: options.lastSignInAt === undefined ? new Date() : options.lastSignInAt,
     })
     .returning();
   return user!;

@@ -35,3 +35,16 @@ export async function ensureEnvironmentAdmins(db: Db) {
 export function isEnvironmentAdmin(email: string): boolean {
   return config().adminEmails.includes(email.toLowerCase());
 }
+
+/** Startup warnings about sign-in settings that let more people in than intended. */
+export function warnAboutOpenSignIn() {
+  const settings = config();
+  if (settings.allowedEmailDomains.length === 0 && settings.accessGroups.length === 0) {
+    logger.warn(
+      "everyone the provider lets in may sign in: set ALLOWED_EMAIL_DOMAINS or ACCESS_GROUPS to limit it",
+    );
+  }
+  if (!settings.OIDC_REQUIRE_EMAIL_VERIFIED) {
+    logger.warn("OIDC_REQUIRE_EMAIL_VERIFIED is off: email addresses the provider has not verified sign in");
+  }
+}

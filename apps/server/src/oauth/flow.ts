@@ -4,7 +4,7 @@ import type { OauthRequest } from "@knowledge/shared/api/tokens";
 import { config } from "../config";
 import type { Db, DbOrTx } from "../db/client";
 import { credentials, oauthClients, oauthGrants, oauthRequests, users } from "../db/schema";
-import { hashToken, issueCredential } from "../auth/credentials";
+import { agentAccess, hashToken, issueCredential } from "../auth/credentials";
 import type { UserPrincipal } from "../auth/principal";
 import { conflict, notFound } from "../http/errors";
 import { logger } from "../logger";
@@ -257,13 +257,13 @@ export async function revokeGrantTokens(tx: DbOrTx, grantId: string, options: { 
 async function activeGrant(tx: DbOrTx, grantId: string | null, clientId: string) {
   if (!grantId) return null;
   const [row] = await tx
-    .select({ grant: oauthGrants, blockedAt: users.blockedAt })
+    .select({ grant: oauthGrants, blockedAt: users.blockedAt, lastSignInAt: users.lastSignInAt })
     .from(oauthGrants)
     .innerJoin(users, eq(users.id, oauthGrants.userId))
     .where(
       and(eq(oauthGrants.id, grantId), eq(oauthGrants.clientId, clientId), isNull(oauthGrants.revokedAt)),
     );
-  if (!row || row.blockedAt) return null;
+  if (!row || agentAccess(row) !== "allowed") return null;
   return row.grant;
 }
 

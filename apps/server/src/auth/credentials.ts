@@ -1,7 +1,9 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { config } from "../config";
 import type { DbOrTx } from "../db/client";
 import { credentials, oauthClients, oauthGrants, users } from "../db/schema";
+import { AppError } from "../http/errors";
 import type { Principal } from "./principal";
 
 /**
@@ -72,9 +74,52 @@ export async function issueCredential(
 const LAST_USED_RESOLUTION_MS = 60_000;
 
 /**
+ * Whether a person's agents (personal tokens, connected apps) may act for
+ * them: not when the person is blocked, nor when they have not signed in
+ * through the provider for AGENT_SIGN_IN_DAYS. So agents stop some days
+ * after the provider stops letting the person in. Every place that accepts
+ * an agent's credential asks this.
+ */
+export function agentAccess(
+  person: { blockedAt: Date | null; lastSignInAt: Date | null },
+  now = new Date(),
+): "allowed" | "blocked" | "sign_in_needed" {
+  if (person.blockedAt) return "blocked";
+  const days = config().AGENT_SIGN_IN_DAYS;
+  if (days === 0) return "allowed";
+  if (!person.lastSignInAt || now.getTime() - person.lastSignInAt.getTime() > days * 86_400_000) {
+    return "sign_in_needed";
+  }
+  return "allowed";
+}
+
+/** The 401 for an agent whose person has to sign in again. */
+export function signInNeeded() {
+  const { APP_NAME, AGENT_SIGN_IN_DAYS } = config();
+  return new AppError(
+    401,
+    "sign_in_needed",
+    `Sign in to ${APP_NAME} again: agents work for ${AGENT_SIGN_IN_DAYS} days after your last sign-in.`,
+  );
+}
+
+/** Ends all of a person's personal tokens and connected apps for good (blocking). */
+export async function revokeAgentAccess(tx: DbOrTx, userId: string) {
+  await tx
+    .update(credentials)
+    .set({ revokedAt: sql`now()` })
+    .where(and(eq(credentials.userId, userId), isNull(credentials.revokedAt)));
+  await tx
+    .update(oauthGrants)
+    .set({ revokedAt: sql`now()` })
+    .where(and(eq(oauthGrants.userId, userId), isNull(oauthGrants.revokedAt)));
+}
+
+/**
  * The principal of a bearer token (`Authorization: Bearer <token>`), or null
- * when it is unknown, expired, revoked, or its person is blocked. Refresh
- * tokens are not accepted here.
+ * when it is unknown, expired, revoked, or its person is blocked. Throws
+ * `signInNeeded()` when its person has to sign in again (`agentAccess`).
+ * Refresh tokens are not accepted here.
  */
 export async function resolveBearer(db: DbOrTx, token: string): Promise<Principal | null> {
   const kind = (Object.keys(CREDENTIAL_PREFIXES) as CredentialKind[]).find((candidate) =>
@@ -96,6 +141,7 @@ export async function resolveBearer(db: DbOrTx, token: string): Promise<Principa
         image: users.image,
         isAdmin: users.isAdmin,
         blockedAt: users.blockedAt,
+        lastSignInAt: users.lastSignInAt,
       },
       clientName: oauthClients.name,
       grantRevokedAt: oauthGrants.revokedAt,
@@ -119,8 +165,11 @@ export async function resolveBearer(db: DbOrTx, token: string): Promise<Principa
       await db.update(oauthGrants).set({ lastUsedAt: now }).where(eq(oauthGrants.id, row.grantId));
   }
   if (row.kind === "service") return { kind: "service", credentialId: row.id, name: row.name };
-  if (!row.user || row.user.blockedAt) return null;
+  if (!row.user) return null;
   if (row.kind === "oauth_access" && (!row.grantId || row.grantRevokedAt)) return null;
+  const access = agentAccess(row.user, now);
+  if (access === "blocked") return null;
+  if (access === "sign_in_needed") throw signInNeeded();
   return {
     kind: "user",
     id: row.user.id,

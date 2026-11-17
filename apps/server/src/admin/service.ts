@@ -10,6 +10,7 @@ import { spaceRoleSchema } from "@knowledge/shared/roles";
 import type { Db } from "../db/client";
 import { pages, sessions, spaceMembers, spaces, users } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
+import { revokeAgentAccess } from "../auth/credentials";
 import { audit } from "../core/audit";
 import { AppError, conflict, notFound, validationError } from "../http/errors";
 import { getSpaceById } from "../spaces/access";
@@ -60,7 +61,8 @@ export async function listPeople(db: Db, q: string | undefined): Promise<Person[
 /**
  * Makes a person admin or not, blocks or unblocks them. People listed in
  * ADMIN_EMAILS stay admins; nobody changes their own admin rights or blocks
- * themselves. Blocking ends their sessions (tokens stop working too).
+ * themselves. Blocking ends their sessions and revokes their personal
+ * tokens and connected apps for good: unblocking does not bring them back.
  */
 export async function updatePerson(
   db: Db,
@@ -89,7 +91,10 @@ export async function updatePerson(
     if (input.blocked !== undefined && input.blocked !== (user.blockedAt !== null)) {
       set.blockedAt = input.blocked ? new Date() : null;
       changes.push(`${input.blocked ? "Blocked" : "Unblocked"} ${user.email}`);
-      if (input.blocked) await tx.delete(sessions).where(eq(sessions.userId, user.id));
+      if (input.blocked) {
+        await tx.delete(sessions).where(eq(sessions.userId, user.id));
+        await revokeAgentAccess(tx, user.id);
+      }
     }
     if (changes.length === 0) return;
     await tx

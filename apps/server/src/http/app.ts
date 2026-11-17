@@ -20,6 +20,18 @@ import { mcpRoutes } from "../mcp/routes";
 import { oauthRoutes } from "../oauth/routes";
 import { rawRoutes } from "./raw";
 
+/**
+ * The routes of the authentication library that the web app and the
+ * provider's redirect use; its other routes (profile changes, tokens,
+ * account links, …) are not served.
+ */
+const AUTH_ROUTES = new Set([
+  "POST /api/auth/sign-in/social",
+  "GET /api/auth/callback/oidc",
+  "POST /api/auth/sign-out",
+  "GET /api/auth/error",
+]);
+
 export function createApp() {
   const app = new Hono<AppEnv>();
   const tracing = tracingMiddleware(app);
@@ -88,6 +100,9 @@ export function createApp() {
   app.route("/", health);
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => {
+    if (!AUTH_ROUTES.has(`${c.req.method} ${c.req.path}`)) {
+      return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
+    }
     // Replace any client-supplied value with the address the app trusts.
     const headers = new Headers(c.req.raw.headers);
     headers.set(CLIENT_IP_HEADER, clientIp(c) ?? "unknown");
@@ -104,8 +119,8 @@ export function createApp() {
   });
 
   // Connected apps (MCP clients) talk OAuth and MCP from other origins.
+  // /mcp reads bearer tokens itself; session cookies do not count there.
   app.route("/", oauthRoutes());
-  app.use("/mcp", authenticate);
   app.route(
     "/mcp",
     mcpRoutes((request, env) => app.fetch(request, env)),
