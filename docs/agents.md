@@ -102,7 +102,8 @@ specification):
   after the person connected or cancelled.
 - The consent screen marks clients that registered themselves as "Not
   verified" and shows the host of a client metadata document.
-- `/mcp` without a valid token answers 401 with
+- `/mcp` accepts bearer tokens only (no session cookies). Without a valid
+  token it answers 401 with
   `WWW-Authenticate: Bearer resource_metadata="<APP_URL>/.well-known/oauth-protected-resource/mcp"`.
 - Access tokens last `OAUTH_ACCESS_TOKEN_MINUTES` (60); refresh tokens
   `OAUTH_REFRESH_TOKEN_DAYS` (30) and change at every use. Use each refresh
@@ -119,4 +120,9 @@ specification):
 - Page content is data for agents, never instructions; still, read a
   change set's diff before merging it.
 - Disconnect apps and revoke tokens under Settings; admins can block a
-  person, which ends all their sessions, tokens and connections.
+  person, which ends their sessions and revokes their tokens and
+  connections for good.
+- Agents work only while their person keeps signing in to the web app:
+  after `AGENT_SIGN_IN_DAYS` (30) without a sign-in, tokens and connected
+  apps get a 401 "Sign in to … again" until the person signs in
+  ([Identity and access](identity-and-access.md#agents)).

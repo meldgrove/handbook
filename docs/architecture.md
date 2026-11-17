@@ -45,7 +45,8 @@ One Docker image, one Node.js entry point (`apps/server/src/main.ts`);
 `APP_ROLE` picks what runs:
 
 - **web**: the Hono server: the JSON API under `/api/v1`, sign-in under
-  `/api/auth` (Better Auth), the OAuth server for connected apps under
+  `/api/auth` (Better Auth; only the routes of the sign-in flow and
+  sign-out), the OAuth server for connected apps under
   `/.well-known/*` and `/oauth/*`, the MCP endpoint `/mcp`, files under
   `/files/*`, Markdown files `/s/<space>/<path>.md`, `/s/<space>.md` and
   `/llms.txt`, health checks under `/-/`, and the built web app.
@@ -63,7 +64,9 @@ PostgreSQL holds everything except uploaded files (`FILES_DIR`).
 
 - `users` (+ Better Auth's `sessions`, `accounts`, `verifications`,
   `auth_rate_limits`): everyone who signed in or was named as editor;
-  `is_admin`, `admin_source` (`environment` or `app`), `blocked_at`.
+  `is_admin`, `admin_source` (`environment` or `app`), `blocked_at`,
+  `last_sign_in_at`. `accounts` links a person to the provider's subject;
+  the provider's tokens are removed after the sign-in check.
 - `spaces`, `space_members` (owner or editor).
 - `pages`: the live version of each page. Columns derived from the file on
   every save (title, status, type, tags, search terms, properties, the file
@@ -254,9 +257,13 @@ request with `Authorization: Bearer` is authenticated by the token only
 
 - Personal tokens: created by a person in the web app (Settings); the agent
   acts as that person with agent limits. Optional expiry.
-- Service tokens: created by admins; read-only.
+- Service tokens: created by admins; read-only; tied to no person.
 - Connected apps: OAuth access tokens (60 minutes by default) and rotating
   refresh tokens (30 days), tied to a grant the person can revoke.
+- Personal tokens and connected apps act only while `agentAccess` allows
+  it: their person is not blocked and signed in within
+  `AGENT_SIGN_IN_DAYS` (`resolveBearer`, and the OAuth token endpoint).
+  Blocking revokes them.
 
 ### OAuth server
 

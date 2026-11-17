@@ -45,6 +45,8 @@ volume `files` (`/data/files` in the container), shared by `web` and
    `AUTH_SECRET` (`openssl rand -base64 32`), the `OIDC_*` values, your
    address in `ADMIN_EMAILS`, and `SEARCH_LANGUAGES` for the languages your
    pages are written in. Remove `NODE_ENV=development`, `RUN_MIGRATIONS` and
+   `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`. With an `https` `APP_URL`, the app
+   does not start with the example `AUTH_SECRET` or with
    `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`.
 4. **Start:** `docker compose up -d` (with `-f compose.yaml -f
 compose.postgres.yaml` and `POSTGRES_PASSWORD` for the bundled database).
@@ -135,14 +137,20 @@ errors can quote values. There are no session replays.
 Every process logs JSON lines to standard output (`docker compose logs
 web`). Logs carry identifiers (page, change set, request), never page texts
 or email addresses. Sign-ins that were refused log the reason (`sign-in
-refused: email domain not allowed`, `… not in ACCESS_GROUPS`, `… blocked`).
+refused: email domain not allowed`, `… not in ACCESS_GROUPS`, `… blocked`,
+`… email address not verified by the provider`).
 
 ## Hardening
 
 - Serve the app over HTTPS only.
 - Use your organization's own identity provider, where people cannot choose
   their email address themselves. With a public provider (e.g. Google),
-  set `ALLOWED_EMAIL_DOMAINS` or `ACCESS_GROUPS`.
+  set `ALLOWED_EMAIL_DOMAINS` or `ACCESS_GROUPS`; without either, the
+  server logs a warning at start.
+- Keep `OIDC_REQUIRE_EMAIL_VERIFIED` on unless your provider does not send
+  `email_verified` ([Identity and access](identity-and-access.md#verified-email-addresses)).
+- When someone leaves, block them in the app for immediate effect
+  ([Identity and access](identity-and-access.md#when-someone-leaves)).
 - Keep `ADMIN_EMAILS` to one or two people.
 - When someone leaves, see [Offboarding](identity-and-access.md#offboarding).
 - Agents only propose changes; editors decide. Read a change set's diff
