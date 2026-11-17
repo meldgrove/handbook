@@ -244,7 +244,12 @@ mentions.
   and listed, or, for owners with `defineProperties`, added to the space
   (text, list, number, yes/no or date, from the values). VitePress boxes
   (`::: tip`, `info`, `warning`, `danger`, `details`) become callouts; heading
-  anchors `{#id}` are removed. Limits: `MAX_IMPORT_BYTES`, `MAX_IMPORT_FILES`.
+  anchors `{#id}` are removed. Limits: `MAX_IMPORT_BYTES`, `MAX_IMPORT_FILES`,
+  unpacked files together four times `MAX_IMPORT_BYTES` (by the sizes the
+  zip declares; inflating a file stops at its declared size, and a file
+  that grows past it fails the import as damaged), Markdown files 2 MB each,
+  `_space.yaml` 1 MB (larger ones are skipped and listed). The import yields
+  to other requests between files.
 
 ## Agents
 
