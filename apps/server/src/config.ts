@@ -88,6 +88,8 @@ const schema = z
     OAUTH_ALLOW_PRIVATE_CLIENT_URLS: flag(false),
     /** Largest file upload, in megabytes. */
     MAX_UPLOAD_MB: withDefault(z.coerce.number().int().min(1).max(500), 20),
+    /** Days the audit log keeps entries; the worker deletes older ones. 0 keeps them all. */
+    AUDIT_LOG_DAYS: withDefault(z.coerce.number().int().min(0).max(36_500), 365),
     /** The worker touches this file every few seconds, for container health checks. */
     WORKER_HEARTBEAT_FILE: optional(z.string()),
     /** Version of a release image, set by the release workflow; unset in images built from source. */

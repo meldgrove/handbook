@@ -52,7 +52,8 @@ One Docker image, one Node.js entry point (`apps/server/src/main.ts`);
 - **worker**: rebuilds the search index when `SEARCH_LANGUAGES` changed
   (one page per transaction, so saves go on meanwhile) and removes expired
   locks, OAuth requests and tokens, OAuth clients that never got a grant
-  (after 3 days), and unused uploads.
+  (after 3 days), unused uploads, and audit log entries older than
+  `AUDIT_LOG_DAYS`.
 - **migrate**: applies the Drizzle migrations under an advisory lock.
 - **all**: web and worker in one process.
 

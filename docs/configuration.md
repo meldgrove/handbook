@@ -57,6 +57,7 @@ See [Agents and MCP](agents.md).
 | `RUN_MIGRATIONS`                 | `false`                          | Apply migrations at start (single-container setups).                                                               |
 | `DATABASE_POOL_SIZE`             | `10`                             | Connections per process.                                                                                           |
 | `LOG_LEVEL`                      | `info`                           | `fatal` … `trace`, or `silent`.                                                                                    |
+| `AUDIT_LOG_DAYS`                 | `365`                            | Days the audit log keeps entries; the worker deletes older ones. `0` keeps them all.                               |
 | `WORKER_HEARTBEAT_FILE`          | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds, for health checks.                                                        |
 | `WEB_DIST_DIR`, `MIGRATIONS_DIR` | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
 
