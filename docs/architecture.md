@@ -78,7 +78,8 @@ PostgreSQL holds everything except uploaded files (`FILES_DIR`).
 - `page_sections`: live pages split at headings, with anchors and heading
   paths, for search. `page_links`: links between pages (backlinks, broken
   links). `redirects`: old paths of moved pages.
-- `files`: uploads, stored under `FILES_DIR` with generated names.
+- `files`: uploads, stored under `FILES_DIR` with generated names;
+  `used_at`: when saved content first mentioned one.
 - `edit_locks`, `drafts`: the web editor's locks and unsaved text.
 - `change_sets`, `change_set_items` (one per page), `change_set_events` (the
   timeline: edits, comments, status changes).
@@ -224,9 +225,15 @@ Statuses: `open → in_review → merged`, or `closed` (and back to `open`).
 `MAX_UPLOAD_MB`) and returns its URL `/files/<id>/<name>` and a Markdown
 snippet. `GET /files/<id>/<name>` serves it to anyone signed in: PNG, JPEG,
 GIF and WebP inline, everything else (including SVG) as a download, always
-with `X-Content-Type-Options: nosniff` and a sandboxing CSP. The worker
-removes uploads older than a day that no page, revision or change set
-mentions.
+with `X-Content-Type-Options: nosniff` and a sandboxing CSP.
+
+Saving content marks the uploads it mentions (`/files/<id>`) as used
+(`markFilesUsed` in `apps/server/src/files/storage.ts`): pages and their
+revisions, change set items and descriptions, drafts, comments, space
+descriptions and page type templates. Every new place that stores such
+text calls it too. The worker removes uploads older than a day that were
+never used; a used upload stays, also when the text that mentioned it is
+gone.
 
 ## Import and export
 

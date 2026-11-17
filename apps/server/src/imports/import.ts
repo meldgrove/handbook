@@ -35,6 +35,7 @@ import {
   titleFromName,
 } from "./convert";
 import { readZip } from "./zip";
+import { markFilesUsed } from "../files/storage";
 
 /** Uncompressed size of all files of an import at most. */
 const MAX_UNCOMPRESSED_BYTES = MAX_IMPORT_BYTES * 4;
@@ -359,6 +360,10 @@ export async function importSpace(
         .update(spaces)
         .set({ properties, pageTypes, updatedAt: sql`now()` })
         .where(eq(spaces.id, space.id));
+      await markFilesUsed(
+        tx,
+        pageTypes.map((pageType) => pageType.template),
+      );
       await audit(tx, actor, {
         action: "space.updated",
         entityType: "space",
@@ -393,6 +398,10 @@ export async function importSpace(
     await tx
       .insert(changeSetEvents)
       .values({ changeSetId: changeSet!.id, kind: "created", actorId: actor.id });
+    await markFilesUsed(
+      tx,
+      items.map((item) => item.markdown),
+    );
     for (const item of items) {
       const { title: pageTitle, ...row } = item;
       await tx.insert(changeSetItems).values({ ...row, changeSetId: changeSet!.id });

@@ -5,6 +5,7 @@ import type { DbOrTx } from "../db/client";
 import { changeSetEvents, changeSetItems, changeSets, pageRevisions, pages, users } from "../db/schema";
 import type { Principal, UserPrincipal } from "../auth/principal";
 import { forbidden, notFound } from "../http/errors";
+import { markFilesUsed } from "../files/storage";
 import { getSpaceById, spaceContext, type SpaceContext } from "../spaces/access";
 import type { PageRow } from "../pages/core";
 
@@ -217,6 +218,7 @@ export async function addEvent(
     pagePath: event.page?.path ?? null,
     pageTitle: event.page?.title ?? null,
   });
+  await markFilesUsed(db, [event.body]);
 }
 
 export type ActorRow = { id: string; name: string; email: string };

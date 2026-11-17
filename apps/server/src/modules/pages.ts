@@ -15,6 +15,7 @@ import { getDb, type DbOrTx } from "../db/client";
 import { drafts, editLocks, pages } from "../db/schema";
 import type { AppEnv } from "../http/env";
 import { notFound } from "../http/errors";
+import { markFilesUsed } from "../files/storage";
 import {
   idParam,
   jsonBody,
@@ -299,6 +300,7 @@ router.put("/pages/:id/draft", async (c) => {
       set: { markdown: input.markdown, baseRevision: input.baseRevision, updatedAt: sql`now()` },
     })
     .returning();
+  await markFilesUsed(getDb(), [input.markdown]);
   return c.json({
     markdown: draft!.markdown,
     baseRevision: draft!.baseRevision,

@@ -14,6 +14,7 @@ import { changeSets, pages, spaceMembers, spaces, users } from "../db/schema";
 import type { Principal, UserPrincipal } from "../auth/principal";
 import { audit } from "../core/audit";
 import { conflict, forbidden, notFound, validationError } from "../http/errors";
+import { markFilesUsed } from "../files/storage";
 import { abilitiesOf, requireAbility, type SpaceContext, type SpaceRow } from "./access";
 
 const iso = (value: Date) => value.toISOString();
@@ -100,6 +101,7 @@ export async function createSpace(db: Db, actor: UserPrincipal, input: SpaceCrea
       .insert(spaces)
       .values({ slug: input.slug, name: input.name, description: input.description })
       .returning();
+    await markFilesUsed(tx, [input.description]);
     await audit(tx, actor, {
       action: "space.created",
       entityType: "space",
@@ -156,6 +158,10 @@ export async function updateSpace(db: Db, actor: UserPrincipal, context: SpaceCo
       })
       .where(eq(spaces.id, space.id))
       .returning();
+    await markFilesUsed(tx, [
+      input.description,
+      ...(input.pageTypes ?? []).map((pageType) => pageType.template),
+    ]);
     const changed = Object.keys(input).filter((key) => input[key as keyof SpaceUpdate] !== undefined);
     await audit(tx, actor, {
       action: "space.updated",

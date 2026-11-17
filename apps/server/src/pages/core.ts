@@ -13,6 +13,7 @@ import type { DbOrTx } from "../db/client";
 import { pageLinks, pageRevisions, pageSections, pages, redirects, spaces, users } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
 import { AppError, conflict, notFound, validationError } from "../http/errors";
+import { markFilesUsed } from "../files/storage";
 import { schemaOf, type SpaceRow } from "../spaces/access";
 import { pageLinksOf, sectionsOf } from "./analyze";
 
@@ -264,6 +265,7 @@ async function insertRevision(
     added: stats.added,
     removed: stats.removed,
   });
+  await markFilesUsed(tx, [input.markdown]);
 }
 
 export type SaveResult = { page: PageRow; changed: boolean; merged: boolean };
