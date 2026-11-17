@@ -46,6 +46,14 @@ export const personUpdateSchema = z.object({
 });
 export type PersonUpdate = z.infer<typeof personUpdateSchema>;
 
+/**
+ * `DELETE /admin/people/:id` removes a person (204): their name and email
+ * are replaced, their sign-ins, tokens, connected apps, drafts and roles
+ * deleted. Their revisions, change sets and comments stay, shown under this
+ * name. Signing in again makes a new, empty person.
+ */
+export const REMOVED_PERSON_NAME = "Removed person";
+
 export const auditEntrySchema = z.object({
   id: idSchema,
   createdAt: z.string(),

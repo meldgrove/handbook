@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Ban, Search, ShieldCheck, UsersRound } from "lucide-react";
-import type { Person } from "@knowledge/shared/api/users";
+import { REMOVED_PERSON_NAME, type Person } from "@knowledge/shared/api/users";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Page, PageHeader } from "@/components/layout/page";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
@@ -17,10 +17,15 @@ import { useMe } from "@/hooks/use-me";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useFormatter } from "@/lib/format";
-import { usePeople, useUpdatePerson } from "./api";
+import { usePeople, useRemovePerson, useUpdatePerson } from "./api";
 import { messages } from "./messages";
 
-function PersonRow(props: { person: Person; isMe: boolean; onBlock: (person: Person) => void }) {
+function PersonRow(props: {
+  person: Person;
+  isMe: boolean;
+  onBlock: (person: Person) => void;
+  onRemove: (person: Person) => void;
+}) {
   const t = useT(messages);
   const format = useFormatter();
   const update = useUpdatePerson();
@@ -90,14 +95,26 @@ function PersonRow(props: { person: Person; isMe: boolean; onBlock: (person: Per
         </div>
       </TableCell>
       <TableCell className="text-right align-top">
-        {isMe || environment ? null : person.blocked ? (
-          <Button variant="outline" size="sm" disabled={update.isPending} onClick={unblock}>
-            {t("unblock")}
-          </Button>
-        ) : (
-          <Button variant="ghost" size="sm" onClick={() => props.onBlock(person)}>
-            {t("block")}
-          </Button>
+        {isMe || environment ? null : (
+          <div className="flex justify-end gap-1">
+            {person.blocked ? (
+              <Button variant="outline" size="sm" disabled={update.isPending} onClick={unblock}>
+                {t("unblock")}
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={() => props.onBlock(person)}>
+                {t("block")}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive"
+              onClick={() => props.onRemove(person)}
+            >
+              {t("remove")}
+            </Button>
+          </div>
         )}
       </TableCell>
     </TableRow>
@@ -113,6 +130,9 @@ export function AdminPeoplePage() {
   const update = useUpdatePerson();
   const [blocking, setBlocking] = useState<Person | null>(null);
   const blockingLabel = blocking ? blocking.name || blocking.email : "";
+  const remove = useRemovePerson();
+  const [removing, setRemoving] = useState<Person | null>(null);
+  const removingLabel = removing ? removing.name || removing.email : "";
   return (
     <Page>
       <PageHeader title={t("peopleTitle")} description={t("peopleDescription")} />
@@ -149,7 +169,13 @@ export function AdminPeoplePage() {
             </TableHeader>
             <TableBody>
               {people.data.items.map((person) => (
-                <PersonRow key={person.id} person={person} isMe={person.id === me.id} onBlock={setBlocking} />
+                <PersonRow
+                  key={person.id}
+                  person={person}
+                  isMe={person.id === me.id}
+                  onBlock={setBlocking}
+                  onRemove={setRemoving}
+                />
               ))}
             </TableBody>
           </Table>
@@ -166,6 +192,24 @@ export function AdminPeoplePage() {
           blocking &&
           update.mutateAsync({ id: blocking.id, update: { blocked: true } }).then(
             () => toast.success(t("blockedDone", { name: blockingLabel })),
+            (error: unknown) => {
+              toast.error(errorMessage(error));
+              throw error;
+            },
+          )
+        }
+      />
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => !open && setRemoving(null)}
+        title={t("removeTitle", { name: removingLabel })}
+        description={t("removeDescription", { placeholder: REMOVED_PERSON_NAME })}
+        confirmLabel={t("remove")}
+        destructive
+        onConfirm={() =>
+          removing &&
+          remove.mutateAsync(removing.id).then(
+            () => toast.success(t("removedDone", { name: removingLabel })),
             (error: unknown) => {
               toast.error(errorMessage(error));
               throw error;

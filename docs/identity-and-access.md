@@ -8,9 +8,9 @@ app.
 
 | Who                            | May                                                                                                                                |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Everyone signed in             | Read every space and page (draft pages only in spaces they edit), search, suggest changes as change sets, comment, connect agents. |
-| Space editor                   | Also: create, edit, move and delete pages live; review, merge, close and revert change sets; restore pages and older versions.     |
-| Space owner                    | Also: the space's name and description, its editors, properties and page types; export and import.                                 |
+| Everyone signed in             | Read and export every space (drafts only in spaces they edit); search, suggest changes as change sets, comment and connect agents. |
+| Space editor                   | Also: create, edit, move and delete pages live; import; review, merge, close and revert change sets; restore pages and versions.   |
+| Space owner                    | Also: the space's name and description, its editors, properties and page types (also through an import).                           |
 | Admin                          | Everything in every space; create and archive spaces; choose owners; people; service tokens; the audit log.                        |
 | Agent (token or connected app) | Acts as its person, but only reads and proposes: it writes only into change sets and never merges or administers.                  |
 | Service token                  | Reads only (search, pages, Markdown files): for integrations such as a support bot.                                                |
@@ -26,6 +26,17 @@ Admins come from `ADMIN_EMAILS` (always admins, also the way back in) or are
 made admins by another admin under **Administration → People**. There,
 admins can also block someone: blocked people cannot sign in, and their
 sessions and tokens stop working.
+
+Admins can also remove a person (**Remove** under **Administration →
+People**), for example when someone leaves and asks for their data to be
+deleted. Their name and email are replaced, and their sign-ins, tokens,
+connected apps, unsaved drafts, edit locks and space roles are deleted.
+Their page versions, change sets and comments stay, shown as "Removed
+person", and the audit log keeps their actions without their email. Page
+texts that name them (e.g. an `owner` property) are not changed; edit those
+pages. If they sign in again, they start as a new person without roles.
+People in `ADMIN_EMAILS` cannot be removed (take them out of the list
+first), and nobody removes themselves.
 
 ## Sign-in
 

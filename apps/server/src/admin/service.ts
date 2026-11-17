@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull, notLike, or, sql } from "drizzle-orm";
 import type { Person, PersonUpdate } from "@knowledge/shared/api/users";
 import {
   normalizeTag,
@@ -14,6 +14,7 @@ import { audit } from "../core/audit";
 import { AppError, conflict, notFound, validationError } from "../http/errors";
 import { getSpaceById } from "../spaces/access";
 import { authorOf, lockPage, saveLivePage } from "../pages/core";
+import { isRemoved, REMOVED_EMAIL_DOMAIN } from "./remove";
 
 const iso = (value: Date | null) => (value ? value.toISOString() : null);
 
@@ -26,7 +27,10 @@ export async function listPeople(db: Db, q: string | undefined): Promise<Person[
     .select()
     .from(users)
     .where(
-      q ? or(ilike(users.email, `%${escapeLike(q)}%`), ilike(users.name, `%${escapeLike(q)}%`)) : sql`true`,
+      and(
+        notLike(users.email, `%@${REMOVED_EMAIL_DOMAIN}`),
+        q ? or(ilike(users.email, `%${escapeLike(q)}%`), ilike(users.name, `%${escapeLike(q)}%`)) : undefined,
+      ),
     )
     .orderBy(asc(users.email))
     .limit(500);
@@ -66,7 +70,7 @@ export async function updatePerson(
 ): Promise<Person> {
   await db.transaction(async (tx) => {
     const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
-    if (!user) throw notFound("No such person");
+    if (!user || isRemoved(user)) throw notFound("No such person");
     if (user.id === actor.id && (input.isAdmin === false || input.blocked === true)) {
       throw conflict("You cannot remove your own admin rights or block yourself", "self_change");
     }

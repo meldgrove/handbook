@@ -7,6 +7,7 @@ import { auditLog } from "../db/schema";
 import type { AppEnv } from "../http/env";
 import { idParam, jsonBody, queryOf, requireAdmin } from "../http/middleware";
 import { listPeople, renameTag, updatePerson } from "../admin/service";
+import { removePerson } from "../admin/remove";
 import { isoRequired } from "./util";
 
 const router = new Hono<AppEnv>();
@@ -21,6 +22,12 @@ router.patch("/admin/people/:id", async (c) => {
   const actor = requireAdmin(c);
   const input = await jsonBody(c, personUpdateSchema);
   return c.json(await updatePerson(getDb(), actor, idParam(c), input));
+});
+
+router.delete("/admin/people/:id", async (c) => {
+  const actor = requireAdmin(c);
+  await removePerson(getDb(), actor, idParam(c));
+  return c.body(null, 204);
 });
 
 router.post("/admin/tags/rename", async (c) => {

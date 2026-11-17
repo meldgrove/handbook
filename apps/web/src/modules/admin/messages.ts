@@ -57,6 +57,11 @@ export const messages = defineMessages({
       "They are signed out at once, cannot sign in, and their tokens and connected apps stop working.",
     blockedDone: "{name} is blocked",
     unblockedDone: "{name} may sign in again",
+    remove: "Remove",
+    removeTitle: "Remove {name}?",
+    removeDescription:
+      "Their name and email are deleted, and so are their sign-ins, tokens, connected apps, drafts and space roles. Their page versions, change sets and comments stay, shown as “{placeholder}”. This cannot be undone; if they sign in again, they start as a new person.",
+    removedDone: "{name} was removed",
 
     tokensTitle: "Service tokens",
     tokensDescription:
