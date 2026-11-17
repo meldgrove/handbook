@@ -331,7 +331,11 @@ export const changeSetItems = pgTable(
     updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.changeSetId, table.pageId] })],
+  (table) => [
+    primaryKey({ columns: [table.changeSetId, table.pageId] }),
+    // The page view lists the open change sets of a page.
+    index("idx_change_set_items_page").on(table.pageId),
+  ],
 );
 
 /** The timeline of a change set: edits, comments and status changes. */
