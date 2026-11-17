@@ -327,11 +327,25 @@ async function nextPosition(tx: DbOrTx, spaceId: string, parentId: string | null
   return (row?.value ?? -1) + 1;
 }
 
-/** The live parent page of a path; 422 when it does not exist. */
+/**
+ * The live parent page of a path; 422 when it does not exist. The parent and
+ * its ancestors stay locked (shared, top down) until the transaction ends:
+ * none of them can move or go to the trash meanwhile. Moves and deletions
+ * lock their page first, so they wait for this transaction and then see the
+ * page put below it, or this one waits for them and finds no parent.
+ */
 async function parentOf(tx: DbOrTx, space: SpaceRow, path: string): Promise<PageRow | null> {
   const parent = parentPath(path);
   if (!parent) return null;
-  const page = await findLivePage(tx, space.id, parent);
+  const segments = parent.split("/");
+  const ancestors = segments.map((_, index) => segments.slice(0, index + 1).join("/"));
+  const rows = await tx
+    .select()
+    .from(pages)
+    .where(and(eq(pages.spaceId, space.id), inArray(pages.path, ancestors), isNull(pages.deletedAt)))
+    .orderBy(asc(pages.path))
+    .for("share");
+  const page = rows.find((row) => row.path === parent);
   if (!page)
     throw validationError(
       { path: `The parent page “${parent}” does not exist` },

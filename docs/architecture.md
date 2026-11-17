@@ -114,7 +114,9 @@ permissions, then call it inside a transaction with a page locked by
   blocks). Saving the same file again changes nothing.
 - `createLivePage`, `moveLivePage` (with sub-pages; old paths redirect; each
   moved page gets a `move` revision), `deleteLivePage` (to the trash; pages
-  with live sub-pages cannot be deleted), `restoreDeletedPage`.
+  with live sub-pages cannot be deleted), `restoreDeletedPage`. A page put
+  below another locks that parent and its ancestors (shared) until the
+  transaction ends, so none of them moves or goes to the trash meanwhile.
 - After every write it rebuilds the page's search sections, search vector
   and links, and resolves links that pointed at the page's path (on
   restore also its old paths).
