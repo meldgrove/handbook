@@ -52,7 +52,12 @@ compose.postgres.yaml` and `POSTGRES_PASSWORD` for the bundled database).
    and create the first space under **Administration → Spaces**.
 
 The reverse proxy must pass `/mcp`, `/oauth/*` and `/.well-known/*` to the
-app unchanged (agents connect there), and must not buffer or cache them.
+app unchanged (agents connect there), and must not buffer or cache them:
+`/mcp` streams its answers as events (nginx: `proxy_buffering off;` for
+`/mcp`). The app compresses its responses itself (scripts and styles with
+brotli or gzip; JSON, HTML and Markdown with gzip; never `/mcp` or
+`/files`), so the proxy needs no compression of its own. A proxy that
+compresses anyway must leave `/mcp` alone.
 
 ### One container
 
@@ -66,6 +71,11 @@ process. Mount a volume at `/data/files`.
 - `GET /-/readyz`: it reaches the database.
 - The worker touches `/tmp/worker-heartbeat` every few seconds;
   `compose.yaml` checks its age.
+
+Docker Compose marks a container whose check fails as unhealthy, but does
+not restart it. Set up an uptime check from outside the server (your
+monitoring or an uptime service) on `<APP_URL>/-/readyz`, so that someone
+hears when the app is down.
 
 ## Upgrades
 
@@ -94,6 +104,10 @@ Back up together:
   every revision, change sets, people, tokens (as hashes);
 - the `files` volume (uploaded images and attachments; pages refer to them).
 
+Test a restore once, and again after larger changes to the setup: restore
+the database and the `files` volume on another machine (or into a new
+Compose project), start the app there, and open a few pages with images.
+
 Each space can also be exported as a zip of Markdown files (space menu →
 Export), for a copy outside the app; uploaded files are not in it.
 
@@ -101,8 +115,9 @@ Export), for a copy outside the app; uploaded files are not in it.
 
 With `SENTRY_DSN` set, the server and the web app send error reports to
 Sentry (or a compatible service). The release is `knowledge@<version>`, so
-reports link to the code; release images come with their source maps
-uploaded.
+reports link to the code: release builds upload their source maps to
+Sentry. The web app's source maps are not in the image, so browsers cannot
+download them.
 
 - **Errors:** crashes, failed requests and errors the server logs, from the
   server and from browsers.
@@ -129,6 +144,7 @@ refused: email domain not allowed`, `… not in ACCESS_GROUPS`, `… blocked`).
   their email address themselves. With a public provider (e.g. Google),
   set `ALLOWED_EMAIL_DOMAINS` or `ACCESS_GROUPS`.
 - Keep `ADMIN_EMAILS` to one or two people.
+- When someone leaves, see [Offboarding](identity-and-access.md#offboarding).
 - Agents only propose changes; editors decide. Read a change set's diff
   before merging it, also when an agent made it: page content can contain
   instructions meant to mislead agents.
