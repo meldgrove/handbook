@@ -61,7 +61,7 @@ your change instead, or (editors) **Take over**. The other person then sees
 that you took over; their text stays saved as a draft.
 
 The editor saves your unsaved text as a draft every few seconds and offers
-it when you come back. If the page changed while you edited it (for example
+it when you come back (also after the page was deleted and restored). If the page changed while you edited it (for example
 after a takeover or a merged change set), saving combines both changes; if
 both changed the same lines, the editor shows them marked:
 
@@ -97,7 +97,7 @@ always use them.
    overlapping lines marked, to resolve before merging.
 5. **Revert** on a merged change set undoes all its pages at once, as a new
    change set that is merged right away (or left open when later changes
-   overlap).
+   overlap; **Revert** again then opens that one).
 
 **Close** shelves a change set; **Reopen** brings it back. Nothing is ever
 lost: every version stays in the history, deleted pages go to the space's

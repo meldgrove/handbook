@@ -115,7 +115,8 @@ permissions, then call it inside a transaction with a page locked by
   moved page gets a `move` revision), `deleteLivePage` (to the trash; pages
   with live sub-pages cannot be deleted), `restoreDeletedPage`.
 - After every write it rebuilds the page's search sections, search vector
-  and links, and resolves links that pointed at the page's path.
+  and links, and resolves links that pointed at the page's path (on
+  restore also its old paths).
 
 Change set merges, imports (through change sets), restores and the REST API
 all use these functions.
@@ -145,7 +146,8 @@ Times in `packages/shared/src/limits.ts`.
 4. A takeover replaces the token; the previous editor's next renewal gets
    409 `lock_lost` with who took it, and its text stays in its draft.
 5. The editor stores unsaved text as a draft every 5 seconds (per person
-   and page) and offers it when the person opens the editor again.
+   and page) and offers it when the person opens the editor again. Drafts
+   of a page in the trash stay and come back with it.
 6. Every save sends `baseRevision`; the page core merges or answers 409
    `page_changed` (see above). The editor then shows the merged text with
    conflict blocks; saving is refused while blocks remain.

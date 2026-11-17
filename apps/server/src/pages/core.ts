@@ -10,7 +10,7 @@ import { isValidSlug, isWithin, joinPath, parentPath, pathProblem, slugify } fro
 import type { Via } from "@knowledge/shared/roles";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
-import { drafts, pageLinks, pageRevisions, pageSections, pages, redirects, users } from "../db/schema";
+import { pageLinks, pageRevisions, pageSections, pages, redirects, users } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
 import { AppError, conflict, notFound, validationError } from "../http/errors";
 import { schemaOf, type SpaceRow } from "../spaces/access";
@@ -496,7 +496,10 @@ export async function moveLivePage(
   return page;
 }
 
-/** Moves a page to the trash. Pages with live sub-pages cannot be deleted. */
+/**
+ * Moves a page to the trash. Pages with live sub-pages cannot be deleted.
+ * Drafts stay, for when the page is restored.
+ */
 export async function deleteLivePage(tx: DbOrTx, input: { space: SpaceRow; page: PageRow; author: Author }) {
   const { page, author } = input;
   const [child] = await tx
@@ -521,7 +524,6 @@ export async function deleteLivePage(tx: DbOrTx, input: { space: SpaceRow; page:
   await tx.delete(pageSections).where(eq(pageSections.pageId, page.id));
   await tx.delete(pageLinks).where(eq(pageLinks.fromPageId, page.id));
   await tx.update(pageLinks).set({ toPageId: null }).where(eq(pageLinks.toPageId, page.id));
-  await tx.delete(drafts).where(eq(drafts.pageId, page.id));
 }
 
 /** Takes a page out of the trash, at its old path (which must be free, below a live parent). */
@@ -557,7 +559,12 @@ export async function restoreDeletedPage(
   });
   await tx.delete(redirects).where(and(eq(redirects.spaceId, space.id), eq(redirects.path, page.path)));
   await deriveFromBody(tx, space, page, bodyOf(page.markdown));
-  await resolveIncomingLinks(tx, space, page.id, [page.path]);
+  // Links to its path and to its old paths (which still redirect to it) reach it again.
+  const oldPaths = await tx
+    .select({ path: redirects.path })
+    .from(redirects)
+    .where(and(eq(redirects.spaceId, space.id), eq(redirects.pageId, page.id)));
+  await resolveIncomingLinks(tx, space, page.id, [page.path, ...oldPaths.map((row) => row.path)]);
   return restored!;
 }
 
