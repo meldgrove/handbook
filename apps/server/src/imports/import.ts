@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { strToU8, zipSync } from "fflate";
+import { Zip, ZipDeflate, strToU8, zipSync } from "fflate";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { ImportResult } from "@knowledge/shared/api/spaces";
 import { MAX_IMPORT_BYTES, MAX_IMPORT_FILES } from "@knowledge/shared/limits";
@@ -55,16 +55,16 @@ export async function exportSpace(
 ): Promise<Uint8Array> {
   const { space } = context;
   const rows = await db
-    .select()
+    .select({ path: pages.path, title: pages.title, position: pages.position, markdown: pages.markdown })
     .from(pages)
     .where(and(eq(pages.spaceId, space.id), isNull(pages.deletedAt), visibleStatus(principal)))
     .orderBy(asc(pages.path));
-  const entries: Record<string, Uint8Array> = {};
-  for (const row of rows) entries[`${row.path}.md`] = strToU8(row.markdown);
+  const files: [name: string, text: string][] = rows.map((row) => [`${row.path}.md`, row.markdown]);
   const order = [...rows]
     .sort((a, b) => a.position - b.position || a.title.localeCompare(b.title))
     .map((row) => row.path);
-  entries["_space.yaml"] = strToU8(
+  files.push([
+    "_space.yaml",
     stringifyYaml(
       {
         name: space.name,
@@ -75,8 +75,33 @@ export async function exportSpace(
       },
       { lineWidth: 0 },
     ),
-  );
-  return zipSync(entries, { level: 6 });
+  ]);
+  return zipInTurns(files);
+}
+
+/** A zip of text files; other requests get their turn after each file. */
+async function zipInTurns(files: [name: string, text: string][]): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let failure: Error | null = null;
+  const zip = new Zip((error, chunk) => {
+    if (error) failure ??= error;
+    else chunks.push(chunk);
+  });
+  for (const [name, text] of files) {
+    const file = new ZipDeflate(name, { level: 6 });
+    zip.add(file);
+    file.push(strToU8(text), true);
+    await nextTurn();
+  }
+  zip.end();
+  if (failure) throw failure;
+  const result = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
 }
 
 type Candidate = { file: string; path: string; values: Record<string, unknown>; body: string };

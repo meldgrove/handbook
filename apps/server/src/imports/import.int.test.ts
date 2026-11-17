@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { strFromU8, unzipSync } from "fflate";
 import { getDb } from "../db/client";
 import { spaces } from "../db/schema";
 import { spaceContext } from "../spaces/access";
-import { createSpace, createUser, request, resetDatabase } from "../test/helpers";
+import { createSpace, createUser, request, resetDatabase, testApp } from "../test/helpers";
 import { resolveSession } from "../test/resolve-mock";
 import { zipBomb } from "../test/zip-bomb";
 import { importSpace, zipOf } from "./import";
@@ -70,5 +71,35 @@ describe("space import", () => {
     expect(result.definedProperties).toEqual(["system"]);
     const [row] = await getDb().select().from(spaces).where(eq(spaces.id, space.id));
     expect(row!.properties.map((property) => property.key)).toEqual(["team", "system"]);
+  });
+
+  it("exports a large space without blocking other requests", async () => {
+    const reader = await createUser();
+    const space = await createSpace({ slug: "it" });
+    // 300 pages of about 100 KB that compress poorly.
+    await getDb().execute(sql`
+      insert into pages (space_id, path, revision, title, markdown)
+      select ${space.id}, 'page-' || n, 1, 'Page ' || n,
+        (select string_agg(md5(n || '-' || g), ' ') from generate_series(1, 3000) g)
+      from generate_series(1, 300) n`);
+    let longest = 0;
+    let last = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now();
+      longest = Math.max(longest, now - last);
+      last = now;
+    }, 5);
+    const response = await testApp().request("/api/v1/spaces/it/export", {
+      headers: { "x-test-user": reader.id },
+    });
+    // The timer runs once more after the export.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    clearInterval(timer);
+    const zip = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    expect(response.status).toBe(200);
+    expect(Object.keys(zip)).toHaveLength(301);
+    expect(strFromU8(zip["page-7.md"]!)).toMatch(/^[0-9a-f]{32} /);
+    expect(strFromU8(zip["_space.yaml"]!)).toContain("- page-1\n");
+    expect(longest).toBeLessThan(250);
   });
 });
