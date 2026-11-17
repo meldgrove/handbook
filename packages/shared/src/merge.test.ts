@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEdits, hasConflictMarkers, lineStats, mergeText } from "./merge";
+import { applyEdits, diffTextLines, hasConflictMarkers, lineStats, mergeText } from "./merge";
 
 describe("merging", () => {
   const base = "a\nb\nc\nd\n";
@@ -30,5 +30,108 @@ describe("merging", () => {
   });
   it("counts lines", () => {
     expect(lineStats("a\nb\n", "a\nc\nd\n")).toEqual({ added: 2, removed: 1 });
+  });
+});
+
+/** Milliseconds a call takes. */
+function timed(run: () => void): number {
+  const start = performance.now();
+  run();
+  return performance.now() - start;
+}
+
+/** A page of `count` paragraphs, each followed by a blank line, as Markdown is. */
+function paragraphs(count: number, word = "Paragraph"): string[] {
+  return Array.from({ length: count }, (_, index) => [`${word} ${index} with some words in it.`, ""]).flat();
+}
+
+describe("merging large pages", () => {
+  it("keeps the blank line after a kept paragraph", () => {
+    const base = "One\n\nTwo\n\nThree\n";
+    expect(mergeText(base, "One\n\nThree\n", "One changed\n\nTwo\n\nThree\n")).toEqual({
+      clean: true,
+      text: "One changed\n\nThree\n",
+      conflicts: 0,
+    });
+  });
+
+  it("merges a page of many blank lines in time", () => {
+    const base = paragraphs(12_000);
+    const yours = [...base];
+    yours[20] = "Changed by you.";
+    const current = [...base];
+    current[base.length - 20] = "Changed meanwhile.";
+    let result = mergeText("", "", "");
+    const ms = timed(() => {
+      result = mergeText(base.join("\n"), yours.join("\n"), current.join("\n"));
+    });
+    expect(base.join("\n").length).toBeGreaterThan(450_000);
+    expect(result.clean).toBe(true);
+    expect(result.text).toContain("Changed by you.");
+    expect(result.text).toContain("Changed meanwhile.");
+    expect(ms).toBeLessThan(1500);
+  });
+
+  it("diffs rewritten pages in time", () => {
+    const before = paragraphs(11_000, "Old").join("\n");
+    const after = paragraphs(11_000, "New").join("\n");
+    // Too many changes for an exact diff: every line from the first to the last change counts.
+    expect(
+      timed(() => expect(lineStats(before, after)).toEqual({ added: 21_999, removed: 21_999 })),
+    ).toBeLessThan(1500);
+    expect(timed(() => expect(diffTextLines(before, after)).toHaveLength(43_998))).toBeLessThan(1500);
+    const merge = timed(() =>
+      expect(mergeText(before, after, before.replace("Old 5 ", "Changed 5 ")).clean).toBe(false),
+    );
+    expect(merge).toBeLessThan(1500);
+  });
+
+  it("diffs pages without common lines in time", () => {
+    const before = Array.from({ length: 70_000 }, (_, index) => `a${index}`).join("\n");
+    const after = Array.from({ length: 70_000 }, (_, index) => `b${index}`).join("\n");
+    expect(
+      timed(() => expect(lineStats(before, after)).toEqual({ added: 70_000, removed: 70_000 })),
+    ).toBeLessThan(1500);
+  });
+
+  it("diffs pages of repeated lines in time", () => {
+    const lines = (mark: string, shift: number) =>
+      Array.from({ length: 250_000 }, (_, index) => (index % 500 === shift ? mark : "")).join("\n");
+    const [base, yours, current] = [lines("x", 0), lines("y", 250), lines("z", 125)];
+    expect(timed(() => lineStats(base, yours))).toBeLessThan(1500);
+    expect(timed(() => mergeText(base, yours, current))).toBeLessThan(1500);
+  });
+});
+
+describe("edits", () => {
+  it("refuses edits that make the page too long", () => {
+    const page = `---\ntitle: A\n---\n\n${"a ".repeat(50_000)}\n`;
+    const result = applyEdits(page, [{ oldText: "a", newText: "b".repeat(20), replaceAll: true }]);
+    expect(result).toEqual({
+      ok: false,
+      index: 0,
+      message: "Edit 1: a page may have at most 500000 characters",
+    });
+  });
+
+  it("limits how many places one call replaces", () => {
+    // Without the limit, the second edit would build a string longer than V8 allows and end the process.
+    const page = `---\ntitle: A\n---\n\n${"a".repeat(490_000)}\n`;
+    const result = applyEdits(page, [
+      { oldText: "a", newText: "b".repeat(1000), replaceAll: true },
+      { oldText: "b", newText: "c", replaceAll: true },
+    ]);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.message).toContain("more than 100000 places");
+  });
+
+  it("finds text in linear time", () => {
+    const page = "a".repeat(490_000);
+    const search = `${"a".repeat(5000)}b${"a".repeat(5000)}`;
+    const edits = Array.from({ length: 100 }, () => ({ oldText: search, newText: "c" }));
+    expect(timed(() => expect(applyEdits(`${page}${search}`, edits.slice(0, 1)).ok).toBe(true))).toBeLessThan(
+      1500,
+    );
+    expect(timed(() => expect(applyEdits(page, edits).ok).toBe(false))).toBeLessThan(1500);
   });
 });
