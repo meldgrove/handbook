@@ -75,13 +75,19 @@ export function bodyOf(markdown: string): string {
   return splitFrontmatter(markdown)?.body ?? markdown;
 }
 
+/** A page by id, live or in the trash, locked for the transaction; null when unknown. */
+export async function lockAnyPage(tx: DbOrTx, pageId: string): Promise<PageRow | null> {
+  const [page] = await tx.select().from(pages).where(eq(pages.id, pageId)).for("update");
+  return page ?? null;
+}
+
 /** A live (not deleted) page by id, locked for the transaction. */
 export async function lockPage(
   tx: DbOrTx,
   pageId: string,
   options: { deleted?: boolean } = {},
 ): Promise<PageRow> {
-  const [page] = await tx.select().from(pages).where(eq(pages.id, pageId)).for("update");
+  const page = await lockAnyPage(tx, pageId);
   if (!page || (page.deletedAt !== null) !== (options.deleted ?? false)) throw notFound("No such page");
   return page;
 }
