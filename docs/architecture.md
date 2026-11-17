@@ -36,7 +36,8 @@ agents.
 | Agent: personal token or connected app (OAuth)  | Reads everything; writes only into change sets, even when its person is an editor; never merges, never administers. |
 | Service token                                   | Reads only (search, pages, Markdown files).                                                                         |
 
-Archived spaces are read-only.
+Archived spaces are read-only: no page changes, change sets, comments or
+status changes.
 
 ## Processes
 
@@ -179,14 +180,18 @@ Statuses: `open → in_review → merged`, or `closed` (and back to `open`).
 - **Merge**: one transaction. Creates first (parents before children), then
   updates and moves (each through `saveLivePage` with the item's
   `base_revision`, so changes saved meanwhile are merged), then deletes
-  (children first). Any overlap aborts the merge with 409 `merge_conflicts`;
-  "Update from live" on an item rebases it (`base_revision` = live, the file
-  merged, with conflict blocks to resolve). Revisions get `via = merge` and
-  the change set id; the author is the person who made the item.
+  (children first; a page already in the trash stays there). Any overlap
+  aborts the merge with 409 `merge_conflicts`; "Update from live" on an
+  item rebases it (`base_revision` = live, the file merged, with conflict
+  blocks to resolve). Revisions get `via = merge` and the change set id; the
+  author is the person who made the item.
 - **Revert** (editors, merged change sets): a new change set "Revert …"
   that restores each page to its revision before the merge (three-way merged
-  with later changes), deletes pages the change set created and restores
-  pages it deleted; it is merged at once when there are no conflicts.
+  with later changes), deletes pages the change set created or took out of
+  the trash, and restores pages it deleted. One transaction: it is merged at
+  once when there are no conflicts, else it stays open (reverting again
+  answers with it); any other failure leaves no revert behind. A page
+  restored live before the revert is merged keeps the changes saved since.
 
 ## Search
 

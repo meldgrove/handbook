@@ -61,9 +61,10 @@ your change instead, or (editors) **Take over**. The other person then sees
 that you took over; their text stays saved as a draft.
 
 The editor saves your unsaved text as a draft every few seconds and offers
-it when you come back (also after the page was deleted and restored). If the page changed while you edited it (for example
-after a takeover or a merged change set), saving combines both changes; if
-both changed the same lines, the editor shows them marked:
+it when you come back (also after the page was deleted and restored). If
+the page changed while you edited it (for example after a takeover or a
+merged change set), saving combines both changes; if both changed the same
+lines, the editor shows them marked:
 
 ```
 <<<<<<< yours
