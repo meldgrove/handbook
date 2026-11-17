@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { applyEdits, diffTextLines, hasConflictMarkers, lineStats, mergeText } from "./merge";
+import {
+  applyEdits,
+  diffTextLines,
+  hasConflictMarkers,
+  lineStats,
+  mergeText,
+  type EditResult,
+} from "./merge";
 
 describe("merging", () => {
   const base = "a\nb\nc\nd\n";
@@ -126,12 +133,14 @@ describe("edits", () => {
   });
 
   it("finds text in linear time", () => {
-    const page = "a".repeat(490_000);
-    const search = `${"a".repeat(5000)}b${"a".repeat(5000)}`;
-    const edits = Array.from({ length: 100 }, () => ({ oldText: search, newText: "c" }));
-    expect(timed(() => expect(applyEdits(`${page}${search}`, edits.slice(0, 1)).ok).toBe(true))).toBeLessThan(
-      1500,
+    // indexOf takes about half a second for each search of these.
+    const one = `${"a".repeat(5000)}b${"a".repeat(5000)}`;
+    const other = `${"a".repeat(5000)}c${"a".repeat(5000)}`;
+    const edits = Array.from({ length: 100 }, (_, index) =>
+      index % 2 === 0 ? { oldText: one, newText: other } : { oldText: other, newText: one },
     );
-    expect(timed(() => expect(applyEdits(page, edits).ok).toBe(false))).toBeLessThan(1500);
+    let result: EditResult | undefined;
+    expect(timed(() => (result = applyEdits(`${"a".repeat(470_000)}${one}`, edits)))).toBeLessThan(1500);
+    expect(result?.ok).toBe(true);
   });
 });
