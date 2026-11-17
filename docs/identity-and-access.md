@@ -15,6 +15,9 @@ app.
 | Agent (token or connected app) | Acts as its person, but only reads and proposes: it writes only into change sets and never merges or administers.                  |
 | Service token                  | Reads only (search, pages, Markdown files): for integrations such as a support bot.                                                |
 
+Archived spaces are read-only for everyone: no page changes, change sets,
+comments or status changes until an admin restores the space.
+
 Owners and editors are chosen in the space's **Settings**; owners can add
 editors, only admins add owners. A person can be named by email before
 their first sign-in and gets the role then.
