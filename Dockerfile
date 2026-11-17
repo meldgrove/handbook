@@ -28,6 +28,9 @@ RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
       && node_modules/.bin/sentry sourcemap upload apps/server/dist \
       && node_modules/.bin/sentry sourcemap upload apps/web/dist; \
     fi
+# The web app's source maps would be public under /assets: they stay out of
+# the image. The server's are never served.
+RUN find apps/web/dist -name '*.map' -delete
 
 FROM base AS prod-deps
 RUN npm ci --omit=dev --workspace @knowledge/server --include-workspace-root=false --no-audit --no-fund
