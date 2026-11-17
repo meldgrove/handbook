@@ -38,7 +38,24 @@ export function actorOf(user: UserRow): Actor | null {
   return { id: user.id, name: user.name || user.email, email: user.email };
 }
 
-export function pageSummary(row: PageRow, spaceSlug: string): PageSummary {
+/** The columns a page summary needs: lists and trees never load the file or its search data. */
+export const pageSummaryColumns = {
+  id: pages.id,
+  path: pages.path,
+  parentId: pages.parentId,
+  position: pages.position,
+  title: pages.title,
+  description: pages.description,
+  status: pages.status,
+  type: pages.type,
+  tags: pages.tags,
+  revision: pages.revision,
+  updatedAt: pages.updatedAt,
+};
+
+export type PageSummaryRow = Pick<PageRow, keyof typeof pageSummaryColumns>;
+
+export function pageSummary(row: PageSummaryRow, spaceSlug: string): PageSummary {
   return {
     id: row.id,
     space: spaceSlug,
@@ -126,7 +143,7 @@ export async function pageView(
   const { space, abilities } = context;
   const viewerId = principal.kind === "user" ? principal.id : null;
   const children = await tx
-    .select()
+    .select(pageSummaryColumns)
     .from(pages)
     .where(
       and(

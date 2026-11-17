@@ -227,6 +227,7 @@ describe("pages API", () => {
     const trash = await request("GET", `/api/v1/spaces/it/trash`, { userId: editor.id });
     expect(trash.body.items.map((item: { title: string }) => item.title)).toEqual(["Setup"]);
     expect(trash.body.items[0].deletedBy.name).toBe("Eddie Editor");
+    expect(Date.parse(trash.body.items[0].deletedAt)).toBeGreaterThan(Date.now() - 60_000);
     expect((await request("GET", `/api/v1/spaces/it/trash`, { userId: reader.id })).status).toBe(403);
     const restored = await request("POST", `/api/v1/pages/${child.id}/restore`, { userId: editor.id });
     expect(restored.status).toBe(200);

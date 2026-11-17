@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, arrayContains, asc, eq, isNull, sql } from "drizzle-orm";
 import { recentQuerySchema } from "@knowledge/shared/api/pages";
 import { searchQuerySchema } from "@knowledge/shared/api/search";
 import { normalizeTag } from "@knowledge/shared/page";
@@ -9,7 +9,7 @@ import type { AppEnv } from "../http/env";
 import { queryOf, requirePrincipal } from "../http/middleware";
 import { getSpace } from "../spaces/access";
 import { searchPages } from "../search/query";
-import { pageSummary, recentRevisions, visibleStatus } from "../pages/views";
+import { pageSummary, pageSummaryColumns, recentRevisions, visibleStatus } from "../pages/views";
 
 const router = new Hono<AppEnv>();
 
@@ -34,10 +34,11 @@ router.get("/tags/:tag/pages", async (c) => {
   const principal = requirePrincipal(c);
   const tag = normalizeTag(decodeURIComponent(c.req.param("tag")));
   const rows = await getDb()
-    .select({ page: pages, space: spaces.slug })
+    .select({ page: pageSummaryColumns, space: spaces.slug })
     .from(pages)
     .innerJoin(spaces, eq(spaces.id, pages.spaceId))
-    .where(and(isNull(pages.deletedAt), visibleStatus(principal), sql`${tag} = any(${pages.tags})`))
+    // @> (not = any) so the GIN index on tags finds the pages.
+    .where(and(isNull(pages.deletedAt), visibleStatus(principal), arrayContains(pages.tags, [tag])))
     .orderBy(asc(pages.title));
   return c.json({ items: rows.map((row) => pageSummary(row.page, row.space)) });
 });

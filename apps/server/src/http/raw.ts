@@ -48,7 +48,13 @@ async function spaceIndex(principal: Principal, slug: string): Promise<string | 
   if (!space) return null;
   const context = await spaceContext(getDb(), principal, space);
   const rows = await getDb()
-    .select()
+    .select({
+      id: pages.id,
+      parentId: pages.parentId,
+      path: pages.path,
+      title: pages.title,
+      description: pages.description,
+    })
     .from(pages)
     .where(
       and(

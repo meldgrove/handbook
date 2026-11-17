@@ -24,7 +24,7 @@ import {
   spaceView,
   updateSpace,
 } from "../spaces/service";
-import { actorOf, iso, pageSummary } from "../pages/views";
+import { actorOf, iso, pageSummary, pageSummaryColumns } from "../pages/views";
 import { multipartBody } from "./util";
 import { exportSpace, importSpace } from "../imports/import";
 
@@ -92,7 +92,7 @@ router.get("/spaces/:space/tree", async (c) => {
   const principal = requirePrincipal(c);
   const { space, abilities } = await spaceContext(getDb(), principal, c.req.param("space"));
   const rows = await getDb()
-    .select()
+    .select(pageSummaryColumns)
     .from(pages)
     .where(
       and(
@@ -110,7 +110,11 @@ router.get("/spaces/:space/trash", async (c) => {
   const context = await spaceContext(getDb(), principal, c.req.param("space"));
   if (!context.abilities.seeDrafts) throw forbidden("Only editors of this space see its trash");
   const rows = await getDb()
-    .select({ page: pages, deletedBy: { id: users.id, name: users.name, email: users.email } })
+    .select({
+      page: pageSummaryColumns,
+      deletedAt: pages.deletedAt,
+      deletedBy: { id: users.id, name: users.name, email: users.email },
+    })
     .from(pages)
     .leftJoin(users, eq(users.id, pages.deletedById))
     .where(and(eq(pages.spaceId, context.space.id), isNotNull(pages.deletedAt)))
@@ -118,7 +122,7 @@ router.get("/spaces/:space/trash", async (c) => {
   return c.json({
     items: rows.map((row) => ({
       ...pageSummary(row.page, context.space.slug),
-      deletedAt: iso(row.page.deletedAt!),
+      deletedAt: iso(row.deletedAt!),
       deletedBy: actorOf(row.deletedBy),
     })),
   });
