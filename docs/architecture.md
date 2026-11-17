@@ -49,9 +49,10 @@ One Docker image, one Node.js entry point (`apps/server/src/main.ts`);
   `/.well-known/*` and `/oauth/*`, the MCP endpoint `/mcp`, files under
   `/files/*`, Markdown files `/s/<space>/<path>.md`, `/s/<space>.md` and
   `/llms.txt`, health checks under `/-/`, and the built web app.
-- **worker**: rebuilds the search index when `SEARCH_LANGUAGES` changed and
-  removes expired locks, OAuth requests and tokens, OAuth clients that never
-  got a grant (after 3 days), and unused uploads.
+- **worker**: rebuilds the search index when `SEARCH_LANGUAGES` changed
+  (one page per transaction, so saves go on meanwhile) and removes expired
+  locks, OAuth requests and tokens, OAuth clients that never got a grant
+  (after 3 days), and unused uploads.
 - **migrate**: applies the Drizzle migrations under an advisory lock.
 - **all**: web and worker in one process.
 

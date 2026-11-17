@@ -596,17 +596,17 @@ export async function restoreDeletedPage(
   return restored!;
 }
 
-/** Rebuilds the search data of every live page (after SEARCH_LANGUAGES changed). */
-export async function reindexAllPages(tx: DbOrTx, space: SpaceRow) {
-  const rows = await tx
-    .select()
-    .from(pages)
-    .where(and(eq(pages.spaceId, space.id), isNull(pages.deletedAt)));
-  for (const page of rows) {
-    await tx
-      .update(pages)
-      .set({ searchVector: pageSearchVector(page) })
-      .where(eq(pages.id, page.id));
-    await deriveFromBody(tx, space, page, bodyOf(page.markdown));
-  }
+/**
+ * Rebuilds the search data of a live page from its file (after
+ * SEARCH_LANGUAGES changed). It locks and reads the page itself, so a save
+ * meanwhile is never undone; a page in the trash has nothing to rebuild.
+ */
+export async function reindexPage(tx: DbOrTx, space: SpaceRow, pageId: string) {
+  const page = await lockAnyPage(tx, pageId);
+  if (!page || page.deletedAt !== null) return;
+  await tx
+    .update(pages)
+    .set({ searchVector: pageSearchVector(page) })
+    .where(eq(pages.id, page.id));
+  await deriveFromBody(tx, space, page, bodyOf(page.markdown));
 }

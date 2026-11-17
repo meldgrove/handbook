@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb, type Tx } from "../db/client";
-import { pages, spaces } from "../db/schema";
+import { pageLinks, pageSections, pages, spaces } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
 import { spaceContext } from "../spaces/access";
 import { updateSpace } from "../spaces/service";
+import { reindexIfLanguagesChanged } from "../search/reindex";
 import { createPage, createSpace, createUser, resetDatabase } from "../test/helpers";
 import { blockedOrDone, heldTransaction, settle } from "../test/concurrency";
 import {
@@ -201,5 +202,36 @@ describe("page core races", () => {
       expect(result).toMatchObject({ ok: false, error: { status: 422 } });
       expect((await pageAt(page.id)).revision).toBe(1);
     });
+  });
+
+  it("rebuilds the search data of a page saved meanwhile from its new file", async () => {
+    const space = await createSpace({ slug: "it" });
+    const page = await createPage(space, { title: "Doc", body: "## Old heading\n\nOld text.\n" });
+    const held = heldTransaction(async (tx) =>
+      saveLivePage(tx, {
+        space,
+        page: await lockPage(tx, page.id),
+        markdown: "---\ntitle: Handbook\n---\n\n## New heading\n\nSee [VPN](vpn).\n",
+        baseRevision: 1,
+        author,
+      }),
+    );
+    await held.ready;
+    // The search languages changed: the worker rebuilds every page.
+    const rebuild = settle(reindexIfLanguagesChanged(getDb()));
+    const waited = await blockedOrDone(rebuild);
+    await held.commit();
+    expect(waited).toBe("blocked");
+    expect(await rebuild).toMatchObject({ ok: true });
+
+    const sections = await getDb().select().from(pageSections).where(eq(pageSections.pageId, page.id));
+    expect(sections.map((section) => section.headingPath)).toEqual([["New heading"]]);
+    const links = await getDb().select().from(pageLinks).where(eq(pageLinks.fromPageId, page.id));
+    expect(links.map((link) => link.toPath)).toEqual(["vpn"]);
+    const [found] = await getDb()
+      .select({ id: pages.id })
+      .from(pages)
+      .where(sql`${pages.searchVector} @@ to_tsquery('simple', 'handbook')`);
+    expect(found?.id).toBe(page.id);
   });
 });
