@@ -1,5 +1,5 @@
 {
-  "id": "f7dd8521-6b4e-4183-86f1-b7c26782baac",
+  "id": "b03f5b45-30a2-4673-ae21-66f53f8da97e",
   "prevId": "e5971894-9e1f-45ee-88a4-bae0b87202d8",
   "version": "7",
   "dialect": "postgresql",
@@ -723,7 +723,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_change_set_items_page": {
+          "name": "idx_change_set_items_page",
+          "columns": [
+            {
+              "expression": "page_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "change_set_items_change_set_id_change_sets_id_fk": {
           "name": "change_set_items_change_set_id_change_sets_id_fk",
