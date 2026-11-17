@@ -42,6 +42,13 @@ Editors use **Edit** on a page, or **New page** in a space.
   The callout kinds are `NOTE`, `TIP`, `IMPORTANT`, `WARNING` and `CAUTION`.
   HTML is shown as text, never run.
 
+- **Limits:** a page has at most 500,000 characters. Saving refuses Markdown
+  that would take too long to show, and names the line: lists, quotes and
+  footnotes nested more than 16 levels deep, a paragraph (lines without a
+  blank line between them) of more than 20,000 characters or with more than
+  1,000 `*`, `_` and `~`, and very long pages full of lists, quotes or
+  tables. Split those up with blank lines or into several pages.
+
 - **Links to other pages** are ordinary Markdown links: `[VPN](vpn)` links
   to a page next to this one, `[AI policy](../policies/ai)` one level up,
   `[Leave](/s/hr/leave)` to another space. The toolbar's link button finds

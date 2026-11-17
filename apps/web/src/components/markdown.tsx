@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, Info, Lightbulb, MessageSquareWarning, OctagonAlert } from "lucide-react";
+import { markdownProblem } from "@knowledge/shared/markdown";
 import { resolveLink } from "@knowledge/shared/paths";
 import { cn } from "@/lib/utils";
 import { defineMessages, useT } from "@/i18n";
@@ -219,6 +220,19 @@ function components(from: { space: string; path: string }): Components {
 
 export function MarkdownView(props: MarkdownViewProps) {
   const from = { space: props.space, path: props.path };
+  // Markdown the parser cannot handle in time (pages refuse it; comments may have it) stays plain text.
+  if (markdownProblem(props.markdown)) {
+    return (
+      <div
+        className={cn(
+          "text-foreground min-w-0 text-[0.95rem] break-words whitespace-pre-wrap",
+          props.className,
+        )}
+      >
+        {props.markdown}
+      </div>
+    );
+  }
   return (
     <div className={cn("text-foreground min-w-0 text-[0.95rem] break-words", props.className)}>
       <ReactMarkdown

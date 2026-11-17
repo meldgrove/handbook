@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
+import { markdownProblem } from "@knowledge/shared/markdown";
 import { resolveLink } from "@knowledge/shared/paths";
 
 /**
@@ -15,6 +16,11 @@ import { resolveLink } from "@knowledge/shared/paths";
 const parser = unified().use(remarkParse).use(remarkGfm);
 
 export function parseMarkdown(body: string): Root {
+  // Saving refuses such Markdown; text stored otherwise (a change set item
+  // with conflict blocks, say) stays plain text rather than block the server.
+  if (markdownProblem(body)) {
+    return { type: "root", children: [{ type: "paragraph", children: [{ type: "text", value: body }] }] };
+  }
   return parser.parse(body);
 }
 

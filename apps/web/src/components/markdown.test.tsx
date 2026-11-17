@@ -104,4 +104,12 @@ describe("MarkdownView", () => {
     expect(container.querySelector("table")?.parentElement).toHaveClass("overflow-x-auto");
     expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(2);
   });
+
+  it("shows Markdown the parser cannot handle as plain text", async () => {
+    // 10,000 nested quotes (a comment may be that long) would run the renderer out of stack.
+    const markdown = `${">".repeat(10_000)} deep`;
+    const { container } = renderMarkdown({ markdown });
+    await screen.findByText(/deep$/);
+    expect(container.querySelector("blockquote")).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isDocument, isMap, isScalar, parseDocument, stringify } from "yaml";
+import { markdownProblem } from "./markdown";
 
 /**
  * A page is one Markdown file: YAML frontmatter, then the body.
@@ -475,7 +476,14 @@ export function parsePageFile(markdown: string, schema: SpaceSchema): PageParseR
   if ("error" in read) return { ok: false, errors: { markdown: read.error } };
   const validated = validateFrontmatter(read.values, schema);
   if (!validated.ok) return validated;
-  return { ok: true, page: { frontmatter: validated.frontmatter, body: normalizeBody(parts.body) } };
+  const body = normalizeBody(parts.body);
+  // Line numbers in the message count from the start of the file.
+  const text = normalizeNewlines(markdown).replace(/^\uFEFF/, "");
+  const before =
+    text.slice(0, text.length - parts.body.length) + (/^(?:[ \t]*\n)+/.exec(parts.body)?.[0] ?? "");
+  const problem = markdownProblem(body, before.split("\n").length);
+  if (problem) return { ok: false, errors: { markdown: problem } };
+  return { ok: true, page: { frontmatter: validated.frontmatter, body } };
 }
 
 export const MAX_PAGE_CHARACTERS = 500_000;

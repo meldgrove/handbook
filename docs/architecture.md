@@ -107,6 +107,15 @@ strikethrough, autolinks) and GitHub callouts (`> [!NOTE]`, `[!TIP]`,
 `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`). HTML in a page is shown as
 text, never run.
 
+The parser (micromark, on the server through remark and in the web app
+through react-markdown) takes quadratic time on some Markdown and runs out
+of stack on deep nesting. `markdownProblem` (`packages/shared/src/markdown.ts`)
+estimates its work in one pass over the lines; files it names a problem for
+are refused (`markdown` field error with the line). Its weights are measured
+against micromark: within the limits, a page parses in under a second.
+Text that never went through it (comments, change set descriptions, items
+with conflict blocks) is shown and indexed as plain text when it fails.
+
 ## The page core
 
 `apps/server/src/pages/core.ts` is the one write path. Callers check

@@ -60,6 +60,14 @@ describe("page files", () => {
     );
   });
 
+  it("refuses Markdown the parser cannot handle, naming the line of the file", () => {
+    const result = parsePageFile(`---\ntitle: A\n---\n\nText\n\n${"> ".repeat(20)}deep\n`, schema);
+    expect(result).toEqual({
+      ok: false,
+      errors: { markdown: "Line 7: lists, quotes and footnotes are nested more than 16 levels deep" },
+    });
+  });
+
   it("refuses duplicate keys and YAML aliases", () => {
     expect(readFrontmatterValues("title: A\ntitle: B\n")).toEqual({
       error: "The frontmatter is not valid YAML: Map keys must be unique",
