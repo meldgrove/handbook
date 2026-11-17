@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
+import { markdownProblem } from "@knowledge/shared/markdown";
 import { resolveLink } from "@knowledge/shared/paths";
 
 /**
@@ -15,6 +16,11 @@ import { resolveLink } from "@knowledge/shared/paths";
 const parser = unified().use(remarkParse).use(remarkGfm);
 
 export function parseMarkdown(body: string): Root {
+  // Saving refuses such Markdown; text stored otherwise (a change set item
+  // with conflict blocks, say) stays plain text rather than block the server.
+  if (markdownProblem(body)) {
+    return { type: "root", children: [{ type: "paragraph", children: [{ type: "text", value: body }] }] };
+  }
   return parser.parse(body);
 }
 
@@ -26,8 +32,12 @@ export type Section = {
   content: string;
 };
 
-/** GitHub-style callout markers ("[!NOTE]") are formatting, not text. */
-const CALLOUT_MARKER = /^\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/gim;
+/**
+ * GitHub-style callout markers ("[!NOTE]") are formatting, not text. Only
+ * spaces before them: `^\s*` would search on through every blank line below
+ * each line start (quadratic on blank lines).
+ */
+const CALLOUT_MARKER = /^[ \t]*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/gim;
 
 function plainText(nodes: RootContent[]): string {
   return nodes

@@ -227,6 +227,7 @@ describe("pages API", () => {
     const trash = await request("GET", `/api/v1/spaces/it/trash`, { userId: editor.id });
     expect(trash.body.items.map((item: { title: string }) => item.title)).toEqual(["Setup"]);
     expect(trash.body.items[0].deletedBy.name).toBe("Eddie Editor");
+    expect(Date.parse(trash.body.items[0].deletedAt)).toBeGreaterThan(Date.now() - 60_000);
     expect((await request("GET", `/api/v1/spaces/it/trash`, { userId: reader.id })).status).toBe(403);
     const restored = await request("POST", `/api/v1/pages/${child.id}/restore`, { userId: editor.id });
     expect(restored.status).toBe(200);
@@ -244,6 +245,7 @@ describe("pages API", () => {
       [2, "web"],
       [1, "api"],
     ]);
+    expect(list.body.total).toBe(2);
     expect(list.body.items[0]).toMatchObject({
       message: "Shorter",
       author: { name: "Eddie Editor" },
@@ -261,6 +263,42 @@ describe("pages API", () => {
     expect(restored.status).toBe(200);
     expect(restored.body.revision).toBe(3);
     expect(restored.body.body).toContain("three");
+  });
+
+  it("pages the revision list, newest first, without the files", async () => {
+    const { editor, reader, page } = await setup();
+    for (let base = 1; base <= 4; base++) {
+      const saved = await request("PUT", `/api/v1/pages/${page.id}`, {
+        userId: editor.id,
+        body: { markdown: file("Laptop", `version ${base + 1}`), baseRevision: base },
+      });
+      expect(saved.status).toBe(200);
+    }
+    const list = (query: string) =>
+      request("GET", `/api/v1/pages/${page.id}/revisions${query}`, { userId: reader.id });
+    const numbers = (response: { body: { items: { number: number }[] } }) =>
+      response.body.items.map((item) => item.number);
+
+    const all = await list("");
+    expect(numbers(all)).toEqual([5, 4, 3, 2, 1]);
+    expect(all.body.total).toBe(5);
+    expect(all.body.items[0]).not.toHaveProperty("markdown");
+    const first = await list("?limit=2");
+    expect(numbers(first)).toEqual([5, 4]);
+    expect(first.body.total).toBe(5);
+    expect(numbers(await list("?limit=2&offset=2"))).toEqual([3, 2]);
+    expect(numbers(await list("?limit=2&offset=4"))).toEqual([1]);
+    expect(numbers(await list("?offset=9"))).toEqual([]);
+    expect((await list("?limit=0")).status).toBe(422);
+    expect((await list("?limit=201")).status).toBe(422);
+    expect((await list("?offset=-1")).status).toBe(422);
+
+    const third = await request("GET", `/api/v1/pages/${page.id}/revisions/3`, { userId: reader.id });
+    expect(third.body.markdown).toContain("version 3");
+    expect(third.body.previousMarkdown).toContain("version 2");
+    const firstRevision = await request("GET", `/api/v1/pages/${page.id}/revisions/1`, { userId: reader.id });
+    expect(firstRevision.body.markdown).toContain("three");
+    expect(firstRevision.body.previousMarkdown).toBeNull();
   });
 
   it("lists open change sets that touch a page", async () => {

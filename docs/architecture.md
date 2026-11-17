@@ -36,7 +36,8 @@ agents.
 | Agent: personal token or connected app (OAuth)  | Reads everything; writes only into change sets, even when its person is an editor; never merges, never administers. |
 | Service token                                   | Reads only (search, pages, Markdown files).                                                                         |
 
-Archived spaces are read-only.
+Archived spaces are read-only: no page changes, change sets, comments or
+status changes.
 
 ## Processes
 
@@ -44,12 +45,16 @@ One Docker image, one Node.js entry point (`apps/server/src/main.ts`);
 `APP_ROLE` picks what runs:
 
 - **web**: the Hono server: the JSON API under `/api/v1`, sign-in under
-  `/api/auth` (Better Auth), the OAuth server for connected apps under
+  `/api/auth` (Better Auth; only the routes of the sign-in flow and
+  sign-out), the OAuth server for connected apps under
   `/.well-known/*` and `/oauth/*`, the MCP endpoint `/mcp`, files under
   `/files/*`, Markdown files `/s/<space>/<path>.md`, `/s/<space>.md` and
   `/llms.txt`, health checks under `/-/`, and the built web app.
-- **worker**: rebuilds the search index when `SEARCH_LANGUAGES` changed and
-  removes expired locks, OAuth requests and tokens, and unused uploads.
+- **worker**: rebuilds the search index when `SEARCH_LANGUAGES` changed
+  (one page per transaction, so saves go on meanwhile) and removes expired
+  locks, OAuth requests and tokens, OAuth clients that never got a grant
+  (after 3 days), unused uploads, and audit log entries older than
+  `AUDIT_LOG_DAYS`.
 - **migrate**: applies the Drizzle migrations under an advisory lock.
 - **all**: web and worker in one process.
 
@@ -59,7 +64,9 @@ PostgreSQL holds everything except uploaded files (`FILES_DIR`).
 
 - `users` (+ Better Auth's `sessions`, `accounts`, `verifications`,
   `auth_rate_limits`): everyone who signed in or was named as editor;
-  `is_admin`, `admin_source` (`environment` or `app`), `blocked_at`.
+  `is_admin`, `admin_source` (`environment` or `app`), `blocked_at`,
+  `last_sign_in_at`. `accounts` links a person to the provider's subject;
+  the provider's tokens are removed after the sign-in check.
 - `spaces`, `space_members` (owner or editor).
 - `pages`: the live version of each page. Columns derived from the file on
   every save (title, status, type, tags, search terms, properties, the file
@@ -71,7 +78,8 @@ PostgreSQL holds everything except uploaded files (`FILES_DIR`).
 - `page_sections`: live pages split at headings, with anchors and heading
   paths, for search. `page_links`: links between pages (backlinks, broken
   links). `redirects`: old paths of moved pages.
-- `files`: uploads, stored under `FILES_DIR` with generated names.
+- `files`: uploads, stored under `FILES_DIR` with generated names;
+  `used_at`: when saved content first mentioned one.
 - `edit_locks`, `drafts`: the web editor's locks and unsaved text.
 - `change_sets`, `change_set_items` (one per page), `change_set_events` (the
   timeline: edits, comments, status changes).
@@ -99,6 +107,15 @@ strikethrough, autolinks) and GitHub callouts (`> [!NOTE]`, `[!TIP]`,
 `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`). HTML in a page is shown as
 text, never run.
 
+The parser (micromark, on the server through remark and in the web app
+through react-markdown) takes quadratic time on some Markdown and runs out
+of stack on deep nesting. `markdownProblem` (`packages/shared/src/markdown.ts`)
+estimates its work in one pass over the lines; files it names a problem for
+are refused (`markdown` field error with the line). Its weights are measured
+against micromark: within the limits, a page parses in under a second.
+Text that never went through it (comments, change set descriptions, items
+with conflict blocks) is shown and indexed as plain text when it fails.
+
 ## The page core
 
 `apps/server/src/pages/core.ts` is the one write path. Callers check
@@ -106,15 +123,23 @@ permissions, then call it inside a transaction with a page locked by
 `lockPage`:
 
 - `saveLivePage`: canonical form; when the page changed since
-  `baseRevision`, a three-way merge (`packages/shared/src/merge.ts`) combines
-  both changes; overlapping changes throw `PageConflictError` (409
+  `baseRevision`, a three-way merge (`packages/shared/src/merge.ts`, diff3
+  over a Myers line diff with a work limit: past it, all lines between the
+  first and the last change count as changed) combines both changes;
+  overlapping changes throw `PageConflictError` (409
   `page_changed`, with the current file and a merged text with conflict
   blocks). Saving the same file again changes nothing.
 - `createLivePage`, `moveLivePage` (with sub-pages; old paths redirect; each
   moved page gets a `move` revision), `deleteLivePage` (to the trash; pages
-  with live sub-pages cannot be deleted), `restoreDeletedPage`.
+  with live sub-pages cannot be deleted), `restoreDeletedPage`. A page put
+  below another locks that parent and its ancestors (shared) until the
+  transaction ends, so none of them moves or goes to the trash meanwhile.
+- Saves and new pages lock their space (shared) and check the file against
+  its properties and page types as they are then; a change of those
+  (`updateSpace`) locks the space and checks every live page.
 - After every write it rebuilds the page's search sections, search vector
-  and links, and resolves links that pointed at the page's path.
+  and links, and resolves links that pointed at the page's path (on
+  restore also its old paths).
 
 Change set merges, imports (through change sets), restores and the REST API
 all use these functions.
@@ -144,7 +169,8 @@ Times in `packages/shared/src/limits.ts`.
 4. A takeover replaces the token; the previous editor's next renewal gets
    409 `lock_lost` with who took it, and its text stays in its draft.
 5. The editor stores unsaved text as a draft every 5 seconds (per person
-   and page) and offers it when the person opens the editor again.
+   and page) and offers it when the person opens the editor again. Drafts
+   of a page in the trash stay and come back with it.
 6. Every save sends `baseRevision`; the page core merges or answers 409
    `page_changed` (see above). The editor then shows the merged text with
    conflict blocks; saving is refused while blocks remain.
@@ -176,14 +202,18 @@ Statuses: `open → in_review → merged`, or `closed` (and back to `open`).
 - **Merge**: one transaction. Creates first (parents before children), then
   updates and moves (each through `saveLivePage` with the item's
   `base_revision`, so changes saved meanwhile are merged), then deletes
-  (children first). Any overlap aborts the merge with 409 `merge_conflicts`;
-  "Update from live" on an item rebases it (`base_revision` = live, the file
-  merged, with conflict blocks to resolve). Revisions get `via = merge` and
-  the change set id; the author is the person who made the item.
+  (children first; a page already in the trash stays there). Any overlap
+  aborts the merge with 409 `merge_conflicts`; "Update from live" on an
+  item rebases it (`base_revision` = live, the file merged, with conflict
+  blocks to resolve). Revisions get `via = merge` and the change set id; the
+  author is the person who made the item.
 - **Revert** (editors, merged change sets): a new change set "Revert …"
   that restores each page to its revision before the merge (three-way merged
-  with later changes), deletes pages the change set created and restores
-  pages it deleted; it is merged at once when there are no conflicts.
+  with later changes), deletes pages the change set created or took out of
+  the trash, and restores pages it deleted. One transaction: it is merged at
+  once when there are no conflicts, else it stays open (reverting again
+  answers with it); any other failure leaves no revert behind. A page
+  restored live before the revert is merged keeps the changes saved since.
 
 ## Search
 
@@ -192,10 +222,12 @@ Statuses: `open → in_review → merged`, or `closed` (and back to `open`).
 
 - Pages: title (weight A), search terms and tags (B), description (C).
   Sections: heading path (A), text (D).
-- A query ranks sections with their page's rank, keeps the best section per
-  page, and returns a snippet (`ts_headline`) with matched words between
-  `HIGHLIGHT_START` and `HIGHLIGHT_END`. Titles also match with a trigram
-  similarity (`pg_trgm`) for typos.
+- A query takes the matching pages and sections from their GIN indexes,
+  ranks each page by its own rank plus its best matching section, and
+  returns a snippet (`ts_headline`, built only for the results) with matched
+  words between `HIGHLIGHT_START` and `HIGHLIGHT_END`. With fewer results
+  than asked for, titles also match by trigram similarity (`pg_trgm`'s `%`
+  through the title index, threshold 0.3 set per transaction) for typos.
 - Drafts only appear for editors of their space; deleted pages never.
 
 ## Files
@@ -204,9 +236,15 @@ Statuses: `open → in_review → merged`, or `closed` (and back to `open`).
 `MAX_UPLOAD_MB`) and returns its URL `/files/<id>/<name>` and a Markdown
 snippet. `GET /files/<id>/<name>` serves it to anyone signed in: PNG, JPEG,
 GIF and WebP inline, everything else (including SVG) as a download, always
-with `X-Content-Type-Options: nosniff` and a sandboxing CSP. The worker
-removes uploads older than a day that no page, revision or change set
-mentions.
+with `X-Content-Type-Options: nosniff` and a sandboxing CSP.
+
+Saving content marks the uploads it mentions (`/files/<id>`) as used
+(`markFilesUsed` in `apps/server/src/files/storage.ts`): pages and their
+revisions, change set items and descriptions, drafts, comments, space
+descriptions and page type templates. Every new place that stores such
+text calls it too. The worker removes uploads older than a day that were
+never used; a used upload stays, also when the text that mentioned it is
+gone.
 
 ## Import and export
 
@@ -224,7 +262,12 @@ mentions.
   and listed, or, for owners with `defineProperties`, added to the space
   (text, list, number, yes/no or date, from the values). VitePress boxes
   (`::: tip`, `info`, `warning`, `danger`, `details`) become callouts; heading
-  anchors `{#id}` are removed. Limits: `MAX_IMPORT_BYTES`, `MAX_IMPORT_FILES`.
+  anchors `{#id}` are removed. Limits: `MAX_IMPORT_BYTES`, `MAX_IMPORT_FILES`,
+  unpacked files together four times `MAX_IMPORT_BYTES` (by the sizes the
+  zip declares; inflating a file stops at its declared size, and a file
+  that grows past it fails the import as damaged), Markdown files 2 MB each,
+  `_space.yaml` 1 MB (larger ones are skipped and listed). The import yields
+  to other requests between files.
 
 ## Agents
 
@@ -237,9 +280,13 @@ request with `Authorization: Bearer` is authenticated by the token only
 
 - Personal tokens: created by a person in the web app (Settings); the agent
   acts as that person with agent limits. Optional expiry.
-- Service tokens: created by admins; read-only.
+- Service tokens: created by admins; read-only; tied to no person.
 - Connected apps: OAuth access tokens (60 minutes by default) and rotating
   refresh tokens (30 days), tied to a grant the person can revoke.
+- Personal tokens and connected apps act only while `agentAccess` allows
+  it: their person is not blocked and signed in within
+  `AGENT_SIGN_IN_DAYS` (`resolveBearer`, and the OAuth token endpoint).
+  Blocking revokes them.
 
 ### OAuth server
 
@@ -254,21 +301,41 @@ Claude Code, …), following the MCP authorization specification:
   `token_endpoint_auth_methods_supported: none, client_secret_post,
 client_secret_basic`, `client_id_metadata_document_supported: true`.
 - `POST /oauth/register`: dynamic client registration (RFC 7591).
-  Redirect URIs must be `https`, or `http` on `localhost`/`127.0.0.1`.
+  Redirect URIs must be `https`, `http` on `localhost`, `127.0.0.1` or
+  `[::1]` (any port), or a native app's own scheme (RFC 8252, e.g. Cursor's
+  `cursor://anysphere.cursor-mcp/oauth/callback`); `javascript:`, `data:`,
+  `file:` and similar schemes are refused.
 - Client metadata documents: a `client_id` that is an `https` URL is
   fetched (5 seconds, 64 KB, JSON, no redirects, never private or loopback
   addresses unless `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`), must name itself as
-  `client_id` and list the `redirect_uri`; cached for an hour.
+  `client_id` and list the `redirect_uri`; cached for an hour. One fetch
+  at a time per `client_id` and at most 8 at once per process; beyond that,
+  the sign-in page asks to try again.
 - `GET /oauth/authorize`: checks client, redirect URI, `code_challenge`
   (S256), `resource` (must be the MCP URL when given); stores a request
   (10 minutes) and sends the browser to the sign-in page if needed, then to
-  the consent screen `/oauth/consent?request=<id>` in the web app.
-  Approve or deny there (`/api/v1/oauth/requests/:id/approve|deny`) returns
-  the redirect with `code` and `state`, or `error=access_denied`.
+  the consent screen `/oauth/consent?request=<id>` in the web app. Every
+  problem shows an error page: anyone can register a redirect URI, so the
+  browser goes back to the app only after the person decided (RFC 9700
+  4.11.2, no open redirect). Approve or deny there
+  (`/api/v1/oauth/requests/:id/approve|deny`) returns the redirect with
+  `code` and `state`, or `error=access_denied`.
+- The consent screen shows the app's name as the app's own claim: the
+  host of its metadata document when it has one, "Not verified" when it
+  registered itself, and where the browser returns (the host; with the
+  scheme when it is not `https`). It shows no link from `client_uri`.
 - `POST /oauth/token`: `authorization_code` (one use, PKCE checked,
   `redirect_uri` must match) and `refresh_token` (rotating: the old refresh
-  token stops working). Responses `Cache-Control: no-store`.
+  token stops working). A used code or a replaced refresh token presented
+  again revokes every token of its grant: someone may have stolen it.
+  Responses `Cache-Control: no-store`.
 - `POST /oauth/revoke` (RFC 7009).
+- Rate limits per client address (`X-Forwarded-For` behind `TRUST_PROXY`;
+  IPv6 by /64 network), as token buckets in memory, so each web process
+  counts on its own: `/oauth/register` 30 at once, then 2 per minute;
+  `/oauth/authorize` 30, then 10; `/oauth/token` 60, then 60;
+  `/oauth/revoke` 30, then 30 (`apps/server/src/oauth/rate-limit.ts`).
+  Beyond: 429 with `Retry-After` (an error page for `/oauth/authorize`).
 - `/mcp` without a valid token answers 401 with
   `WWW-Authenticate: Bearer resource_metadata="<APP_URL>/.well-known/oauth-protected-resource/mcp"`.
 - CORS: the well-known documents, `/oauth/register`, `/oauth/token`,
@@ -292,6 +359,12 @@ Changes to a change set answer with the whole change set.
 
 All under `/api/v1`, JSON, contracts in `packages/shared/src/api/`. Errors:
 `{ error: { code, message, fields? } }` plus extra fields for 409 and 423.
+Long lists come in pages: `?limit=` (default 50, at most 200) and `?offset=`,
+with `total` in the answer (`GET /pages/:id/revisions`, newest first, without
+the files; `GET /admin/audit`).
+A request that ran into another change at the same time (two pages created
+at one path, a deadlock) answers 409 `concurrent_change`; trying again
+helps.
 
 | Area        | Routes                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -301,7 +374,7 @@ All under `/api/v1`, JSON, contracts in `packages/shared/src/api/`. Errors:
 | Search      | `GET /search`, `GET /tags`, `GET /tags/:tag/pages`, `GET /recent`                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Change sets | `GET /change-sets`, `POST /change-sets`, `GET /change-sets/:number`, `PATCH /change-sets/:number`, `GET /change-sets/:number/pages/:pageId`, `GET /change-sets/:number/pages/by-path?path=`, `PUT /change-sets/:number/pages`, `POST /change-sets/:number/pages/:pageId/edit`, `/move`, `/delete`, `/rebase`, `DELETE /change-sets/:number/pages/:pageId`, `POST /change-sets/:number/comments`, `/submit`, `/request-changes`, `/merge`, `/close`, `/reopen`, `/revert` |
 | Tokens      | `GET`/`POST /tokens`, `DELETE /tokens/:id`, `GET /connected-apps`, `DELETE /connected-apps/:id`, `GET /connect-info`, `GET /oauth/requests/:id`, `POST /oauth/requests/:id/approve`, `/deny`                                                                                                                                                                                                                                                                             |
-| Admin       | `GET /admin/people`, `PATCH /admin/people/:id`, `GET`/`POST /admin/service-tokens`, `DELETE /admin/service-tokens/:id`, `POST /admin/tags/rename`, `GET /admin/audit`                                                                                                                                                                                                                                                                                                    |
+| Admin       | `GET /admin/people`, `PATCH`/`DELETE /admin/people/:id`, `GET`/`POST /admin/service-tokens`, `DELETE /admin/service-tokens/:id`, `POST /admin/tags/rename`, `GET /admin/audit`                                                                                                                                                                                                                                                                                           |
 
 ## Web app
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { strToU8, unzipSync, zipSync, type Unzipped } from "fflate";
+import { Zip, ZipDeflate, strToU8, zipSync } from "fflate";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { ImportResult } from "@knowledge/shared/api/spaces";
 import { MAX_IMPORT_BYTES, MAX_IMPORT_FILES } from "@knowledge/shared/limits";
@@ -21,7 +22,6 @@ import type { Db, DbOrTx } from "../db/client";
 import { changeSetEvents, changeSetItems, changeSets, pages, spaces } from "../db/schema";
 import type { Principal, UserPrincipal } from "../auth/principal";
 import { audit } from "../core/audit";
-import { badRequest } from "../http/errors";
 import { visibleStatus } from "../pages/views";
 import type { SpaceContext } from "../spaces/access";
 import {
@@ -34,11 +34,15 @@ import {
   stripCommonFolder,
   titleFromName,
 } from "./convert";
+import { readZip } from "./zip";
+import { markFilesUsed } from "../files/storage";
 
 /** Uncompressed size of all files of an import at most. */
 const MAX_UNCOMPRESSED_BYTES = MAX_IMPORT_BYTES * 4;
 /** One Markdown file at most. */
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
+/** `_space.yaml` at most: parsing YAML takes far more memory than its text. */
+const MAX_SPACE_FILE_BYTES = 1024 * 1024;
 
 /**
  * Exports a space as a zip: `<path>.md` for every live page (sub-pages in
@@ -52,16 +56,16 @@ export async function exportSpace(
 ): Promise<Uint8Array> {
   const { space } = context;
   const rows = await db
-    .select()
+    .select({ path: pages.path, title: pages.title, position: pages.position, markdown: pages.markdown })
     .from(pages)
     .where(and(eq(pages.spaceId, space.id), isNull(pages.deletedAt), visibleStatus(principal)))
     .orderBy(asc(pages.path));
-  const entries: Record<string, Uint8Array> = {};
-  for (const row of rows) entries[`${row.path}.md`] = strToU8(row.markdown);
+  const files: [name: string, text: string][] = rows.map((row) => [`${row.path}.md`, row.markdown]);
   const order = [...rows]
     .sort((a, b) => a.position - b.position || a.title.localeCompare(b.title))
     .map((row) => row.path);
-  entries["_space.yaml"] = strToU8(
+  files.push([
+    "_space.yaml",
     stringifyYaml(
       {
         name: space.name,
@@ -72,31 +76,36 @@ export async function exportSpace(
       },
       { lineWidth: 0 },
     ),
-  );
-  return zipSync(entries, { level: 6 });
+  ]);
+  return zipInTurns(files);
+}
+
+/** A zip of text files; other requests get their turn after each file. */
+async function zipInTurns(files: [name: string, text: string][]): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let failure: Error | null = null;
+  const zip = new Zip((error, chunk) => {
+    if (error) failure ??= error;
+    else chunks.push(chunk);
+  });
+  for (const [name, text] of files) {
+    const file = new ZipDeflate(name, { level: 6 });
+    zip.add(file);
+    file.push(strToU8(text), true);
+    await nextTurn();
+  }
+  zip.end();
+  if (failure) throw failure;
+  const result = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
 }
 
 type Candidate = { file: string; path: string; values: Record<string, unknown>; body: string };
-
-function unzip(data: Uint8Array): Unzipped {
-  let count = 0;
-  let total = 0;
-  try {
-    return unzipSync(data, {
-      filter: (file) => {
-        if (file.name.endsWith("/")) return false;
-        count += 1;
-        total += file.originalSize;
-        if (count > MAX_IMPORT_FILES) throw badRequest(`A zip may hold at most ${MAX_IMPORT_FILES} files`);
-        if (total > MAX_UNCOMPRESSED_BYTES) throw badRequest("The unpacked files are too large");
-        return true;
-      },
-    });
-  } catch (error) {
-    if (error instanceof Error && "status" in error) throw error;
-    throw badRequest("This is not a zip file, or it is damaged");
-  }
-}
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -125,8 +134,14 @@ export async function importSpace(
     definedPageTypes: [],
     notes: [],
   };
-  const zip = unzip(input.data);
-  const names = stripCommonFolder(Object.keys(zip));
+  // Files are inflated one at a time, when needed, and only up to their declared size.
+  const zip = new Map(
+    readZip(input.data, { maxFiles: MAX_IMPORT_FILES, maxBytes: MAX_UNCOMPRESSED_BYTES }).map((entry) => [
+      entry.name,
+      entry,
+    ]),
+  );
+  const names = stripCommonFolder([...zip.keys()]);
 
   const candidates: Candidate[] = [];
   const taken = new Map<string, string>();
@@ -136,8 +151,13 @@ export async function importSpace(
   let renamed = 0;
 
   for (const [original, name] of names) {
-    const data = zip[original]!;
+    const entry = zip.get(original)!;
     if (name === "_space.yaml") {
+      if (entry.size > MAX_SPACE_FILE_BYTES) {
+        result.skipped.push({ file: name, reason: "The file is larger than 1 MB" });
+        continue;
+      }
+      const data = entry.read();
       try {
         const parsed: unknown = parseYaml(decoder.decode(data));
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
@@ -155,7 +175,7 @@ export async function importSpace(
       result.skipped.push({ file: name, reason: "Not a Markdown file" });
       continue;
     }
-    if (data.length > MAX_FILE_BYTES) {
+    if (entry.size > MAX_FILE_BYTES) {
       result.skipped.push({ file: name, reason: "The file is larger than 2 MB" });
       continue;
     }
@@ -171,6 +191,9 @@ export async function importSpace(
       });
       continue;
     }
+    // Other requests get their turn between files.
+    await nextTurn();
+    const data = entry.read();
     let text: string;
     try {
       text = decoder.decode(data);
@@ -261,6 +284,7 @@ export async function importSpace(
   type Prepared = { candidate: Candidate; markdown: string; title: string };
   const prepared: Prepared[] = [];
   for (const candidate of candidates) {
+    await nextTurn();
     const yaml = stringifyYaml(candidate.values, { lineWidth: 0 });
     const canonical = canonicalPageFile(`---\n${yaml}---\n\n${candidate.body}`, schema);
     if (!canonical.ok) {
@@ -270,6 +294,8 @@ export async function importSpace(
       continue;
     }
     prepared.push({ candidate, markdown: canonical.markdown, title: canonical.page.frontmatter.title });
+    // Only the canonical file is needed from here on.
+    candidate.body = "";
   }
   prepared.sort((a, b) => a.candidate.path.split("/").length - b.candidate.path.split("/").length);
 
@@ -314,10 +340,30 @@ export async function importSpace(
     }
 
     if (result.definedProperties.length > 0 || result.definedPageTypes.length > 0) {
+      // Adds to the settings as they are now: an owner may have changed them meanwhile.
+      const [current] = await tx
+        .select({ properties: spaces.properties, pageTypes: spaces.pageTypes })
+        .from(spaces)
+        .where(eq(spaces.id, space.id))
+        .for("no key update");
+      const properties = [...current!.properties];
+      for (const property of schema.properties) {
+        if (!result.definedProperties.includes(property.key)) continue;
+        if (!properties.some((existing) => existing.key === property.key)) properties.push(property);
+      }
+      const pageTypes = [...current!.pageTypes];
+      for (const pageType of schema.pageTypes) {
+        if (!result.definedPageTypes.includes(pageType.key)) continue;
+        if (!pageTypes.some((existing) => existing.key === pageType.key)) pageTypes.push(pageType);
+      }
       await tx
         .update(spaces)
-        .set({ properties: schema.properties, pageTypes: schema.pageTypes, updatedAt: sql`now()` })
+        .set({ properties, pageTypes, updatedAt: sql`now()` })
         .where(eq(spaces.id, space.id));
+      await markFilesUsed(
+        tx,
+        pageTypes.map((pageType) => pageType.template),
+      );
       await audit(tx, actor, {
         action: "space.updated",
         entityType: "space",
@@ -352,6 +398,10 @@ export async function importSpace(
     await tx
       .insert(changeSetEvents)
       .values({ changeSetId: changeSet!.id, kind: "created", actorId: actor.id });
+    await markFilesUsed(
+      tx,
+      items.map((item) => item.markdown),
+    );
     for (const item of items) {
       const { title: pageTitle, ...row } = item;
       await tx.insert(changeSetItems).values({ ...row, changeSetId: changeSet!.id });

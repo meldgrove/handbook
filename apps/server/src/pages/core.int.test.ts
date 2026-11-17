@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { newPageFile } from "@knowledge/shared/page";
 import { getDb } from "../db/client";
-import { pageLinks, pageRevisions, pageSections, pages } from "../db/schema";
+import { drafts, pageLinks, pageRevisions, pageSections, pages } from "../db/schema";
 import { createPage, createSpace, createUser, resetDatabase } from "../test/helpers";
 import {
   createLivePage,
@@ -15,6 +15,24 @@ import {
 } from "./core";
 
 const author = (userId: string) => ({ userId, via: "web" as const, clientName: null });
+
+const nobody = { userId: null, via: "web" as const, clientName: null };
+
+type Space = Awaited<ReturnType<typeof createSpace>>;
+
+async function trash(space: Space, pageId: string) {
+  await getDb().transaction(async (tx) => {
+    const page = await lockPage(tx, pageId);
+    await deleteLivePage(tx, { space, page, author: nobody });
+  });
+}
+
+async function restore(space: Space, pageId: string) {
+  await getDb().transaction(async (tx) => {
+    const page = await lockPage(tx, pageId, { deleted: true });
+    await restoreDeletedPage(tx, { space, page, author: nobody });
+  });
+}
 
 async function save(pageId: string, markdown: string, baseRevision: number, userId: string) {
   return getDb().transaction(async (tx) => {
@@ -146,5 +164,47 @@ describe("page core", () => {
         }),
       ),
     ).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("restores links that reached the page through its old paths", async () => {
+    const space = await createSpace({ slug: "it" });
+    const vpn = await createPage(space, { title: "VPN" });
+    await getDb().transaction(async (tx) => {
+      const page = await lockPage(tx, vpn.id);
+      await moveLivePage(tx, { space, page, newPath: "network-vpn", author: nobody });
+    });
+    await createPage(space, { title: "Old link", body: "See [VPN](vpn).\n" });
+    await createPage(space, { title: "New link", body: "See [VPN](network-vpn).\n" });
+    const targets = async () =>
+      (await getDb().select().from(pageLinks))
+        .map((link) => [link.toPath, link.toPageId === vpn.id] as const)
+        .sort();
+    expect(await targets()).toEqual([
+      ["network-vpn", true],
+      ["vpn", true],
+    ]);
+    await trash(space, vpn.id);
+    expect(await targets()).toEqual([
+      ["network-vpn", false],
+      ["vpn", false],
+    ]);
+    await restore(space, vpn.id);
+    expect(await targets()).toEqual([
+      ["network-vpn", true],
+      ["vpn", true],
+    ]);
+  });
+
+  it("keeps drafts of a page in the trash for when it comes back", async () => {
+    const user = await createUser();
+    const space = await createSpace();
+    const page = await createPage(space, { title: "Doc", body: "Text.\n" });
+    await getDb()
+      .insert(drafts)
+      .values({ pageId: page.id, userId: user.id, markdown: `${page.markdown}More.\n`, baseRevision: 1 });
+    await trash(space, page.id);
+    await restore(space, page.id);
+    const [draft] = await getDb().select().from(drafts).where(eq(drafts.pageId, page.id));
+    expect(draft).toMatchObject({ userId: user.id, markdown: `${page.markdown}More.\n`, baseRevision: 1 });
   });
 });

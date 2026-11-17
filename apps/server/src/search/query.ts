@@ -35,7 +35,8 @@ function draftFilter(principal: Principal): SQL {
 function filters(query: SearchQuery): SQL {
   const parts: SQL[] = [sql`p.deleted_at is null`];
   if (query.space) parts.push(sql`sp.slug = ${query.space}`);
-  if (query.tag) parts.push(sql`${normalizeTag(query.tag)} = any(p.tags)`);
+  // @> (not = any) so the GIN index on tags can find the pages.
+  if (query.tag) parts.push(sql`p.tags @> array[${normalizeTag(query.tag)}]::text[]`);
   if (query.type) parts.push(sql`p.type = ${query.type}`);
   return sql.join(parts, sql` and `);
 }
@@ -75,6 +76,9 @@ function toResult(row: Row): SearchResult {
   };
 }
 
+/** Titles more similar to the query than this (pg_trgm) match as typos. */
+const TITLE_SIMILARITY = 0.3;
+
 export async function searchPages(
   db: DbOrTx,
   principal: Principal,
@@ -82,55 +86,80 @@ export async function searchPages(
 ): Promise<SearchResult[]> {
   const q = tsQuery(query.q);
   const headlineLanguage = config().searchConfigs[0]!;
+  // Only pages whose own search data or one of whose sections matches are
+  // ranked; both come from the GIN indexes. `sections` keeps the best
+  // matching section per page (rank, then position). The snippet is built
+  // only for the pages returned.
   const ranked = await db.execute<Row>(sql`
-    with q as (select ${q} as query)
-    select p.id, p.path, p.title, p.description, p.tags, p.type, sp.slug as space_slug, sp.name as space_name,
+    with q as (select ${q} as query),
+    sections as (
+      select distinct on (s.page_id) s.page_id, s.id, ts_rank(s.search_vector, q.query) as rank
+      from page_sections s
+      cross join q
+      where s.search_vector @@ q.query
+      order by s.page_id, rank desc, s.position
+    ),
+    matches as (
+      select p.id from pages p cross join q where p.search_vector @@ q.query
+      union
+      select page_id from sections
+    ),
+    top as (
+      select p.id, p.path, p.title, p.description, p.tags, p.type, sp.slug as space_slug, sp.name as space_name,
+        best.id as section_id,
+        (ts_rank(p.search_vector, q.query) * 2 + coalesce(best.rank, 0)) as score
+      from matches m
+      join pages p on p.id = m.id
+      join spaces sp on sp.id = p.space_id
+      cross join q
+      left join sections best on best.page_id = p.id
+      where ${filters(query)} and ${draftFilter(principal)}
+      order by score desc, p.title
+      limit ${query.limit}
+    )
+    select top.id, top.path, top.title, top.description, top.tags, top.type, top.space_slug, top.space_name,
       best.anchor, best.heading_path,
       ts_headline(${headlineLanguage}::regconfig,
-        coalesce(best.content, nullif(p.description, ''), first.content, ''), q.query, ${HEADLINE_OPTIONS}) as snippet,
-      (ts_rank(p.search_vector, q.query) * 2 + coalesce(best.rank, 0)) as score
-    from pages p
-    join spaces sp on sp.id = p.space_id
+        coalesce(best.content, nullif(top.description, ''),
+          (select s.content from page_sections s where s.page_id = top.id order by s.position limit 1), ''),
+        q.query, ${HEADLINE_OPTIONS}) as snippet,
+      top.score
+    from top
     cross join q
-    left join lateral (
-      select s.anchor, s.heading_path, s.content, ts_rank(s.search_vector, q.query) as rank
-      from page_sections s
-      where s.page_id = p.id and s.search_vector @@ q.query
-      order by rank desc, s.position
-      limit 1
-    ) best on true
-    left join lateral (
-      select s.content from page_sections s where s.page_id = p.id order by s.position limit 1
-    ) first on true
-    where ${filters(query)} and ${draftFilter(principal)}
-      and (p.search_vector @@ q.query or best.rank is not null)
-    order by score desc, p.title
-    limit ${query.limit}
+    left join page_sections best on best.id = top.section_id
+    order by top.score desc, top.title
   `);
   const results = ranked.rows.map(toResult);
   if (results.length >= query.limit) return results;
 
-  // Typos: titles similar to the query that full-text search missed.
+  // Typos: titles similar to the query that full-text search missed. The %
+  // operator (not similarity() alone) lets the trigram index find them; its
+  // threshold is set for this transaction only.
   const seen = results.map((result) => result.pageId);
-  const similar = await db.execute<Row>(sql`
-    select p.id, p.path, p.title, p.description, p.tags, p.type, sp.slug as space_slug, sp.name as space_name,
-      null as anchor, null as heading_path,
-      left(coalesce(nullif(p.description, ''), (select s.content from page_sections s where s.page_id = p.id order by s.position limit 1), ''), 240) as snippet,
-      similarity(p.title, ${query.q}) * 0.5 as score
-    from pages p
-    join spaces sp on sp.id = p.space_id
-    where ${filters(query)} and ${draftFilter(principal)}
-      and similarity(p.title, ${query.q}) > 0.3
-      ${
-        seen.length > 0
-          ? sql`and p.id not in (${sql.join(
-              seen.map((id) => sql`${id}::uuid`),
-              sql`, `,
-            )})`
-          : sql``
-      }
-    order by similarity(p.title, ${query.q}) desc, p.title
-    limit ${query.limit - results.length}
-  `);
+  const similar = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('pg_trgm.similarity_threshold', ${String(TITLE_SIMILARITY)}, true)`,
+    );
+    return tx.execute<Row>(sql`
+      select p.id, p.path, p.title, p.description, p.tags, p.type, sp.slug as space_slug, sp.name as space_name,
+        null as anchor, null as heading_path,
+        left(coalesce(nullif(p.description, ''), (select s.content from page_sections s where s.page_id = p.id order by s.position limit 1), ''), 240) as snippet,
+        similarity(p.title, ${query.q}) * 0.5 as score
+      from pages p
+      join spaces sp on sp.id = p.space_id
+      where ${filters(query)} and ${draftFilter(principal)}
+        and p.title % ${query.q}
+        ${
+          seen.length > 0
+            ? sql`and p.id not in (${sql.join(
+                seen.map((id) => sql`${id}::uuid`),
+                sql`, `,
+              )})`
+            : sql``
+        }
+      order by similarity(p.title, ${query.q}) desc, p.title
+      limit ${query.limit - results.length}
+    `);
+  });
   return [...results, ...similar.rows.map(toResult)];
 }

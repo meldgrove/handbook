@@ -42,6 +42,13 @@ Editors use **Edit** on a page, or **New page** in a space.
   The callout kinds are `NOTE`, `TIP`, `IMPORTANT`, `WARNING` and `CAUTION`.
   HTML is shown as text, never run.
 
+- **Limits:** a page has at most 500,000 characters. Saving refuses Markdown
+  that would take too long to show, and names the line: lists, quotes and
+  footnotes nested more than 16 levels deep, a paragraph (lines without a
+  blank line between them) of more than 20,000 characters or with more than
+  1,000 `*`, `_` and `~`, and very long pages full of lists, quotes or
+  tables. Split those up with blank lines or into several pages.
+
 - **Links to other pages** are ordinary Markdown links: `[VPN](vpn)` links
   to a page next to this one, `[AI policy](../policies/ai)` one level up,
   `[Leave](/s/hr/leave)` to another space. The toolbar's link button finds
@@ -61,9 +68,10 @@ your change instead, or (editors) **Take over**. The other person then sees
 that you took over; their text stays saved as a draft.
 
 The editor saves your unsaved text as a draft every few seconds and offers
-it when you come back. If the page changed while you edited it (for example
-after a takeover or a merged change set), saving combines both changes; if
-both changed the same lines, the editor shows them marked:
+it when you come back (also after the page was deleted and restored). If
+the page changed while you edited it (for example after a takeover or a
+merged change set), saving combines both changes; if both changed the same
+lines, the editor shows them marked:
 
 ```
 <<<<<<< yours
@@ -97,7 +105,7 @@ always use them.
    overlapping lines marked, to resolve before merging.
 5. **Revert** on a merged change set undoes all its pages at once, as a new
    change set that is merged right away (or left open when later changes
-   overlap).
+   overlap; **Revert** again then opens that one).
 
 **Close** shelves a change set; **Reopen** brings it back. Nothing is ever
 lost: every version stays in the history, deleted pages go to the space's

@@ -16,10 +16,28 @@ pg.types.setTypeParser(pg.types.builtins.INT8, (value) => Number(value));
 let pool: pg.Pool | undefined;
 let database: Db | undefined;
 
+/** How every connection connects: waiting fails instead of hanging, and dead connections are noticed. */
+export function connectionOptions(): pg.ClientConfig {
+  return {
+    connectionString: config().DATABASE_URL,
+    // Also the longest wait for a free connection of the pool.
+    connectionTimeoutMillis: 10_000,
+    // Probes idle connections, so ones the network or a failover cut are dropped.
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
+  };
+}
+
 export function getPool(): pg.Pool {
   if (!pool) {
-    const { DATABASE_URL, DATABASE_POOL_SIZE } = config();
-    pool = new pg.Pool({ connectionString: DATABASE_URL, max: DATABASE_POOL_SIZE });
+    const { DATABASE_POOL_SIZE, DATABASE_STATEMENT_TIMEOUT_SECONDS } = config();
+    pool = new pg.Pool({
+      ...connectionOptions(),
+      max: DATABASE_POOL_SIZE,
+      // No statement, and no transaction left open, holds a connection forever.
+      statement_timeout: DATABASE_STATEMENT_TIMEOUT_SECONDS * 1000,
+      idle_in_transaction_session_timeout: 60_000,
+    });
     // An idle client can lose its connection (database restart); the pool replaces it.
     pool.on("error", (error) => logger.warn({ err: error }, "idle database client error"));
     pool.on("connect", (client) => {

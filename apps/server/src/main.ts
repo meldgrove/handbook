@@ -4,7 +4,7 @@ import { logger } from "./logger";
 import { closeDb, getDb } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { createApp } from "./http/app";
-import { ensureEnvironmentAdmins } from "./auth/bootstrap";
+import { ensureEnvironmentAdmins, warnAboutOpenSignIn } from "./auth/bootstrap";
 import { flushErrorReports } from "./error-reporting";
 import { startWorker, type Stop } from "./worker";
 
@@ -28,6 +28,7 @@ async function main() {
   const stops: Stop[] = [];
   if (role === "all" || role === "web") {
     await ensureEnvironmentAdmins(getDb());
+    warnAboutOpenSignIn();
     const app = createApp();
     server = serve({ fetch: app.fetch, port: settings.PORT, hostname: settings.HOST }, (info) => {
       logger.info({ port: info.port, url: settings.APP_URL }, "web app listening");

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   canonicalPageFile,
+  normalizeBody,
   parsePageFile,
+  readFrontmatterValues,
   validateFrontmatter,
   withFrontmatter,
   type SpaceSchema,
@@ -56,5 +58,49 @@ describe("page files", () => {
     expect(withFrontmatter("---\ntitle: A\n---\n\nText\n", { title: "B", tags: [] })).toBe(
       "---\ntitle: B\n---\n\nText\n",
     );
+  });
+
+  it("refuses Markdown the parser cannot handle, naming the line of the file", () => {
+    const result = parsePageFile(`---\ntitle: A\n---\n\nText\n\n${"> ".repeat(20)}deep\n`, schema);
+    expect(result).toEqual({
+      ok: false,
+      errors: { markdown: "Line 7: lists, quotes and footnotes are nested more than 16 levels deep" },
+    });
+  });
+
+  it("refuses duplicate keys and YAML aliases", () => {
+    expect(readFrontmatterValues("title: A\ntitle: B\n")).toEqual({
+      error: "The frontmatter is not valid YAML: Map keys must be unique",
+    });
+    expect(readFrontmatterValues("title: &name A\ndescription: *name\n")).toEqual({
+      error: "The frontmatter is not valid YAML: aliases (*name) are not supported",
+    });
+  });
+});
+
+/** Milliseconds a call takes. */
+function timed(run: () => void): number {
+  const start = performance.now();
+  run();
+  return performance.now() - start;
+}
+
+describe("page files near the size limit", () => {
+  it("trims the end of the body in time", () => {
+    expect(normalizeBody("\n\nBody  \n\n\t\n")).toBe("Body\n");
+    const body = `a${" ".repeat(480_000)}b`;
+    expect(timed(() => expect(normalizeBody(body)).toBe(`${body}\n`))).toBeLessThan(1500);
+  });
+
+  it("checks long email addresses in time", () => {
+    const owner = `a@${"a.".repeat(200_000)}@`;
+    let result: ReturnType<typeof validateFrontmatter> | undefined;
+    expect(timed(() => (result = validateFrontmatter({ title: "A", owner }, schema)))).toBeLessThan(1500);
+    expect(result).toEqual({ ok: false, errors: { "properties.owner": "Use an email address" } });
+  });
+
+  it("reads frontmatter with many keys in time", () => {
+    const yaml = Array.from({ length: 45_000 }, (_, index) => `key${index}: value`).join("\n");
+    expect(timed(() => expect("values" in readFrontmatterValues(yaml)).toBe(true))).toBeLessThan(1500);
   });
 });

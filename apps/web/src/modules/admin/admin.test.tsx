@@ -7,7 +7,8 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Me, Person } from "@knowledge/shared/api/users";
 import { AdminPeoplePage } from "./people-page";
@@ -102,12 +103,37 @@ describe("admin", () => {
     const self = (await screen.findByText("(you)")).closest("tr")!;
     expect(within(self).getByRole("switch")).toBeDisabled();
     expect(within(self).queryByRole("button", { name: "Block" })).not.toBeInTheDocument();
+    expect(within(self).queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
     const environment = screen.getByText("root@example.org").closest("tr")!;
     expect(within(environment).getByRole("switch")).toBeDisabled();
     expect(within(environment).getByText("From ADMIN_EMAILS")).toBeInTheDocument();
+    expect(within(environment).queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
     const rita = screen.getByText("Rita Reader").closest("tr")!;
     expect(within(rita).getByRole("switch")).toBeEnabled();
     expect(within(rita).getByRole("button", { name: "Block" })).toBeInTheDocument();
+    expect(within(rita).getByRole("button", { name: "Remove" })).toBeInTheDocument();
     expect(within(rita).getByRole("link", { name: "IT · editor" })).toHaveAttribute("href", "/s/it");
+  });
+
+  it("removes a person after asking", async () => {
+    const rita = person({});
+    routeFetch({
+      "GET /api/v1/me": me,
+      "GET /api/v1/admin/people": { items: [rita] },
+      [`DELETE /api/v1/admin/people/${rita.id}`]: {},
+    });
+    renderPeople();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Remove Rita Reader?" });
+    expect(dialog).toHaveTextContent("shown as “Removed person”");
+    expect(fetch).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: "DELETE" }));
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining(`/api/v1/admin/people/${rita.id}`),
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
   });
 });

@@ -7,7 +7,11 @@ import { config } from "../config";
 import { SERVER_ROOT } from "../paths";
 import { withErrorReportingSettings } from "../error-reporting";
 
-/** The built web app (apps/web/dist): hashed assets, and index.html for every app route. */
+/**
+ * The built web app (apps/web/dist): hashed assets, and index.html for every
+ * app route. Text assets go out as their brotli or gzip copies from the build
+ * (scripts/compress-assets.mjs) when the browser accepts them.
+ */
 export function webApp() {
   const root = config().WEB_DIST_DIR ?? path.resolve(SERVER_ROOT, "../web/dist");
   const relativeRoot = path.relative(process.cwd(), root) || ".";
@@ -16,12 +20,13 @@ export function webApp() {
     "/assets/*",
     serveStatic({
       root: relativeRoot,
+      precompressed: true,
       onFound: (_path, c) => {
         c.header("cache-control", "public, max-age=31536000, immutable");
       },
     }),
   );
-  app.use("/favicon.svg", serveStatic({ root: relativeRoot }));
+  app.use("/favicon.svg", serveStatic({ root: relativeRoot, precompressed: true }));
   let indexHtml: string | undefined;
   app.get("*", async (c) => {
     if (!c.req.header("accept")?.includes("text/html")) return c.notFound();

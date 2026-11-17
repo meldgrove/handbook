@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { pageRevisions, pages } from "../db/schema";
+import { changeSets, pageRevisions, pages } from "../db/schema";
 import { issueCredential } from "../auth/credentials";
 import { createPage, createSpace, createToken, createUser, request, resetDatabase } from "../test/helpers";
 import { lockPage, saveLivePage } from "../pages/core";
@@ -568,5 +568,221 @@ describe("change sets", () => {
     expect(byPath.get("laptop")?.id).not.toBe(laptop.id);
     expect(byPath.get("laptop/start")?.parentId).toBe(byPath.get("laptop")?.id);
     expect(byPath.has("archive/laptop/start")).toBe(false);
+  });
+
+  it("merges a deletion of a page that was put in the trash meanwhile", async () => {
+    const { editor, reader, space, laptop } = await setup();
+    const old = await createPage(space, { title: "Old" });
+    const number = (
+      await request("POST", "/api/v1/change-sets", {
+        userId: reader.id,
+        body: { space: "it", title: "Tidy" },
+      })
+    ).body.number as number;
+    await request("POST", `/api/v1/change-sets/${number}/pages/${old.id}/delete`, { userId: reader.id });
+    await request("PUT", `/api/v1/change-sets/${number}/pages`, {
+      userId: reader.id,
+      body: { pageId: laptop.id, markdown: laptop.markdown.replace("one", "ONE") },
+    });
+    expect((await request("DELETE", `/api/v1/pages/${old.id}`, { userId: editor.id })).status).toBe(204);
+    const detail = await request("GET", `/api/v1/change-sets/${number}`, { userId: editor.id });
+    expect(detail.body.checks.filter((check: { level: string }) => check.level === "error")).toEqual([]);
+
+    const merged = await request("POST", `/api/v1/change-sets/${number}/merge`, { userId: editor.id });
+    expect(merged.status).toBe(200);
+    expect(merged.body.status).toBe("merged");
+    const [trashed] = await getDb().select().from(pages).where(eq(pages.id, old.id));
+    expect(trashed).toMatchObject({ revision: 2 });
+    expect(trashed?.deletedAt).not.toBeNull();
+    const [after] = await getDb().select().from(pages).where(eq(pages.id, laptop.id));
+    expect(after?.markdown).toContain("ONE");
+  });
+
+  it("merges a revert that restores a page someone restored live meanwhile", async () => {
+    const { editor, space, laptop } = await setup();
+    const old = await createPage(space, { title: "Old", body: "first\n\nsecond\n" });
+    const number = (
+      await request("POST", "/api/v1/change-sets", {
+        userId: editor.id,
+        body: { space: "it", title: "Tidy" },
+      })
+    ).body.number as number;
+    await request("POST", `/api/v1/change-sets/${number}/pages/${old.id}/delete`, { userId: editor.id });
+    await request("PUT", `/api/v1/change-sets/${number}/pages`, {
+      userId: editor.id,
+      body: { pageId: laptop.id, markdown: laptop.markdown.replace("one", "ONE") },
+    });
+    expect((await request("POST", `/api/v1/change-sets/${number}/merge`, { userId: editor.id })).status).toBe(
+      200,
+    );
+    // An overlapping live change keeps the revert open.
+    const changed = (await getDb().select().from(pages).where(eq(pages.id, laptop.id)))[0]!;
+    await liveSave(laptop.id, changed.markdown.replace("ONE", "uno"), changed.revision);
+    const revert = await request("POST", `/api/v1/change-sets/${number}/revert`, { userId: editor.id });
+    expect(revert.body).toMatchObject({ merged: false });
+    const revertNumber = revert.body.number as number;
+
+    // Meanwhile an editor restores the page and changes it live.
+    expect((await request("POST", `/api/v1/pages/${old.id}/restore`, { userId: editor.id })).status).toBe(
+      200,
+    );
+    const restored = (await getDb().select().from(pages).where(eq(pages.id, old.id)))[0]!;
+    await liveSave(old.id, restored.markdown.replace("second", "SECOND"), restored.revision);
+
+    await request("DELETE", `/api/v1/change-sets/${revertNumber}/pages/${laptop.id}`, { userId: editor.id });
+    const merged = await request("POST", `/api/v1/change-sets/${revertNumber}/merge`, { userId: editor.id });
+    expect(merged.status).toBe(200);
+    const [page] = await getDb().select().from(pages).where(eq(pages.id, old.id));
+    expect(page?.deletedAt).toBeNull();
+    expect(page?.markdown).toContain("SECOND");
+  });
+
+  it("reverts a revert that restored a deleted page", async () => {
+    const { editor, space } = await setup();
+    const old = await createPage(space, { title: "Old" });
+    const number = (
+      await request("POST", "/api/v1/change-sets", {
+        userId: editor.id,
+        body: { space: "it", title: "Tidy" },
+      })
+    ).body.number as number;
+    await request("POST", `/api/v1/change-sets/${number}/pages/${old.id}/delete`, { userId: editor.id });
+    await request("POST", `/api/v1/change-sets/${number}/merge`, { userId: editor.id });
+    const first = await request("POST", `/api/v1/change-sets/${number}/revert`, { userId: editor.id });
+    expect(first.body).toMatchObject({ merged: true });
+    expect((await getDb().select().from(pages).where(eq(pages.id, old.id)))[0]?.deletedAt).toBeNull();
+
+    const second = await request("POST", `/api/v1/change-sets/${first.body.number}/revert`, {
+      userId: editor.id,
+    });
+    expect(second.body).toMatchObject({ merged: true });
+    expect((await getDb().select().from(pages).where(eq(pages.id, old.id)))[0]?.deletedAt).not.toBeNull();
+  });
+
+  it("keeps a page that was edited after a change set restored it when that change set is reverted", async () => {
+    const { editor, space } = await setup();
+    const old = await createPage(space, { title: "Old" });
+    const number = (
+      await request("POST", "/api/v1/change-sets", {
+        userId: editor.id,
+        body: { space: "it", title: "Tidy" },
+      })
+    ).body.number as number;
+    await request("POST", `/api/v1/change-sets/${number}/pages/${old.id}/delete`, { userId: editor.id });
+    await request("POST", `/api/v1/change-sets/${number}/merge`, { userId: editor.id });
+    const restore = await request("POST", `/api/v1/change-sets/${number}/revert`, { userId: editor.id });
+    expect(restore.body).toMatchObject({ merged: true });
+    const restored = (await getDb().select().from(pages).where(eq(pages.id, old.id)))[0]!;
+    await liveSave(old.id, `${restored.markdown}\nAdded after the restore.\n`, restored.revision);
+
+    const undo = await request("POST", `/api/v1/change-sets/${restore.body.number}/revert`, {
+      userId: editor.id,
+    });
+    expect(undo.body).toMatchObject({ merged: false });
+    const live = (await getDb().select().from(pages).where(eq(pages.id, old.id)))[0]!;
+    expect(live.deletedAt).toBeNull();
+    expect(live.markdown).toContain("Added after the restore.");
+  });
+
+  it("leaves no revert behind when merging it fails, and keeps one open revert", async () => {
+    const { editor, laptop } = await setup();
+    const number = (
+      await request("POST", "/api/v1/change-sets", {
+        userId: editor.id,
+        body: { space: "it", title: "Edit" },
+      })
+    ).body.number as number;
+    await request("PUT", `/api/v1/change-sets/${number}/pages`, {
+      userId: editor.id,
+      body: { pageId: laptop.id, markdown: laptop.markdown.replace("one", "ONE") },
+    });
+    await request("POST", `/api/v1/change-sets/${number}/merge`, { userId: editor.id });
+    const reverts = async () =>
+      (await getDb().select().from(changeSets)).filter((row) => row.revertOfId !== null).length;
+
+    // A failure inside the merge (here: the database refuses page updates) undoes the whole revert.
+    await getDb().execute(
+      sql`create function test_refuse() returns trigger language plpgsql as $$ begin raise exception 'refused'; end $$`,
+    );
+    await getDb().execute(
+      sql`create trigger test_refuse before update on pages for each row execute function test_refuse()`,
+    );
+    try {
+      const failed = await request("POST", `/api/v1/change-sets/${number}/revert`, { userId: editor.id });
+      expect(failed.status).toBe(500);
+    } finally {
+      await getDb().execute(sql`drop trigger test_refuse on pages`);
+      await getDb().execute(sql`drop function test_refuse`);
+    }
+    expect(await reverts()).toBe(0);
+
+    // A revert with conflicts stays open; reverting again answers with it.
+    const changed = (await getDb().select().from(pages).where(eq(pages.id, laptop.id)))[0]!;
+    await liveSave(laptop.id, changed.markdown.replace("ONE", "uno"), changed.revision);
+    const open = await request("POST", `/api/v1/change-sets/${number}/revert`, { userId: editor.id });
+    expect(open.body).toMatchObject({ merged: false });
+    const again = await request("POST", `/api/v1/change-sets/${number}/revert`, { userId: editor.id });
+    expect(again.body).toEqual({ number: open.body.number, merged: false });
+    expect(await reverts()).toBe(1);
+  });
+
+  it("refuses every change in archived spaces", async () => {
+    const { editor, reader, laptop } = await setup();
+    const admin = await createUser({ isAdmin: true });
+    const create = async (userId: string, title: string) =>
+      (await request("POST", "/api/v1/change-sets", { userId, body: { space: "it", title } })).body
+        .number as number;
+    const open = await create(reader.id, "Open");
+    await request("PUT", `/api/v1/change-sets/${open}/pages`, {
+      userId: reader.id,
+      body: { pageId: laptop.id, markdown: laptop.markdown.replace("one", "ONE") },
+    });
+    const merged = await create(editor.id, "Merged");
+    await request("PUT", `/api/v1/change-sets/${merged}/pages`, {
+      userId: editor.id,
+      body: { path: "vpn", markdown: file("VPN") },
+    });
+    await request("POST", `/api/v1/change-sets/${merged}/merge`, { userId: editor.id });
+    const closed = await create(reader.id, "Closed");
+    await request("POST", `/api/v1/change-sets/${closed}/close`, { userId: reader.id });
+    expect((await request("POST", "/api/v1/spaces/it/archive", { userId: admin.id })).status).toBe(200);
+
+    const attempts: [string, string, string, unknown?][] = [
+      ["POST", "/change-sets", reader.id, { space: "it", title: "New" }],
+      ["PATCH", `/change-sets/${open}`, reader.id, { title: "Renamed" }],
+      ["PUT", `/change-sets/${open}/pages`, reader.id, { path: "x", markdown: file("X") }],
+      ["POST", `/change-sets/${open}/pages/${laptop.id}/delete`, reader.id],
+      ["DELETE", `/change-sets/${open}/pages/${laptop.id}`, reader.id],
+      ["POST", `/change-sets/${open}/comments`, reader.id, { body: "Hello" }],
+      ["POST", `/change-sets/${merged}/comments`, reader.id, { body: "Hello" }],
+      ["POST", `/change-sets/${closed}/comments`, reader.id, { body: "Hello" }],
+      ["POST", `/change-sets/${open}/submit`, reader.id, {}],
+      ["POST", `/change-sets/${open}/close`, reader.id],
+      ["POST", `/change-sets/${open}/close`, editor.id],
+      ["POST", `/change-sets/${open}/merge`, editor.id],
+      ["POST", `/change-sets/${open}/request-changes`, editor.id, { body: "No" }],
+      ["POST", `/change-sets/${closed}/reopen`, reader.id],
+      ["POST", `/change-sets/${merged}/revert`, editor.id],
+      ["PUT", `/pages/${laptop.id}`, editor.id, { markdown: laptop.markdown, baseRevision: 1 }],
+      ["POST", "/spaces/it/pages", editor.id, { markdown: file("New") }],
+      ["POST", `/pages/${laptop.id}/move`, editor.id, { parentPath: null, slug: "notebook" }],
+      ["DELETE", `/pages/${laptop.id}`, editor.id],
+      ["POST", `/pages/${laptop.id}/lock`, editor.id],
+      ["PUT", `/pages/${laptop.id}/draft`, editor.id, { markdown: laptop.markdown, baseRevision: 1 }],
+    ];
+    for (const [method, path, userId, body] of attempts) {
+      const response = await request(method, `/api/v1${path}`, { userId, body });
+      expect({ method, path, status: response.status, message: response.body.error?.message }).toEqual({
+        method,
+        path,
+        status: 403,
+        message: "This space is archived; it can only be read",
+      });
+    }
+    const detail = await request("GET", `/api/v1/change-sets/${open}`, { userId: reader.id });
+    expect(detail.status).toBe(200);
+    expect(Object.values(detail.body.permissions).some(Boolean)).toBe(false);
+    const [page] = await getDb().select().from(pages).where(eq(pages.id, laptop.id));
+    expect(page).toMatchObject({ revision: 1, path: "laptop", deletedAt: null });
   });
 });

@@ -7,6 +7,7 @@ import type { Db, DbOrTx } from "../db/client";
 import { changeSetItems, changeSets, pages } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
 import { conflict, notFound, validationError } from "../http/errors";
+import { markFilesUsed } from "../files/storage";
 import { requireAbility, spaceContext } from "../spaces/access";
 import { canonicalize, revisionMarkdown, type PageRow } from "../pages/core";
 import {
@@ -58,6 +59,7 @@ export async function createChangeSet(
         clientName: principal.clientName,
       })
       .returning();
+    await markFilesUsed(tx, [input.description]);
     await addEvent(tx, row!, principal, { kind: "created" });
     return row!;
   });
@@ -76,6 +78,7 @@ export async function updateChangeSet(
       .update(changeSets)
       .set({ ...input, updatedAt: sql`now()` })
       .where(eq(changeSets.id, access.changeSet.id));
+    await markFilesUsed(tx, [input.description]);
   });
 }
 
@@ -162,6 +165,7 @@ async function saveItem(
       .onConflictDoUpdate({ target: [changeSetItems.changeSetId, changeSetItems.pageId], set: values })
       .returning();
     stored = row!;
+    await markFilesUsed(tx, [next.markdown]);
   }
   await addEvent(tx, changeSet, principal, {
     kind: "edited",

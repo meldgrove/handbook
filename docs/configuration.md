@@ -9,7 +9,7 @@ Spaces, editors, properties and page types are set up in the app.
 | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `APP_URL`            | The public URL, e.g. `https://knowledge.example.org`. Sign-in, OAuth and links depend on it.                        |
 | `DATABASE_URL`       | PostgreSQL connection, e.g. `postgres://knowledge:secret@db:5432/knowledge`.                                        |
-| `AUTH_SECRET`        | Signs sessions; at least 32 characters (`openssl rand -base64 32`).                                                 |
+| `AUTH_SECRET`        | Signs sessions; at least 32 characters (`openssl rand -base64 32`); example values are refused.                     |
 | `OIDC_ISSUER`        | The OpenID Connect provider, e.g. `https://login.example.org/realms/example`.                                       |
 | `OIDC_CLIENT_ID`     | The app's client at the provider.                                                                                   |
 | `OIDC_CLIENT_SECRET` | Its secret.                                                                                                         |
@@ -17,14 +17,17 @@ Spaces, editors, properties and page types are set up in the app.
 
 ## Sign-in and access
 
-| Variable                | Default                | Meaning                                                                                                            |
-| ----------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `OIDC_PROVIDER_NAME`    | `single sign-on`       | Shown on the sign-in button ("Sign in with …").                                                                    |
-| `OIDC_SCOPES`           | `openid email profile` | Scopes asked for. Add one that puts groups into the sign-in if you use `ACCESS_GROUPS` and your provider needs it. |
-| `OIDC_PKCE`             | `true`                 | Proof Key for Code Exchange; turn off only for providers that reject it.                                           |
-| `ALLOWED_EMAIL_DOMAINS` | (any)                  | Comma-separated domains that may sign in, e.g. `example.org`.                                                      |
-| `ACCESS_GROUPS`         | (no check)             | Comma-separated groups; a person must be in one of them (or a subgroup, for Keycloak paths like `/staff`).         |
-| `OIDC_GROUPS_CLAIM`     | `groups`               | The claim with a person's groups, from the ID token or the userinfo endpoint. A dotted name reads a nested claim.  |
+| Variable                      | Default                | Meaning                                                                                                                                                                   |
+| ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OIDC_PROVIDER_NAME`          | `single sign-on`       | Shown on the sign-in button ("Sign in with …").                                                                                                                           |
+| `OIDC_SCOPES`                 | `openid email profile` | Scopes asked for. Add one that puts groups into the sign-in if you use `ACCESS_GROUPS` and your provider needs it.                                                        |
+| `OIDC_PKCE`                   | `true`                 | Proof Key for Code Exchange; turn off only for providers that reject it.                                                                                                  |
+| `ALLOWED_EMAIL_DOMAINS`       | (any)                  | Comma-separated domains that may sign in, e.g. `example.org`.                                                                                                             |
+| `ACCESS_GROUPS`               | (no check)             | Comma-separated groups; a person must be in one of them (or a subgroup, for Keycloak paths like `/staff`).                                                                |
+| `OIDC_GROUPS_CLAIM`           | `groups`               | The claim with a person's groups, from the ID token or the userinfo endpoint. A dotted name reads a nested claim.                                                         |
+| `OIDC_REQUIRE_EMAIL_VERIFIED` | `true`                 | Only addresses the provider verified (`email_verified`) sign in. Turn off only for providers without the claim ([risk](identity-and-access.md#verified-email-addresses)). |
+| `SESSION_DAYS`                | `7`                    | Sessions end this many days after sign-in, however much they are used.                                                                                                    |
+| `AGENT_SIGN_IN_DAYS`          | `30`                   | Personal tokens and connected apps stop when their person has not signed in for this long; `0`: no limit, else at least `SESSION_DAYS`.                                   |
 
 See [Identity and access](identity-and-access.md).
 
@@ -48,17 +51,23 @@ See [Agents and MCP](agents.md).
 
 ## Processes and server
 
-| Variable                         | Default                          | Meaning                                                                                                            |
-| -------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `APP_ROLE`                       | `all`                            | `all`, `web`, `worker` or `migrate`; the image's command sets it.                                                  |
-| `APP_NAME`                       | `Knowledge`                      | The name in the app, on the sign-in page and for agents.                                                           |
-| `PORT`, `HOST`                   | `3000`, 0.0.0.0                  | Where the web process listens.                                                                                     |
-| `TRUST_PROXY`                    | `0`                              | Proxies in front that append to `X-Forwarded-For`: `true` (one), a number, or `false`. `compose.yaml` sets `true`. |
-| `RUN_MIGRATIONS`                 | `false`                          | Apply migrations at start (single-container setups).                                                               |
-| `DATABASE_POOL_SIZE`             | `10`                             | Connections per process.                                                                                           |
-| `LOG_LEVEL`                      | `info`                           | `fatal` … `trace`, or `silent`.                                                                                    |
-| `WORKER_HEARTBEAT_FILE`          | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds, for health checks.                                                        |
-| `WEB_DIST_DIR`, `MIGRATIONS_DIR` | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
+| Variable                             | Default                          | Meaning                                                                                                            |
+| ------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `APP_ROLE`                           | `all`                            | `all`, `web`, `worker` or `migrate`; the image's command sets it.                                                  |
+| `APP_NAME`                           | `Knowledge`                      | The name in the app, on the sign-in page and for agents.                                                           |
+| `PORT`, `HOST`                       | `3000`, 0.0.0.0                  | Where the web process listens.                                                                                     |
+| `TRUST_PROXY`                        | `0`                              | Proxies in front that append to `X-Forwarded-For`: `true` (one), a number, or `false`. `compose.yaml` sets `true`. |
+| `RUN_MIGRATIONS`                     | `false`                          | Apply migrations at start (single-container setups).                                                               |
+| `DATABASE_POOL_SIZE`                 | `10`                             | Connections per process.                                                                                           |
+| `DATABASE_STATEMENT_TIMEOUT_SECONDS` | `60`                             | Longest database statement of the web app and the worker; `0`: no limit. Migrations have none.                     |
+| `LOG_LEVEL`                          | `info`                           | `fatal` … `trace`, or `silent`.                                                                                    |
+| `AUDIT_LOG_DAYS`                     | `365`                            | Days the audit log keeps entries; the worker deletes older ones. `0` keeps them all.                               |
+| `WORKER_HEARTBEAT_FILE`              | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds while no job hangs, for health checks.                                     |
+| `WEB_DIST_DIR`, `MIGRATIONS_DIR`     | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
+
+Behind a reverse proxy, set `TRUST_PROXY`: the rate limits of sign-in and of
+connected apps (OAuth) count per client address, and without it every
+request seems to come from the proxy.
 
 ## Error reports (Sentry)
 

@@ -66,6 +66,15 @@ export function useUpdatePerson() {
   });
 }
 
+/** Removes a person: their history stays under REMOVED_PERSON_NAME (`@knowledge/shared/api/users`). */
+export function useRemovePerson() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/admin/people/${id}`),
+    onSettled: () => client.invalidateQueries({ queryKey: ["admin", "people"] }),
+  });
+}
+
 export function useServiceTokens() {
   return useQuery({
     queryKey: adminKeys.serviceTokens,

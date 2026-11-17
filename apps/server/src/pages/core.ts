@@ -10,9 +10,10 @@ import { isValidSlug, isWithin, joinPath, parentPath, pathProblem, slugify } fro
 import type { Via } from "@knowledge/shared/roles";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
-import { drafts, pageLinks, pageRevisions, pageSections, pages, redirects, users } from "../db/schema";
+import { pageLinks, pageRevisions, pageSections, pages, redirects, spaces, users } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
 import { AppError, conflict, notFound, validationError } from "../http/errors";
+import { markFilesUsed } from "../files/storage";
 import { schemaOf, type SpaceRow } from "../spaces/access";
 import { pageLinksOf, sectionsOf } from "./analyze";
 
@@ -70,9 +71,27 @@ export function canonicalize(markdown: string, space: SpaceRow): { markdown: str
   return { markdown: result.markdown, page: result.page };
 }
 
+/**
+ * The space a file is written to, read again and locked (shared) until the
+ * transaction ends: files are checked against its properties and page types
+ * as they are now, and owners cannot change those until the write is done
+ * (`updateSpace` locks the space and checks the live pages).
+ */
+async function spaceForWrite(tx: DbOrTx, spaceId: string): Promise<SpaceRow> {
+  const [space] = await tx.select().from(spaces).where(eq(spaces.id, spaceId)).for("share");
+  if (!space) throw notFound("No such space");
+  return space;
+}
+
 /** The body of a stored file, without checking it against the space (its schema may have changed). */
 export function bodyOf(markdown: string): string {
   return splitFrontmatter(markdown)?.body ?? markdown;
+}
+
+/** A page by id, live or in the trash, locked for the transaction; null when unknown. */
+export async function lockAnyPage(tx: DbOrTx, pageId: string): Promise<PageRow | null> {
+  const [page] = await tx.select().from(pages).where(eq(pages.id, pageId)).for("update");
+  return page ?? null;
 }
 
 /** A live (not deleted) page by id, locked for the transaction. */
@@ -81,7 +100,7 @@ export async function lockPage(
   pageId: string,
   options: { deleted?: boolean } = {},
 ): Promise<PageRow> {
-  const [page] = await tx.select().from(pages).where(eq(pages.id, pageId)).for("update");
+  const page = await lockAnyPage(tx, pageId);
   if (!page || (page.deletedAt !== null) !== (options.deleted ?? false)) throw notFound("No such page");
   return page;
 }
@@ -246,6 +265,7 @@ async function insertRevision(
     added: stats.added,
     removed: stats.removed,
   });
+  await markFilesUsed(tx, [input.markdown]);
 }
 
 export type SaveResult = { page: PageRow; changed: boolean; merged: boolean };
@@ -260,7 +280,8 @@ export async function saveLivePage(
   tx: DbOrTx,
   input: { space: SpaceRow; page: PageRow; markdown: string; baseRevision: number; author: Author },
 ): Promise<SaveResult> {
-  const { space, page, author } = input;
+  const { page, author } = input;
+  const space = await spaceForWrite(tx, input.space.id);
   if (input.baseRevision > page.revision)
     throw conflict("This revision does not exist yet", "invalid_revision");
   let file = canonicalize(input.markdown, space);
@@ -321,11 +342,25 @@ async function nextPosition(tx: DbOrTx, spaceId: string, parentId: string | null
   return (row?.value ?? -1) + 1;
 }
 
-/** The live parent page of a path; 422 when it does not exist. */
+/**
+ * The live parent page of a path; 422 when it does not exist. The parent and
+ * its ancestors stay locked (shared, top down) until the transaction ends:
+ * none of them can move or go to the trash meanwhile. Moves and deletions
+ * lock their page first, so they wait for this transaction and then see the
+ * page put below it, or this one waits for them and finds no parent.
+ */
 async function parentOf(tx: DbOrTx, space: SpaceRow, path: string): Promise<PageRow | null> {
   const parent = parentPath(path);
   if (!parent) return null;
-  const page = await findLivePage(tx, space.id, parent);
+  const segments = parent.split("/");
+  const ancestors = segments.map((_, index) => segments.slice(0, index + 1).join("/"));
+  const rows = await tx
+    .select()
+    .from(pages)
+    .where(and(eq(pages.spaceId, space.id), inArray(pages.path, ancestors), isNull(pages.deletedAt)))
+    .orderBy(asc(pages.path))
+    .for("share");
+  const page = rows.find((row) => row.path === parent);
   if (!page)
     throw validationError(
       { path: `The parent page “${parent}” does not exist` },
@@ -356,7 +391,8 @@ export async function createLivePage(
     position?: number;
   },
 ): Promise<PageRow> {
-  const { space, author } = input;
+  const { author } = input;
+  const space = await spaceForWrite(tx, input.space.id);
   const file = canonicalize(input.markdown, space);
   const slug = input.slug?.trim() ? input.slug.trim() : slugify(file.page.frontmatter.title);
   if (!isValidSlug(slug)) {
@@ -490,7 +526,10 @@ export async function moveLivePage(
   return page;
 }
 
-/** Moves a page to the trash. Pages with live sub-pages cannot be deleted. */
+/**
+ * Moves a page to the trash. Pages with live sub-pages cannot be deleted.
+ * Drafts stay, for when the page is restored.
+ */
 export async function deleteLivePage(tx: DbOrTx, input: { space: SpaceRow; page: PageRow; author: Author }) {
   const { page, author } = input;
   const [child] = await tx
@@ -515,15 +554,25 @@ export async function deleteLivePage(tx: DbOrTx, input: { space: SpaceRow; page:
   await tx.delete(pageSections).where(eq(pageSections.pageId, page.id));
   await tx.delete(pageLinks).where(eq(pageLinks.fromPageId, page.id));
   await tx.update(pageLinks).set({ toPageId: null }).where(eq(pageLinks.toPageId, page.id));
-  await tx.delete(drafts).where(eq(drafts.pageId, page.id));
 }
 
 /** Takes a page out of the trash, at its old path (which must be free, below a live parent). */
 export async function restoreDeletedPage(
   tx: DbOrTx,
-  input: { space: SpaceRow; page: PageRow; author: Author },
+  input: {
+    space: SpaceRow;
+    page: PageRow;
+    author: Author;
+    /** False when the caller saves a checked file right after (a merge brings the page back). */
+    checkFile?: boolean;
+  },
 ): Promise<PageRow> {
   const { space, page, author } = input;
+  // Its file must fit the space as it is now: properties may have changed while it was in the trash.
+  const current = await spaceForWrite(tx, space.id);
+  if (input.checkFile !== false && !canonicalPageFile(page.markdown, schemaOf(current)).ok) {
+    throw validationError({}, "The page no longer fits the space's properties and page types.");
+  }
   if (await findLivePage(tx, space.id, page.path)) {
     throw conflict(`Another page has the path “${page.path}” now. Move it first.`, "path_taken");
   }
@@ -551,21 +600,26 @@ export async function restoreDeletedPage(
   });
   await tx.delete(redirects).where(and(eq(redirects.spaceId, space.id), eq(redirects.path, page.path)));
   await deriveFromBody(tx, space, page, bodyOf(page.markdown));
-  await resolveIncomingLinks(tx, space, page.id, [page.path]);
+  // Links to its path and to its old paths (which still redirect to it) reach it again.
+  const oldPaths = await tx
+    .select({ path: redirects.path })
+    .from(redirects)
+    .where(and(eq(redirects.spaceId, space.id), eq(redirects.pageId, page.id)));
+  await resolveIncomingLinks(tx, space, page.id, [page.path, ...oldPaths.map((row) => row.path)]);
   return restored!;
 }
 
-/** Rebuilds the search data of every live page (after SEARCH_LANGUAGES changed). */
-export async function reindexAllPages(tx: DbOrTx, space: SpaceRow) {
-  const rows = await tx
-    .select()
-    .from(pages)
-    .where(and(eq(pages.spaceId, space.id), isNull(pages.deletedAt)));
-  for (const page of rows) {
-    await tx
-      .update(pages)
-      .set({ searchVector: pageSearchVector(page) })
-      .where(eq(pages.id, page.id));
-    await deriveFromBody(tx, space, page, bodyOf(page.markdown));
-  }
+/**
+ * Rebuilds the search data of a live page from its file (after
+ * SEARCH_LANGUAGES changed). It locks and reads the page itself, so a save
+ * meanwhile is never undone; a page in the trash has nothing to rebuild.
+ */
+export async function reindexPage(tx: DbOrTx, space: SpaceRow, pageId: string) {
+  const page = await lockAnyPage(tx, pageId);
+  if (!page || page.deletedAt !== null) return;
+  await tx
+    .update(pages)
+    .set({ searchVector: pageSearchVector(page) })
+    .where(eq(pages.id, page.id));
+  await deriveFromBody(tx, space, page, bodyOf(page.markdown));
 }

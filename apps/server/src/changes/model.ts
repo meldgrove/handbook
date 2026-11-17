@@ -5,6 +5,7 @@ import type { DbOrTx } from "../db/client";
 import { changeSetEvents, changeSetItems, changeSets, pageRevisions, pages, users } from "../db/schema";
 import type { Principal, UserPrincipal } from "../auth/principal";
 import { forbidden, notFound } from "../http/errors";
+import { markFilesUsed } from "../files/storage";
 import { getSpaceById, spaceContext, type SpaceContext } from "../spaces/access";
 import type { PageRow } from "../pages/core";
 
@@ -57,10 +58,10 @@ export function accessOf(
     submit: edit && changeSet.status === "open",
     review: review && changeSet.status === "in_review",
     merge: review && active,
-    close: user !== null && active && (isAuthor || review),
+    close: user !== null && active && !archived && (isAuthor || review),
     reopen: user !== null && changeSet.status === "closed" && !archived && (isAuthor || review),
     revert: review && changeSet.status === "merged" && changeSet.revertedById === null,
-    comment: user !== null,
+    comment: user !== null && !archived,
   };
 }
 
@@ -116,12 +117,13 @@ export function requireAccess(
   what: Exclude<keyof ChangeSetAccess, "changeSet" | "context" | "user" | "isAuthor">,
 ) {
   if (access[what]) return;
+  // Archived spaces are read-only: no changes, comments or status changes.
+  if (access.context.space.archivedAt) throw forbidden("This space is archived; it can only be read");
   const status = access.changeSet.status;
   if (what === "edit" || what === "submit" || what === "close") {
     if (!ACTIVE_STATUSES.includes(status as ChangeSetStatus)) {
       throw forbidden(status === "merged" ? "This change set is merged" : "This change set is closed");
     }
-    if (access.context.space.archivedAt) throw forbidden("This space is archived; it can only be read");
     throw forbidden("Only its author and editors of this space can change this change set");
   }
   if (what === "reopen") throw forbidden("Only its author and editors of this space can reopen it");
@@ -216,6 +218,7 @@ export async function addEvent(
     pagePath: event.page?.path ?? null,
     pageTitle: event.page?.title ?? null,
   });
+  await markFilesUsed(db, [event.body]);
 }
 
 export type ActorRow = { id: string; name: string; email: string };

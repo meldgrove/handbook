@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node ../../scripts/inject-debug-ids.mjs dist",
+    "build": "vite build && node ../../scripts/inject-debug-ids.mjs dist && node ../../scripts/compress-assets.mjs dist",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"

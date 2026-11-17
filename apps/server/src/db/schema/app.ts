@@ -241,8 +241,18 @@ export const files = pgTable(
     storageKey: text("storage_key").notNull().unique(),
     uploadedById: uuid("uploaded_by_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * When saved content (a page, change set, draft, comment or space
+     * setting) first mentioned `/files/<id>`; unused uploads are removed.
+     */
+    usedAt: timestamp("used_at", { withTimezone: true }),
   },
-  (table) => [index("idx_files_space").on(table.spaceId)],
+  (table) => [
+    index("idx_files_space").on(table.spaceId),
+    index("idx_files_unused")
+      .on(table.createdAt)
+      .where(sql`${table.usedAt} is null`),
+  ],
 );
 
 /** Who edits a page in the web editor right now (docs/architecture.md, "Edit locks"). */
@@ -331,7 +341,11 @@ export const changeSetItems = pgTable(
     updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.changeSetId, table.pageId] })],
+  (table) => [
+    primaryKey({ columns: [table.changeSetId, table.pageId] }),
+    // The page view lists the open change sets of a page.
+    index("idx_change_set_items_page").on(table.pageId),
+  ],
 );
 
 /** The timeline of a change set: edits, comments and status changes. */

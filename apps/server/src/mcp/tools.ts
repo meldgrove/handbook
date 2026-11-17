@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ChangeSet, ChangeSetPage, ChangeSetSummary } from "@knowledge/shared/api/changes";
-import type { Page, PageSummary, Revision, RevisionSummary } from "@knowledge/shared/api/pages";
+import type { Page, PageSummary, Revision, RevisionList } from "@knowledge/shared/api/pages";
 import type { SearchResponse } from "@knowledge/shared/api/search";
 import { HIGHLIGHT_END, HIGHLIGHT_START } from "@knowledge/shared/api/search";
 import type { Space, SpaceSummary } from "@knowledge/shared/api/spaces";
@@ -396,20 +396,25 @@ export function registerTools(server: McpServer, api: ApiClient) {
     {
       title: "Page history",
       description:
-        "Lists a page's revisions, newest first: number, kind (save, move, delete, restore), who, how, change set, lines changed.",
+        "Lists a page's revisions, newest first: number, kind (save, move, delete, restore), who, how, change set, lines changed. `total` counts all; use `offset` for older ones.",
       inputSchema: {
         page: pageRef,
         limit: z.number().int().min(1).max(200).optional().describe("Most revisions (default 20)"),
+        offset: z.number().int().min(0).optional().describe("Skips this many of the newest (default 0)"),
       },
       annotations: READ,
     },
-    ({ page, limit }) =>
+    ({ page, limit, offset }) =>
       run(async () => {
         const live = await livePage(api, parseRef(page));
-        const response = await api.get<{ items: RevisionSummary[] }>(`/pages/${live.id}/revisions`);
+        const response = await api.get<RevisionList>(`/pages/${live.id}/revisions`, {
+          limit: limit ?? 20,
+          offset: offset ?? 0,
+        });
         return {
           page: `${live.space}/${live.path}`,
-          revisions: response.items.slice(0, limit ?? 20).map((revision) => ({
+          total: response.total,
+          revisions: response.items.map((revision) => ({
             number: revision.number,
             kind: revision.kind,
             title: revision.title,

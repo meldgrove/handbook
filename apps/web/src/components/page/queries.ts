@@ -1,10 +1,11 @@
+import { keepPreviousData } from "@tanstack/react-query";
 import type { ChangeSet, ChangeSetPage, ChangeSetSummary } from "@knowledge/shared/api/changes";
 import type {
   Draft,
   Page,
   PageSummary,
   Revision,
-  RevisionSummary,
+  RevisionList,
   recentChangeSchema,
 } from "@knowledge/shared/api/pages";
 import type { SearchResponse } from "@knowledge/shared/api/search";
@@ -56,9 +57,10 @@ export const draftQuery = (id: string) => ({
   staleTime: 0,
 });
 
-export const revisionsQuery = (id: string) => ({
-  queryKey: ["page", id, "revisions"] as const,
-  queryFn: () => api.get<{ items: RevisionSummary[] }>(`/pages/${id}/revisions`),
+export const revisionsQuery = (id: string, limit: number, offset: number) => ({
+  queryKey: ["page", id, "revisions", { limit, offset }] as const,
+  queryFn: () => api.get<RevisionList>(`/pages/${id}/revisions`, { limit, offset }),
+  placeholderData: keepPreviousData,
 });
 
 export const revisionQuery = (id: string, number: number) => ({

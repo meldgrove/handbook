@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { eq, sql } from "drizzle-orm";
+import { and, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { FileInfo } from "@knowledge/shared/api/spaces";
 import { INLINE_IMAGE_TYPES } from "@knowledge/shared/limits";
 import { config } from "../config";
-import { getDb, type Db } from "../db/client";
+import { getDb, type Db, type DbOrTx } from "../db/client";
 import { files } from "../db/schema";
 import { badRequest } from "../http/errors";
 import { logger } from "../logger";
@@ -91,26 +91,49 @@ export function readStoredFile(row: FileRow) {
   return createReadStream(filePath(row.storageKey));
 }
 
+const FILE_MENTION = /\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+
+/** Ids of the uploads texts mention (`/files/<id>`, also in absolute URLs). */
+export function mentionedFileIds(texts: (string | null | undefined)[]): string[] {
+  const ids = new Set<string>();
+  for (const text of texts) {
+    if (!text?.includes("/files/")) continue;
+    for (const match of text.matchAll(FILE_MENTION)) ids.add(match[1]!.toLowerCase());
+  }
+  return [...ids];
+}
+
 /**
- * Removes uploads older than a day that no live page, revision or change
- * set mentions (`/files/<id>/`).
+ * Marks the uploads that saved content mentions as used, so the worker
+ * keeps them. Every write of content people or agents write calls it:
+ * pages (with their revisions), change set items and descriptions, drafts,
+ * comments, space descriptions and page type templates.
  */
+export async function markFilesUsed(db: DbOrTx, texts: (string | null | undefined)[]) {
+  const ids = mentionedFileIds(texts);
+  if (ids.length === 0) return;
+  await db
+    .update(files)
+    .set({ usedAt: sql`now()` })
+    .where(and(isNull(files.usedAt), sql`${files.id} = any(${sql.param(ids)}::uuid[])`));
+}
+
+/** Removes uploads older than a day that no saved content ever mentioned, 500 per run. */
 export async function pruneUnusedUploads(db: Db): Promise<number> {
-  const rows = await db
-    .select()
+  const unused = db
+    .select({ id: files.id })
     .from(files)
-    .where(
-      sql`${files.createdAt} < now() - interval '1 day'
-        and not exists (select 1 from pages p where strpos(p.markdown, '/files/' || ${files.id}::text || '/') > 0)
-        and not exists (select 1 from page_revisions r where strpos(r.markdown, '/files/' || ${files.id}::text || '/') > 0)
-        and not exists (select 1 from change_set_items i where strpos(coalesce(i.markdown, ''), '/files/' || ${files.id}::text || '/') > 0)`,
-    )
+    .where(and(isNull(files.usedAt), lt(files.createdAt, sql`now() - interval '1 day'`)))
     .limit(500);
-  for (const row of rows) {
+  // Checked again on delete: content saved meanwhile may have used one.
+  const removed = await db
+    .delete(files)
+    .where(and(isNull(files.usedAt), inArray(files.id, unused)))
+    .returning({ id: files.id, storageKey: files.storageKey });
+  for (const row of removed) {
     await rm(filePath(row.storageKey), { force: true }).catch((error: unknown) =>
       logger.warn({ err: error, fileId: row.id }, "could not remove an unused upload"),
     );
-    await db.delete(files).where(eq(files.id, row.id));
   }
-  return rows.length;
+  return removed.length;
 }

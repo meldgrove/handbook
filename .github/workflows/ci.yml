@@ -40,7 +40,8 @@ jobs:
             exit 1
           fi
       - run: npm run build
-      - run: npm audit --omit=dev --audit-level=high
+      # What the image installs (Dockerfile, prod-deps).
+      - run: npm audit --omit=dev --omit=optional --audit-level=high
 
   integration:
     name: Integration tests (PostgreSQL 18)

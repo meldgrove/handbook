@@ -19,7 +19,11 @@ const flag = (fallback: boolean) =>
     z.boolean().default(fallback),
   );
 
-const EXAMPLE_SECRET = "change-me-to-a-long-random-value";
+/** Example values of AUTH_SECRET (.env.example, older docs): never valid where the app is in use. */
+const EXAMPLE_SECRETS = new Set([
+  "change-me-to-a-long-random-value",
+  "development-secret-development-secret",
+]);
 const TEXT_SEARCH_CONFIG = /^[a-z_]+$/;
 
 const schema = z
@@ -34,6 +38,8 @@ const schema = z
     APP_NAME: withDefault(z.string().min(1).max(100), "Knowledge"),
     DATABASE_URL: z.string().min(1),
     DATABASE_POOL_SIZE: withDefault(z.coerce.number().int().min(1).max(200), 10),
+    /** Longest database statement of the web app and the worker, in seconds; 0: no limit. */
+    DATABASE_STATEMENT_TIMEOUT_SECONDS: withDefault(z.coerce.number().int().min(0).max(86_400), 60),
     /** Signs sessions. At least 32 characters. */
     AUTH_SECRET: z.string().min(32),
     LOG_LEVEL: withDefault(z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]), "info"),
@@ -72,6 +78,19 @@ const schema = z
     /** Comma-separated groups (from OIDC_GROUPS_CLAIM) of which a person must be in one; empty: no check. */
     ACCESS_GROUPS: withDefault(z.string(), ""),
     /**
+     * Sign in only when the provider says the email address is verified
+     * (claim `email_verified`). Turn off only for providers that do not send
+     * the claim (Microsoft Entra ID) and where people cannot choose their address.
+     */
+    OIDC_REQUIRE_EMAIL_VERIFIED: flag(true),
+    /** Sessions end this many days after sign-in; using the app does not extend them. */
+    SESSION_DAYS: withDefault(z.coerce.number().int().min(1).max(90), 7),
+    /**
+     * Personal tokens and connected apps stop working when their person has
+     * not signed in through the provider for this many days; 0: no limit.
+     */
+    AGENT_SIGN_IN_DAYS: withDefault(z.coerce.number().int().min(0).max(365), 30),
+    /**
      * PostgreSQL text search configurations for search, comma-separated, e.g.
      * `english,german`. Word forms ("laptops" finds "laptop") follow them;
      * exact words always match.
@@ -88,6 +107,8 @@ const schema = z
     OAUTH_ALLOW_PRIVATE_CLIENT_URLS: flag(false),
     /** Largest file upload, in megabytes. */
     MAX_UPLOAD_MB: withDefault(z.coerce.number().int().min(1).max(500), 20),
+    /** Days the audit log keeps entries; the worker deletes older ones. 0 keeps them all. */
+    AUDIT_LOG_DAYS: withDefault(z.coerce.number().int().min(0).max(36_500), 365),
     /** The worker touches this file every few seconds, for container health checks. */
     WORKER_HEARTBEAT_FILE: optional(z.string()),
     /** Version of a release image, set by the release workflow; unset in images built from source. */
@@ -100,8 +121,21 @@ const schema = z
     SENTRY_TRACES_SAMPLE_RATE: withDefault(z.coerce.number().min(0).max(1), 0),
   })
   .superRefine((value, ctx) => {
-    if (value.NODE_ENV === "production" && value.AUTH_SECRET === EXAMPLE_SECRET) {
-      ctx.addIssue({ code: "custom", path: ["AUTH_SECRET"], message: "Replace the example value" });
+    // A copied .env.example sets NODE_ENV=development: an https address counts too.
+    const deployed = value.NODE_ENV === "production" || /^https:/i.test(value.APP_URL);
+    if (deployed && EXAMPLE_SECRETS.has(value.AUTH_SECRET)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["AUTH_SECRET"],
+        message: "Replace the example value (openssl rand -base64 32)",
+      });
+    }
+    if (value.AGENT_SIGN_IN_DAYS > 0 && value.AGENT_SIGN_IN_DAYS < value.SESSION_DAYS) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["AGENT_SIGN_IN_DAYS"],
+        message: "Use 0 or at least SESSION_DAYS",
+      });
     }
     for (const email of splitList(value.ADMIN_EMAILS)) {
       if (!z.email().safeParse(email).success) {
@@ -122,7 +156,7 @@ const schema = z
         });
       }
     }
-    if (value.OAUTH_ALLOW_PRIVATE_CLIENT_URLS && value.NODE_ENV === "production") {
+    if (value.OAUTH_ALLOW_PRIVATE_CLIENT_URLS && deployed) {
       ctx.addIssue({
         code: "custom",
         path: ["OAUTH_ALLOW_PRIVATE_CLIENT_URLS"],

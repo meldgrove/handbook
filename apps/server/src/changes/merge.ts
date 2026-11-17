@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
 import { lastSegment, parentPath } from "@knowledge/shared/paths";
 import type { Db, DbOrTx } from "../db/client";
 import { changeSetItems, changeSets, pageRevisions, pages } from "../db/schema";
@@ -9,6 +9,7 @@ import {
   createLivePage,
   deleteLivePage,
   findLivePage,
+  lockAnyPage,
   lockPage,
   moveLivePage,
   PageConflictError,
@@ -16,7 +17,15 @@ import {
   saveLivePage,
   type Author,
 } from "../pages/core";
-import { addEvent, itemsOf, loadChangeSet, requireAccess, titleOf, type ChangeSetAccess } from "./model";
+import {
+  ACTIVE_STATUSES,
+  addEvent,
+  itemsOf,
+  loadChangeSet,
+  requireAccess,
+  titleOf,
+  type ChangeSetAccess,
+} from "./model";
 import { computeChecks, itemStates, type ItemState } from "./view";
 
 /**
@@ -131,6 +140,15 @@ async function applyItems(tx: DbOrTx, access: ChangeSetAccess, states: ItemState
   if (conflicts.length > 0) throw new MergeConflictsError(conflicts);
 }
 
+/** The revision that last took a page out of the trash. */
+async function restoredAt(tx: DbOrTx, pageId: string): Promise<number | null> {
+  const [row] = await tx
+    .select({ number: max(pageRevisions.number) })
+    .from(pageRevisions)
+    .where(and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.kind, "restore")));
+  return row?.number ?? null;
+}
+
 async function applyItem(tx: DbOrTx, access: ChangeSetAccess, state: ItemState, conflicts: MergeConflict[]) {
   const space = access.context.space;
   const { item, targetPath } = state;
@@ -143,18 +161,21 @@ async function applyItem(tx: DbOrTx, access: ChangeSetAccess, state: ItemState, 
   };
   try {
     if (item.action === "create") {
-      const [existing] = await tx.select({ id: pages.id }).from(pages).where(eq(pages.id, item.pageId));
+      const existing = await lockAnyPage(tx, item.pageId);
       if (existing) {
-        // A page in the trash comes back (reverting a deletion), then gets the file.
-        let page = await lockPage(tx, item.pageId, { deleted: true });
-        page = await restoreDeletedPage(tx, { space, page, author });
+        // Reverting a deletion: a page in the trash comes back, then gets the
+        // file. One restored live meanwhile keeps the changes saved since.
+        let page = existing;
+        const baseRevision = page.deletedAt === null ? await restoredAt(tx, page.id) : null;
+        if (page.deletedAt !== null)
+          page = await restoreDeletedPage(tx, { space, page, author, checkFile: false });
         if (page.path !== item.path)
           page = await moveLivePage(tx, { space, page, newPath: item.path, author });
         await saveLivePage(tx, {
           space,
           page,
           markdown: item.markdown!,
-          baseRevision: page.revision,
+          baseRevision: baseRevision ?? page.revision,
           author,
         });
       } else {
@@ -180,7 +201,9 @@ async function applyItem(tx: DbOrTx, access: ChangeSetAccess, state: ItemState, 
       // Only a move this change set asked for; a move saved live meanwhile stays.
       if (page.path !== targetPath) await moveLivePage(tx, { space, page, newPath: targetPath, author });
     } else {
-      const page = await lockPage(tx, item.pageId);
+      const page = await lockAnyPage(tx, item.pageId);
+      // In the trash already (deleted live meanwhile): nothing left to do.
+      if (!page || page.deletedAt !== null) return;
       if (item.baseRevision !== null && page.revision !== item.baseRevision) {
         const [base] = await tx
           .select({ markdown: pageRevisions.markdown })
@@ -271,18 +294,25 @@ export async function mergeChangeSet(db: Db, principal: UserPrincipal, number: n
 /**
  * Reverts a merged change set: a new change set restores every page it
  * touched to the revision before the merge (combined with later changes),
- * deletes pages it created and restores pages it deleted. It is merged at
- * once when that is clean; else it stays open for a person to resolve.
+ * deletes pages it created or took out of the trash, and restores pages it
+ * deleted. It is merged at once when that is clean; else it stays open for a
+ * person to resolve, and reverting again answers with that change set. One
+ * transaction: any other failure leaves no revert behind.
  */
 export async function revertChangeSet(
   db: Db,
   principal: UserPrincipal,
   number: number,
 ): Promise<{ number: number; merged: boolean }> {
-  const created = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     const access = await loadChangeSet(tx, principal, number, { forUpdate: true });
     requireAccess(access, "revert");
     const original = access.changeSet;
+    const [pending] = await tx
+      .select({ number: changeSets.number })
+      .from(changeSets)
+      .where(and(eq(changeSets.revertOfId, original.id), inArray(changeSets.status, ACTIVE_STATUSES)));
+    if (pending) return { number: pending.number, merged: false };
     const revisions = await tx
       .select()
       .from(pageRevisions)
@@ -321,23 +351,27 @@ export async function revertChangeSet(
       const first = pageRevisionsOfSet[0]!;
       const last = pageRevisionsOfSet.at(-1)!;
       const base = { changeSetId: revert!.id, pageId, updatedById: principal.id };
-      if (first.number === 1) {
-        // Created by the change set: delete it (if it still exists).
+      const [before] =
+        first.number === 1
+          ? []
+          : await tx
+              .select()
+              .from(pageRevisions)
+              .where(and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.number, first.number - 1)));
+      if (first.number === 1 || before?.kind === "delete") {
+        // Created by the change set, or taken out of the trash: delete it (if it
+        // still exists). Edits made since then make the deletion a conflict.
         if (page.deletedAt === null) {
           items.push({
             ...base,
             action: "delete",
-            baseRevision: page.revision,
+            baseRevision: last.number,
             path: page.path,
             markdown: null,
           });
         }
         continue;
       }
-      const [before] = await tx
-        .select()
-        .from(pageRevisions)
-        .where(and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.number, first.number - 1)));
       if (!before) continue;
       if (last.kind === "delete") {
         // Deleted by the change set: bring it back as it was.
@@ -377,21 +411,21 @@ export async function revertChangeSet(
         page: { id: item.pageId, path: item.path, title },
       });
     }
-    return revert!;
-  });
 
-  try {
-    await db.transaction(async (tx) => {
-      const access = await loadChangeSet(tx, principal, created.number, { forUpdate: true });
-      requireAccess(access, "merge");
-      await mergeInTransaction(tx, principal, access);
-    });
-    return { number: created.number, merged: true };
-  } catch (error) {
-    if (error instanceof AppError && (error.status === 409 || error.status === 422)) {
-      logger.info({ changeSet: created.number }, "revert needs a person to resolve conflicts");
-      return { number: created.number, merged: false };
+    try {
+      // In a savepoint: conflicts undo only the merge, and the revert stays open.
+      await tx.transaction(async (merge) => {
+        const revertAccess = await loadChangeSet(merge, principal, revert!.number, { forUpdate: true });
+        requireAccess(revertAccess, "merge");
+        await mergeInTransaction(merge, principal, revertAccess);
+      });
+      return { number: revert!.number, merged: true };
+    } catch (error) {
+      if (error instanceof AppError && (error.status === 409 || error.status === 422)) {
+        logger.info({ changeSet: revert!.number }, "revert needs a person to resolve conflicts");
+        return { number: revert!.number, merged: false };
+      }
+      throw error;
     }
-    throw error;
-  }
+  });
 }

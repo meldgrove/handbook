@@ -84,6 +84,29 @@ describe("import conversion", () => {
 
   it("finds titles", () => {
     expect(firstHeading("Intro\n\n# Main title #\n")).toBe("Main title");
+    expect(firstHeading("# C#\n")).toBe("C#");
+    expect(firstHeading("#\nNot a title\n## Second level\n# Spaced   \n")).toBe("Spaced");
+    expect(firstHeading("No heading\n")).toBeNull();
     expect(titleFromName("getting-started.md")).toBe("Getting started");
+  });
+
+  it("keeps heading anchors and box titles as other tools write them", () => {
+    const body = ["## Steps   {#steps}  ", "# A b{#x}", "## Not {#an anchor}", "::: warning   Be careful  "];
+    expect(convertVitepress(body.join("\n"))).toEqual({
+      body: ["## Steps", "# A b", "## Not {#an anchor}", "> [!WARNING]", "> **Be careful**"].join("\n"),
+      callouts: 1,
+      anchors: 2,
+    });
+  });
+
+  it("reads long lines in linear time", () => {
+    // Each took seconds with the earlier backtracking patterns.
+    const start = performance.now();
+    expect(firstHeading(`# a${" ".repeat(2_000)}x`)).toBe(`a${" ".repeat(2_000)}x`);
+    expect(firstHeading(`# a${"#".repeat(50_000)}x`)).toBe(`a${"#".repeat(50_000)}x`);
+    const spaces = " ".repeat(80_000);
+    const body = [`# a${spaces}x`, `## a {#${"{#".repeat(40_000)}`, `::: tip a${spaces}b`, ":::"].join("\n");
+    expect(convertVitepress(body)).toMatchObject({ callouts: 1, anchors: 0 });
+    expect(performance.now() - start).toBeLessThan(500);
   });
 });

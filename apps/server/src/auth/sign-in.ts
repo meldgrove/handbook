@@ -57,7 +57,8 @@ export function inAllowedGroup(groups: string[], allowed: string[]): boolean {
 
 let userInfoEndpoint: string | null | undefined;
 
-async function userInfoClaims(accessToken: string): Promise<Record<string, unknown> | null> {
+/** The userinfo answer for `subject`; an answer about anyone else is an error. */
+async function userInfoClaims(accessToken: string, subject: string): Promise<Record<string, unknown> | null> {
   if (userInfoEndpoint === undefined) {
     const discovery = await fetch(
       `${config().OIDC_ISSUER.replace(/\/+$/, "")}/.well-known/openid-configuration`,
@@ -74,28 +75,73 @@ async function userInfoClaims(accessToken: string): Promise<Record<string, unkno
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`The provider's userinfo endpoint answered HTTP ${response.status}`);
-  return (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  const claims = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  // OpenID Connect Core 5.3.2: the answer must be about the person who signed in.
+  if (claims?.sub !== subject) throw new Error("The provider's userinfo answer is about another subject");
+  return claims;
 }
 
 /** The groups of the sign-in: the claim in the ID token, else in the userinfo response. */
 async function signInGroups(account: {
+  accountId: string;
   idToken: string | null;
   accessToken: string | null;
 }): Promise<string[]> {
   const claim = config().OIDC_GROUPS_CLAIM;
-  const fromIdToken = readClaim(jwtClaims(account.idToken), claim);
+  const idClaims = jwtClaims(account.idToken);
+  const fromIdToken = readClaim(idClaims, claim);
   if (fromIdToken !== undefined) return claimGroups(fromIdToken);
   if (!account.accessToken) return [];
-  return claimGroups(readClaim(await userInfoClaims(account.accessToken), claim));
+  const subject = typeof idClaims?.sub === "string" ? idClaims.sub : account.accountId;
+  return claimGroups(readClaim(await userInfoClaims(account.accessToken, subject), claim));
+}
+
+/**
+ * Asked by Better Auth before it creates, links or signs in a person from
+ * the provider's answer: the provider must vouch for the email address
+ * (`email_verified`). People exist by email before their first sign-in
+ * (ADMIN_EMAILS, named editors, former colleagues), and an address someone
+ * merely typed in at the provider must not reach them.
+ * OIDC_REQUIRE_EMAIL_VERIFIED=false turns this off for providers that do
+ * not send the claim.
+ */
+export function checkProviderUserInfo(user: {
+  id?: unknown;
+  emailVerified?: unknown;
+}): { error: string; errorDescription: string } | undefined {
+  if (!config().OIDC_REQUIRE_EMAIL_VERIFIED || user.emailVerified === true) return undefined;
+  logger.info(
+    { userId: typeof user.id === "string" ? user.id : undefined },
+    "sign-in refused: email address not verified by the provider",
+  );
+  return {
+    error: "email_not_verified",
+    errorDescription: "The provider has not verified this email address",
+  };
 }
 
 /**
  * Decides at every sign-in whether a person may use the app: not blocked,
  * an allowed email domain (ALLOWED_EMAIL_DOMAINS) and in an allowed group
  * (ACCESS_GROUPS). Admins from ADMIN_EMAILS always may. Returns false to
- * refuse the session.
+ * refuse the session. The provider's tokens are needed only for this
+ * check: afterwards none are kept.
  */
 export async function checkAccessAtSignIn(userId: string): Promise<boolean> {
+  try {
+    return await mayUseApp(userId);
+  } finally {
+    await getDb()
+      .update(accounts)
+      .set({ accessToken: null, refreshToken: null, idToken: null })
+      .where(eq(accounts.userId, userId))
+      .catch((error: unknown) =>
+        logger.warn({ err: error, userId }, "could not remove the provider's tokens"),
+      );
+  }
+}
+
+async function mayUseApp(userId: string): Promise<boolean> {
   const db = getDb();
   const [user] = await db.select().from(users).where(eq(users.id, userId));
   if (!user) return false;
@@ -111,7 +157,7 @@ export async function checkAccessAtSignIn(userId: string): Promise<boolean> {
     return false;
   }
   const domains = config().allowedEmailDomains;
-  const domain = user.email.split("@")[1]?.toLowerCase() ?? "";
+  const domain = user.email.slice(user.email.lastIndexOf("@") + 1).toLowerCase();
   if (domains.length > 0 && !domains.includes(domain)) {
     logger.info({ userId }, "sign-in refused: email domain not allowed");
     return false;
@@ -119,7 +165,7 @@ export async function checkAccessAtSignIn(userId: string): Promise<boolean> {
   const groups = config().accessGroups;
   if (groups.length > 0) {
     const [account] = await db
-      .select({ idToken: accounts.idToken, accessToken: accounts.accessToken })
+      .select({ accountId: accounts.accountId, idToken: accounts.idToken, accessToken: accounts.accessToken })
       .from(accounts)
       .where(and(eq(accounts.userId, userId), eq(accounts.providerId, "oidc")))
       .orderBy(desc(accounts.updatedAt))

@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { HIGHLIGHT_END, HIGHLIGHT_START } from "@knowledge/shared/api/search";
+import { sql } from "drizzle-orm";
+import { HIGHLIGHT_END, HIGHLIGHT_START, searchQuerySchema } from "@knowledge/shared/api/search";
 import { getDb } from "../db/client";
 import { issueCredential } from "../auth/credentials";
+import { searchPages } from "../search/query";
+import { getSpace } from "../spaces/access";
 import { createPage, createSpace, createUser, request, resetDatabase } from "../test/helpers";
+import { resolveSession } from "../test/resolve-mock";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
 
@@ -64,6 +68,37 @@ describe("search API", () => {
     expect(terms.body.results[0]?.title).toBe("Laptop setup");
     const typo = await request("GET", "/api/v1/search?q=Holidyas", { userId: reader.id });
     expect(typo.body.results[0]?.title).toBe("Holidays");
+  });
+
+  it("finds typos with the trigram threshold of the search, not the server's", async () => {
+    const { reader } = await setup();
+    const principal = (await resolveSession(getDb(), new Headers({ "x-test-user": reader.id })))!;
+    const results = await getDb().transaction(async (tx) => {
+      // A stricter threshold for the session: the search sets its own.
+      await tx.execute(sql`set local pg_trgm.similarity_threshold = 0.9`);
+      return searchPages(tx, principal, searchQuerySchema.parse({ q: "Holidyas" }));
+    });
+    expect(results.map((result) => result.title)).toEqual(["Holidays"]);
+    expect(results[0]).toMatchObject({ anchor: null, snippet: "Ask your lead." });
+  });
+
+  it("ranks pages by their own fields and their best section", async () => {
+    const { reader } = await setup();
+    const it = await getSpace(getDb(), "it");
+    await createPage(it, {
+      title: "Printers",
+      markdown: file(
+        "Printers",
+        "Intro.\n\n## Paper\n\nLoad paper.\n\n## Office printer\n\nThe office printer is on floor 2.\n",
+      ),
+    });
+    const result = await request("GET", "/api/v1/search?q=printer", { userId: reader.id });
+    expect(
+      result.body.results.map((item: { title: string; anchor: string | null }) => [item.title, item.anchor]),
+    ).toEqual([
+      ["Printers", "office-printer"],
+      ["Laptop setup", "printers"],
+    ]);
   });
 
   it("filters by space and tag, and shows drafts only to editors", async () => {

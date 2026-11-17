@@ -28,9 +28,14 @@ RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
       && node_modules/.bin/sentry sourcemap upload apps/server/dist \
       && node_modules/.bin/sentry sourcemap upload apps/web/dist; \
     fi
+# The web app's source maps would be public under /assets: they stay out of
+# the image. The server's are never served.
+RUN find apps/web/dist -name '*.map' -delete
 
 FROM base AS prod-deps
-RUN npm ci --omit=dev --workspace @knowledge/server --include-workspace-root=false --no-audit --no-fund
+# Optional packages here are build and test tools that libraries name as
+# optional peers (vitest, drizzle-kit, esbuild): the server needs none of them.
+RUN npm ci --omit=dev --omit=optional --workspace @knowledge/server --include-workspace-root=false --no-audit --no-fund
 
 FROM node:26.13.0-bookworm-slim AS runtime
 ENV NODE_ENV=production \

@@ -7,6 +7,7 @@ import {
   pageCreateSchema,
   pageMoveSchema,
   pageSaveSchema,
+  revisionListQuerySchema,
   revisionRestoreSchema,
 } from "@knowledge/shared/api/pages";
 import { joinPath } from "@knowledge/shared/paths";
@@ -14,6 +15,7 @@ import { getDb, type DbOrTx } from "../db/client";
 import { drafts, editLocks, pages } from "../db/schema";
 import type { AppEnv } from "../http/env";
 import { notFound } from "../http/errors";
+import { markFilesUsed } from "../files/storage";
 import {
   idParam,
   jsonBody,
@@ -184,7 +186,8 @@ async function pageForHistory(principal: Principal, pageId: string) {
 router.get("/pages/:id/revisions", async (c) => {
   const principal = requirePrincipal(c);
   const { page } = await pageForHistory(principal, idParam(c));
-  return c.json({ items: await listRevisions(getDb(), page.id) });
+  const query = queryOf(c, revisionListQuerySchema);
+  return c.json(await listRevisions(getDb(), page.id, query));
 });
 
 router.get("/pages/:id/revisions/:number", async (c) => {
@@ -297,6 +300,7 @@ router.put("/pages/:id/draft", async (c) => {
       set: { markdown: input.markdown, baseRevision: input.baseRevision, updatedAt: sql`now()` },
     })
     .returning();
+  await markFilesUsed(getDb(), [input.markdown]);
   return c.json({
     markdown: draft!.markdown,
     baseRevision: draft!.baseRevision,

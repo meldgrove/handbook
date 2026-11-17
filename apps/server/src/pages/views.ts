@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { Actor } from "@knowledge/shared/api/common";
 import type {
   LockHolder,
@@ -38,7 +38,24 @@ export function actorOf(user: UserRow): Actor | null {
   return { id: user.id, name: user.name || user.email, email: user.email };
 }
 
-export function pageSummary(row: PageRow, spaceSlug: string): PageSummary {
+/** The columns a page summary needs: lists and trees never load the file or its search data. */
+export const pageSummaryColumns = {
+  id: pages.id,
+  path: pages.path,
+  parentId: pages.parentId,
+  position: pages.position,
+  title: pages.title,
+  description: pages.description,
+  status: pages.status,
+  type: pages.type,
+  tags: pages.tags,
+  revision: pages.revision,
+  updatedAt: pages.updatedAt,
+};
+
+export type PageSummaryRow = Pick<PageRow, keyof typeof pageSummaryColumns>;
+
+export function pageSummary(row: PageSummaryRow, spaceSlug: string): PageSummary {
   return {
     id: row.id,
     space: spaceSlug,
@@ -126,7 +143,7 @@ export async function pageView(
   const { space, abilities } = context;
   const viewerId = principal.kind === "user" ? principal.id : null;
   const children = await tx
-    .select()
+    .select(pageSummaryColumns)
     .from(pages)
     .where(
       and(
@@ -184,14 +201,26 @@ export async function pageView(
   };
 }
 
+/** A revision without its file: lists never load the text. */
 const revisionColumns = {
-  revision: pageRevisions,
+  revision: {
+    number: pageRevisions.number,
+    kind: pageRevisions.kind,
+    path: pageRevisions.path,
+    title: pageRevisions.title,
+    via: pageRevisions.via,
+    clientName: pageRevisions.clientName,
+    message: pageRevisions.message,
+    added: pageRevisions.added,
+    removed: pageRevisions.removed,
+    createdAt: pageRevisions.createdAt,
+  },
   author: { id: users.id, name: users.name, email: users.email },
   changeSet: { number: changeSets.number, title: changeSets.title },
 };
 
 type RevisionRow = {
-  revision: typeof pageRevisions.$inferSelect;
+  revision: Pick<typeof pageRevisions.$inferSelect, keyof typeof revisionColumns.revision>;
   author: UserRow;
   changeSet: { number: number; title: string } | null;
 };
@@ -222,11 +251,21 @@ function revisionQuery(tx: DbOrTx) {
     .leftJoin(changeSets, eq(changeSets.id, pageRevisions.changeSetId));
 }
 
-export async function listRevisions(tx: DbOrTx, pageId: string): Promise<RevisionSummary[]> {
-  const rows = await revisionQuery(tx)
-    .where(eq(pageRevisions.pageId, pageId))
-    .orderBy(desc(pageRevisions.number));
-  return rows.map(revisionSummary);
+/** A page's revisions, newest first, one page of the list at a time. */
+export async function listRevisions(
+  tx: DbOrTx,
+  pageId: string,
+  options: { limit: number; offset: number },
+): Promise<{ items: RevisionSummary[]; total: number }> {
+  const [rows, [total]] = await Promise.all([
+    revisionQuery(tx)
+      .where(eq(pageRevisions.pageId, pageId))
+      .orderBy(desc(pageRevisions.number))
+      .limit(options.limit)
+      .offset(options.offset),
+    tx.select({ value: count() }).from(pageRevisions).where(eq(pageRevisions.pageId, pageId)),
+  ]);
+  return { items: rows.map(revisionSummary), total: total?.value ?? 0 };
 }
 
 export async function getRevision(tx: DbOrTx, pageId: string, number: number): Promise<Revision> {
@@ -234,17 +273,16 @@ export async function getRevision(tx: DbOrTx, pageId: string, number: number): P
     and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.number, number)),
   );
   if (!row) throw notFound("No such revision");
-  const [previous] =
-    number > 1
-      ? await tx
-          .select({ markdown: pageRevisions.markdown })
-          .from(pageRevisions)
-          .where(and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.number, number - 1)))
-      : [];
+  // The file of this revision and of the one before it, for a diff.
+  const files = await tx
+    .select({ number: pageRevisions.number, markdown: pageRevisions.markdown })
+    .from(pageRevisions)
+    .where(and(eq(pageRevisions.pageId, pageId), inArray(pageRevisions.number, [number, number - 1])));
+  const fileOf = (wanted: number) => files.find((file) => file.number === wanted)?.markdown ?? null;
   return {
     ...revisionSummary(row),
-    markdown: row.revision.markdown,
-    previousMarkdown: previous?.markdown ?? null,
+    markdown: fileOf(number) ?? "",
+    previousMarkdown: fileOf(number - 1),
   };
 }
 

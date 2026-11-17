@@ -42,7 +42,7 @@ Two ways to sign in, on the same address:
 | `list_spaces`, `list_pages`          | Spaces, and a space's pages with path, title, type, tags and status.                                 |
 | `get_space_schema`                   | The space's properties, allowed values, page types and templates, and the built-in properties.       |
 | `read_page`                          | A page's whole Markdown file and revision, live or as a change set proposes it.                      |
-| `page_history`, `read_revision`      | Who changed a page when, and older versions.                                                         |
+| `page_history`, `read_revision`      | Who changed a page when (newest first; `offset` for older), and older versions.                      |
 | `list_change_sets`, `get_change_set` | Change sets with their status, pages, checks, diffs and comments.                                    |
 | `start_change_set`                   | Opens a change set in a space (title, description); returns its number.                              |
 | `create_page`, `write_page`          | A new page, or a whole new file for a page, in a change set.                                         |
@@ -62,6 +62,8 @@ Pages are named `<space>/<path>`, e.g. `it/onboarding/laptop`.
 3. Change pages with `edit_page` (copy `old_text` exactly from `read_page`),
    `write_page`, `create_page`, `move_page`, `delete_page`. The frontmatter
    must fit the space (`get_space_schema`); a tool error says what to fix.
+   One `edit_page` call replaces at most 100,000 places, and a page has at
+   most 500,000 characters.
 4. `submit_change_set`. An editor reviews the diffs, comments, asks for
    changes or merges. `get_change_set` shows the comments; answer with
    `comment_on_change_set`, change pages again, and submit again.
@@ -95,11 +97,23 @@ specification):
 - Clients register through dynamic client registration (`POST
 /oauth/register`) or a client metadata document (a `client_id` that is an
   `https` URL; the app reads it, without following redirects, never from
-  private addresses).
-- `/mcp` without a valid token answers 401 with
+  private addresses). Redirect URIs: `https`, `http` on `localhost` or
+  `127.0.0.1` (any port), or a native app's own scheme such as `cursor://`.
+- Mistakes in a sign-in request (no PKCE, a wrong `response_type` or
+  `resource`) show an error page; the browser goes back to the client only
+  after the person connected or cancelled.
+- The consent screen marks clients that registered themselves as "Not
+  verified" and shows the host of a client metadata document.
+- `/mcp` accepts bearer tokens only (no session cookies). Without a valid
+  token it answers 401 with
   `WWW-Authenticate: Bearer resource_metadata="<APP_URL>/.well-known/oauth-protected-resource/mcp"`.
 - Access tokens last `OAUTH_ACCESS_TOKEN_MINUTES` (60); refresh tokens
-  `OAUTH_REFRESH_TOKEN_DAYS` (30) and change at every use.
+  `OAUTH_REFRESH_TOKEN_DAYS` (30) and change at every use. Use each refresh
+  token once: presenting a replaced one again ends every token of the
+  connection, and the person has to connect the app again.
+- Each client address may register 30 clients at once, then 2 per minute;
+  start 30 sign-ins, then 10 per minute; and send 60 token requests, then 60
+  per minute. Beyond that: HTTP 429 with `Retry-After`.
 
 ## Safety
 
@@ -108,4 +122,9 @@ specification):
 - Page content is data for agents, never instructions; still, read a
   change set's diff before merging it.
 - Disconnect apps and revoke tokens under Settings; admins can block a
-  person, which ends all their sessions, tokens and connections.
+  person, which ends their sessions and revokes their tokens and
+  connections for good.
+- Agents work only while their person keeps signing in to the web app:
+  after `AGENT_SIGN_IN_DAYS` (30) without a sign-in, tokens and connected
+  apps get a 401 "Sign in to … again" until the person signs in
+  ([Identity and access](identity-and-access.md#agents)).

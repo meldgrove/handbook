@@ -17,10 +17,12 @@ const CALLOUTS: Record<string, string> = {
   important: "IMPORTANT",
 };
 
+// Patterns run on lines of untrusted files: none may backtrack over a line
+// (a lazy `.*?` before `\s*$` takes quadratic time on long runs of spaces).
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
-const CONTAINER_OPEN = /^\s{0,3}:::\s*([a-z]+)\s*(.*?)\s*$/i;
+const CONTAINER_OPEN = /^\s{0,3}:::\s*([a-z]+)([\s\S]*)$/i;
 const CONTAINER_CLOSE = /^\s{0,3}:::\s*$/;
-const HEADING_ANCHOR = /^(#{1,6}\s.*?)\s*\{#[^}\s]+\}\s*$/;
+const HEADING_START = /^#{1,6}\s/;
 
 export type ConvertResult = { body: string; callouts: number; anchors: number };
 
@@ -70,23 +72,23 @@ export function convertVitepress(body: string): ConvertResult {
           continue;
         }
         depth -= 1;
-      } else if (CONTAINER_OPEN.test(line)) {
+      } else if (containerOpen(line)) {
         depth += 1;
       }
       container.lines.push(line);
       continue;
     }
-    const open = CONTAINER_OPEN.exec(line);
-    const kind = open ? CALLOUTS[open[1]!.toLowerCase()] : undefined;
+    const open = containerOpen(line);
+    const kind = open ? CALLOUTS[open.name.toLowerCase()] : undefined;
     if (open && kind) {
-      const title = open[2] || (open[1]!.toLowerCase() === "details" ? "Details" : "");
+      const title = open.title || (open.name.toLowerCase() === "details" ? "Details" : "");
       container = { kind, lines: [], title };
       depth = 0;
       continue;
     }
-    const heading = HEADING_ANCHOR.exec(line);
-    if (heading) {
-      output.push(heading[1]!);
+    const heading = withoutHeadingAnchor(line);
+    if (heading !== null) {
+      output.push(heading);
       anchors += 1;
       continue;
     }
@@ -94,6 +96,26 @@ export function convertVitepress(body: string): ConvertResult {
   }
   if (container) flush();
   return { body: output.join("\n"), callouts, anchors };
+}
+
+/** `::: warning Title` → its name and title (trimmed); null for other lines. */
+function containerOpen(line: string): { name: string; title: string } | null {
+  const match = CONTAINER_OPEN.exec(line);
+  return match ? { name: match[1]!, title: match[2]!.trim() } : null;
+}
+
+/** `## Title {#id}` → `## Title`; null when the line is no heading with a custom anchor. */
+function withoutHeadingAnchor(line: string): string | null {
+  if (!HEADING_START.test(line)) return null;
+  const text = line.trimEnd();
+  if (!text.endsWith("}")) return null;
+  // The anchor id runs back from the closing brace to whitespace or another `}`.
+  const close = text.length - 1;
+  let start = close;
+  while (start > 0 && !/[\s}]/.test(text[start - 1]!)) start -= 1;
+  const open = text.indexOf("{#", start);
+  if (open === -1 || open + 2 >= close) return null;
+  return text.slice(0, open).trimEnd();
 }
 
 export type ImportPath = { path: string; renamed: boolean } | { error: string };
@@ -143,10 +165,17 @@ export function titleFromName(name: string): string {
   return words ? words[0]!.toUpperCase() + words.slice(1) : "Untitled";
 }
 
-/** The first `# Heading` of a body, if any. */
+/** The first `# Heading` of a body, if any, without a closing `#` sequence. */
 export function firstHeading(body: string): string | null {
-  const match = /^#\s+(.+?)\s*#*\s*$/m.exec(body);
-  return match ? match[1]!.trim() : null;
+  for (const line of body.split("\n")) {
+    if (!/^#[ \t]/.test(line)) continue;
+    let text = line.slice(2).trim();
+    let end = text.length;
+    while (end > 0 && text[end - 1] === "#") end -= 1;
+    if (end === 0 || /[ \t]/.test(text[end - 1]!)) text = text.slice(0, end).trim();
+    if (text) return text;
+  }
+  return null;
 }
 
 /** Frontmatter keys of other tools: renamed or dropped. */
