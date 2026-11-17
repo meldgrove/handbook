@@ -127,21 +127,24 @@ async function pagesNotFitting(db: DbOrTx, spaceId: string, schema: SpaceSchema)
 
 export async function updateSpace(db: Db, actor: UserPrincipal, context: SpaceContext, input: SpaceUpdate) {
   requireAbility(context, "manage");
-  const { space } = context;
-  const schema: SpaceSchema = {
-    properties: input.properties ?? space.properties,
-    pageTypes: input.pageTypes ?? space.pageTypes,
-  };
-  const problems = spaceSchemaProblems(schema);
-  if (Object.keys(problems).length > 0) throw validationError(problems);
-  if (input.properties !== undefined || input.pageTypes !== undefined) {
-    const failing = await pagesNotFitting(db, space.id, schema);
-    if (failing.length > 0) {
-      const message = `These pages do not fit the new properties or page types: ${failing.join(", ")}. Change them first.`;
-      throw validationError({ properties: message }, message);
-    }
-  }
   return db.transaction(async (tx) => {
+    // Locked: page writes check files against the space under a shared lock
+    // (pages/core.ts), so none is half done while the live pages are checked.
+    const [space] = await tx.select().from(spaces).where(eq(spaces.id, context.space.id)).for("update");
+    if (!space) throw notFound("No such space");
+    const schema: SpaceSchema = {
+      properties: input.properties ?? space.properties,
+      pageTypes: input.pageTypes ?? space.pageTypes,
+    };
+    const problems = spaceSchemaProblems(schema);
+    if (Object.keys(problems).length > 0) throw validationError(problems);
+    if (input.properties !== undefined || input.pageTypes !== undefined) {
+      const failing = await pagesNotFitting(tx, space.id, schema);
+      if (failing.length > 0) {
+        const message = `These pages do not fit the new properties or page types: ${failing.join(", ")}. Change them first.`;
+        throw validationError({ properties: message }, message);
+      }
+    }
     const [updated] = await tx
       .update(spaces)
       .set({

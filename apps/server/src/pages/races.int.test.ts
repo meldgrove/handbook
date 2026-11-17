@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { getDb, type Tx } from "../db/client";
-import { pages } from "../db/schema";
-import { createPage, createSpace, resetDatabase } from "../test/helpers";
+import { pages, spaces } from "../db/schema";
+import type { UserPrincipal } from "../auth/principal";
+import { spaceContext } from "../spaces/access";
+import { updateSpace } from "../spaces/service";
+import { createPage, createSpace, createUser, resetDatabase } from "../test/helpers";
 import { blockedOrDone, heldTransaction, settle } from "../test/concurrency";
-import { createLivePage, deleteLivePage, lockPage, moveLivePage, restoreDeletedPage } from "./core";
+import {
+  createLivePage,
+  deleteLivePage,
+  lockPage,
+  moveLivePage,
+  restoreDeletedPage,
+  saveLivePage,
+} from "./core";
 
 /**
  * Writes that race each other, in a fixed order: the first transaction
@@ -40,8 +50,9 @@ async function race<A, B>(first: (tx: Tx) => Promise<A>, second: (tx: Tx) => Pro
   const held = heldTransaction(first);
   await held.ready;
   const next = settle(getDb().transaction(second));
-  expect(await blockedOrDone(next)).toBe("blocked");
+  const waited = await blockedOrDone(next);
   await held.commit();
+  expect(waited).toBe("blocked");
   return next;
 }
 
@@ -59,8 +70,9 @@ describe("page core races", () => {
     const held = heldTransaction((tx) => create(tx, space, "a", "new"));
     await held.ready;
     const moving = settle(getDb().transaction((tx) => move(tx, space, a.id, "z")));
-    expect(await blockedOrDone(moving)).toBe("blocked");
+    const waited = await blockedOrDone(moving);
     const created = await held.commit();
+    expect(waited).toBe("blocked");
     expect((await moving).ok).toBe(true);
     expect(await pageAt(created.id)).toMatchObject({ path: "z/new", parentId: a.id });
   });
@@ -72,8 +84,9 @@ describe("page core races", () => {
     const held = heldTransaction((tx) => create(tx, space, "a/b", "new"));
     await held.ready;
     const moving = settle(getDb().transaction((tx) => move(tx, space, a.id, "z")));
-    expect(await blockedOrDone(moving)).toBe("blocked");
+    const waited = await blockedOrDone(moving);
     const created = await held.commit();
+    expect(waited).toBe("blocked");
     expect((await moving).ok).toBe(true);
     expect((await pageAt(created.id)).path).toBe("z/b/new");
   });
@@ -123,5 +136,70 @@ describe("page core races", () => {
     );
     expect(result).toMatchObject({ ok: false, error: { status: 422 } });
     expect((await pageAt(child.id)).deletedAt).not.toBeNull();
+  });
+
+  describe("with a property that goes away", () => {
+    const team = {
+      key: "team",
+      label: "Team",
+      type: "select" as const,
+      options: ["it"],
+      required: false,
+      help: "",
+    };
+    const withTeam = "---\ntitle: Doc\nteam: it\n---\n";
+
+    async function setup() {
+      const user = await createUser();
+      const space = await createSpace({ properties: [team], members: { [user.id]: "owner" } });
+      const page = await createPage(space, { title: "Doc" });
+      const owner: UserPrincipal = {
+        kind: "user",
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        image: null,
+        isAdmin: false,
+        channel: "web",
+        agent: false,
+        clientName: null,
+        credentialId: null,
+      };
+      return { space, page, owner };
+    }
+
+    const save = async (tx: Tx, space: Space, pageId: string) =>
+      saveLivePage(tx, {
+        space,
+        page: await lockPage(tx, pageId),
+        markdown: withTeam,
+        baseRevision: 1,
+        author,
+      });
+
+    it("refuses the change while a save that uses it is not done", async () => {
+      const { space, page, owner } = await setup();
+      const held = heldTransaction((tx) => save(tx, space, page.id));
+      await held.ready;
+      const context = await spaceContext(getDb(), owner, space);
+      const updating = settle(updateSpace(getDb(), owner, context, { properties: [] }));
+      const waited = await blockedOrDone(updating);
+      await held.commit();
+      expect(waited).toBe("blocked");
+      expect(await updating).toMatchObject({ ok: false, error: { status: 422 } });
+      const [after] = await getDb().select().from(spaces).where(eq(spaces.id, space.id));
+      expect(after?.properties).toEqual([team]);
+    });
+
+    it("checks a save against the properties as they are when it is done", async () => {
+      const { space, page } = await setup();
+      // `space` is the row as a request read it before the change.
+      const result = await race(
+        (tx) => tx.update(spaces).set({ properties: [] }).where(eq(spaces.id, space.id)),
+        (tx) => save(tx, space, page.id),
+      );
+      expect(result).toMatchObject({ ok: false, error: { status: 422 } });
+      expect((await pageAt(page.id)).revision).toBe(1);
+    });
   });
 });

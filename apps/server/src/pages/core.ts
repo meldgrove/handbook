@@ -10,7 +10,7 @@ import { isValidSlug, isWithin, joinPath, parentPath, pathProblem, slugify } fro
 import type { Via } from "@knowledge/shared/roles";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
-import { pageLinks, pageRevisions, pageSections, pages, redirects, users } from "../db/schema";
+import { pageLinks, pageRevisions, pageSections, pages, redirects, spaces, users } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
 import { AppError, conflict, notFound, validationError } from "../http/errors";
 import { schemaOf, type SpaceRow } from "../spaces/access";
@@ -68,6 +68,18 @@ export function canonicalize(markdown: string, space: SpaceRow): { markdown: str
     throw validationError(result.errors, message);
   }
   return { markdown: result.markdown, page: result.page };
+}
+
+/**
+ * The space a file is written to, read again and locked (shared) until the
+ * transaction ends: files are checked against its properties and page types
+ * as they are now, and owners cannot change those until the write is done
+ * (`updateSpace` locks the space and checks the live pages).
+ */
+async function spaceForWrite(tx: DbOrTx, spaceId: string): Promise<SpaceRow> {
+  const [space] = await tx.select().from(spaces).where(eq(spaces.id, spaceId)).for("share");
+  if (!space) throw notFound("No such space");
+  return space;
 }
 
 /** The body of a stored file, without checking it against the space (its schema may have changed). */
@@ -266,7 +278,8 @@ export async function saveLivePage(
   tx: DbOrTx,
   input: { space: SpaceRow; page: PageRow; markdown: string; baseRevision: number; author: Author },
 ): Promise<SaveResult> {
-  const { space, page, author } = input;
+  const { page, author } = input;
+  const space = await spaceForWrite(tx, input.space.id);
   if (input.baseRevision > page.revision)
     throw conflict("This revision does not exist yet", "invalid_revision");
   let file = canonicalize(input.markdown, space);
@@ -376,7 +389,8 @@ export async function createLivePage(
     position?: number;
   },
 ): Promise<PageRow> {
-  const { space, author } = input;
+  const { author } = input;
+  const space = await spaceForWrite(tx, input.space.id);
   const file = canonicalize(input.markdown, space);
   const slug = input.slug?.trim() ? input.slug.trim() : slugify(file.page.frontmatter.title);
   if (!isValidSlug(slug)) {
