@@ -1,0 +1,100 @@
+import { useMemo, useState } from "react";
+import { diffTextLines, type DiffLine } from "@knowledge/shared/merge";
+import { Button } from "@/components/ui/button";
+import { defineMessages, useT } from "@/i18n";
+import { cn } from "@/lib/utils";
+
+const messages = defineMessages({
+  en: {
+    showAll: "Show all lines",
+    unchanged: "{count} unchanged lines",
+    unchanged_one: "1 unchanged line",
+    noChanges: "No changes to the text.",
+    added: "Added",
+    removed: "Removed",
+  },
+});
+
+/** Unchanged lines shown around each change. */
+const CONTEXT = 3;
+
+export type DiffBlock = { kind: "lines"; lines: DiffLine[] } | { kind: "gap"; count: number };
+
+/** Groups a line diff for display: long unchanged runs become gaps, keeping CONTEXT lines around changes. */
+export function diffBlocks(lines: DiffLine[], context = CONTEXT): DiffBlock[] {
+  const blocks: DiffBlock[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (lines[index]!.kind !== "same") {
+      const start = index;
+      while (index < lines.length && lines[index]!.kind !== "same") index += 1;
+      blocks.push({ kind: "lines", lines: lines.slice(start, index) });
+      continue;
+    }
+    const start = index;
+    while (index < lines.length && lines[index]!.kind === "same") index += 1;
+    const run = lines.slice(start, index);
+    const keepBefore = start === 0 ? 0 : context;
+    const keepAfter = index === lines.length ? 0 : context;
+    if (run.length <= keepBefore + keepAfter + 1) {
+      blocks.push({ kind: "lines", lines: run });
+    } else {
+      if (keepBefore > 0) blocks.push({ kind: "lines", lines: run.slice(0, keepBefore) });
+      blocks.push({ kind: "gap", count: run.length - keepBefore - keepAfter });
+      if (keepAfter > 0) blocks.push({ kind: "lines", lines: run.slice(run.length - keepAfter) });
+    }
+  }
+  return blocks;
+}
+
+const LINE_STYLES: Record<DiffLine["kind"], string> = {
+  same: "text-foreground/80",
+  added: "bg-emerald-500/10 text-emerald-900 dark:text-emerald-200",
+  removed: "bg-rose-500/10 text-rose-900 line-through decoration-rose-500/40 dark:text-rose-200",
+};
+
+const PREFIX: Record<DiffLine["kind"], string> = { same: " ", added: "+", removed: "−" };
+
+/** A unified line diff of two texts (Markdown files), with long unchanged runs folded. */
+export function LineDiff(props: { before: string; after: string; className?: string }) {
+  const t = useT(messages);
+  const [expanded, setExpanded] = useState(false);
+  const lines = useMemo(() => diffTextLines(props.before, props.after), [props.before, props.after]);
+  const blocks = useMemo(
+    () => (expanded ? [{ kind: "lines" as const, lines }] : diffBlocks(lines)),
+    [expanded, lines],
+  );
+  if (!lines.some((line) => line.kind !== "same")) {
+    return <p className="text-muted-foreground text-sm">{t("noChanges")}</p>;
+  }
+  return (
+    <div className={cn("overflow-x-auto rounded-md border font-mono text-xs leading-5", props.className)}>
+      {blocks.map((block, blockIndex) =>
+        block.kind === "gap" ? (
+          <div
+            key={blockIndex}
+            className="bg-muted/60 text-muted-foreground flex items-center gap-2 px-3 py-0.5"
+          >
+            <span>{t("unchanged", { count: block.count })}</span>
+            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setExpanded(true)}>
+              {t("showAll")}
+            </Button>
+          </div>
+        ) : (
+          block.lines.map((line, lineIndex) => (
+            <div
+              key={`${blockIndex}-${lineIndex}`}
+              className={cn("flex min-w-fit px-3 whitespace-pre", LINE_STYLES[line.kind])}
+            >
+              <span aria-hidden className="w-4 shrink-0 select-none">
+                {PREFIX[line.kind]}
+              </span>
+              {line.kind !== "same" ? <span className="sr-only">{t(line.kind)}: </span> : null}
+              <span>{line.text || " "}</span>
+            </div>
+          ))
+        ),
+      )}
+    </div>
+  );
+}
