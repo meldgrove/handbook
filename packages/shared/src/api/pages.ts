@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { actorSchema, idSchema } from "./common";
+import { actorSchema, idSchema, pageQuerySchema } from "./common";
 import { abilitiesSchema } from "./spaces";
 import { pageStatusSchema } from "../page";
 import { MAX_PATH_LENGTH } from "../paths";
@@ -124,7 +124,13 @@ export const revisionSummarySchema = z.object({
   createdAt: z.string(),
 });
 export type RevisionSummary = z.infer<typeof revisionSummarySchema>;
-export const revisionListSchema = z.object({ items: z.array(revisionSummarySchema) });
+/** Newest first; `offset` skips the newest. */
+export const revisionListQuerySchema = pageQuerySchema;
+export const revisionListSchema = z.object({
+  items: z.array(revisionSummarySchema),
+  total: z.number().int(),
+});
+export type RevisionList = z.infer<typeof revisionListSchema>;
 
 export const revisionSchema = revisionSummarySchema.extend({
   markdown: z.string(),

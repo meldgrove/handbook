@@ -7,6 +7,7 @@ import {
   pageCreateSchema,
   pageMoveSchema,
   pageSaveSchema,
+  revisionListQuerySchema,
   revisionRestoreSchema,
 } from "@knowledge/shared/api/pages";
 import { joinPath } from "@knowledge/shared/paths";
@@ -184,7 +185,8 @@ async function pageForHistory(principal: Principal, pageId: string) {
 router.get("/pages/:id/revisions", async (c) => {
   const principal = requirePrincipal(c);
   const { page } = await pageForHistory(principal, idParam(c));
-  return c.json({ items: await listRevisions(getDb(), page.id) });
+  const query = queryOf(c, revisionListQuerySchema);
+  return c.json(await listRevisions(getDb(), page.id, query));
 });
 
 router.get("/pages/:id/revisions/:number", async (c) => {

@@ -52,9 +52,20 @@ const historyRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/pages/$id/history",
   beforeLoad: checkId,
+  validateSearch: z.object({
+    page: z.coerce.number().int().min(1).max(100_000).optional().catch(undefined),
+  }),
   component: function HistoryRoute() {
     const { id } = historyRoute.useParams();
-    return <HistoryPage pageId={id} />;
+    const { page } = historyRoute.useSearch();
+    const navigate = historyRoute.useNavigate();
+    return (
+      <HistoryPage
+        pageId={id}
+        page={page ?? 1}
+        onPage={(next) => void navigate({ search: { page: next > 1 ? next : undefined } })}
+      />
+    );
   },
 });
 

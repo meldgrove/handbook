@@ -42,7 +42,7 @@ Two ways to sign in, on the same address:
 | `list_spaces`, `list_pages`          | Spaces, and a space's pages with path, title, type, tags and status.                                 |
 | `get_space_schema`                   | The space's properties, allowed values, page types and templates, and the built-in properties.       |
 | `read_page`                          | A page's whole Markdown file and revision, live or as a change set proposes it.                      |
-| `page_history`, `read_revision`      | Who changed a page when, and older versions.                                                         |
+| `page_history`, `read_revision`      | Who changed a page when (newest first; `offset` for older), and older versions.                      |
 | `list_change_sets`, `get_change_set` | Change sets with their status, pages, checks, diffs and comments.                                    |
 | `start_change_set`                   | Opens a change set in a space (title, description); returns its number.                              |
 | `create_page`, `write_page`          | A new page, or a whole new file for a page, in a change set.                                         |

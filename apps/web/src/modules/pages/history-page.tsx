@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import type { RevisionSummary } from "@knowledge/shared/api/pages";
 import { Page as PageLayout, PageHeader } from "@/components/layout/page";
 import { pageQuery, revisionsQuery } from "@/components/page/queries";
+import { Pager } from "@/components/pager";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,12 +52,15 @@ export function RevisionMeta({ revision }: { revision: RevisionSummary }) {
   );
 }
 
-/** Every revision of a page, newest first. */
-export function HistoryPage({ pageId }: { pageId: string }) {
+const PAGE_SIZE = 50;
+
+/** Every revision of a page, newest first, 50 at a time. */
+export function HistoryPage(props: { pageId: string; page: number; onPage: (page: number) => void }) {
+  const { pageId } = props;
   const t = useT(messages);
   const format = useFormatter();
   const page = useQuery(pageQuery(pageId));
-  const revisions = useQuery(revisionsQuery(pageId));
+  const revisions = useQuery(revisionsQuery(pageId, PAGE_SIZE, (props.page - 1) * PAGE_SIZE));
   const label = useRevisionLabel();
 
   if (page.error || revisions.error) {
@@ -128,6 +132,9 @@ export function HistoryPage({ pageId }: { pageId: string }) {
           ))}
         </ol>
       )}
+      {revisions.data.total > PAGE_SIZE ? (
+        <Pager page={props.page} pageSize={PAGE_SIZE} total={revisions.data.total} onPage={props.onPage} />
+      ) : null}
     </PageLayout>
   );
 }

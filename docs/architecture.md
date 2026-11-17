@@ -327,6 +327,9 @@ Changes to a change set answer with the whole change set.
 
 All under `/api/v1`, JSON, contracts in `packages/shared/src/api/`. Errors:
 `{ error: { code, message, fields? } }` plus extra fields for 409 and 423.
+Long lists come in pages: `?limit=` (default 50, at most 200) and `?offset=`,
+with `total` in the answer (`GET /pages/:id/revisions`, newest first, without
+the files; `GET /admin/audit`).
 
 | Area        | Routes                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

@@ -203,10 +203,27 @@ describe("MCP server", () => {
     expect(found.results[0]).toMatchObject({ id: "it/laptop", title: "Laptop" });
     const history = await data(token, "page_history", { page: "it/laptop" });
     expect(history.revisions[0]).toMatchObject({ number: 1, kind: "save" });
+    expect(history.total).toBe(1);
     const revision = await data(token, "read_revision", { page: "it/laptop", revision: 1 });
     expect(revision.markdown).toContain("title: Laptop");
     const missing = await call(token, "fetch", { id: "it/nothing" });
     expect(missing.isError).toBe(true);
+  });
+
+  it("pages a long history", async () => {
+    const { editor, laptop, token } = await setup();
+    for (let base = 1; base <= 4; base++) {
+      const saved = await request("PUT", `/api/v1/pages/${laptop.id}`, {
+        userId: editor.id,
+        body: { markdown: `---\ntitle: Laptop\n---\n\nVersion ${base + 1}.\n`, baseRevision: base },
+      });
+      expect(saved.status).toBe(200);
+    }
+    const newest = await data(token, "page_history", { page: "it/laptop", limit: 2 });
+    expect(newest.total).toBe(5);
+    expect(newest.revisions.map((revision: { number: number }) => revision.number)).toEqual([5, 4]);
+    const older = await data(token, "page_history", { page: "it/laptop", limit: 2, offset: 3 });
+    expect(older.revisions.map((revision: { number: number }) => revision.number)).toEqual([2, 1]);
   });
 
   it("lets service tokens read but not write", async () => {
