@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import type { AppEnv } from "./env";
 import { AppError, zodFieldErrors } from "./errors";
 import { authenticate, requestId, requestLog, sameOrigin } from "./middleware";
+import { compression } from "./compression";
 import { webApp } from "./static";
 import { auth } from "../auth/auth";
 import { CLIENT_IP_HEADER, clientIp } from "./client-ip";
@@ -23,7 +24,7 @@ export function createApp() {
   const app = new Hono<AppEnv>();
   const tracing = tracingMiddleware(app);
   if (tracing) app.use("*", tracing);
-  app.use("*", requestId, requestLog);
+  app.use("*", requestId, requestLog, compression());
   // Uploaded files never run anything in the app's origin: a stricter policy
   // than the app's replaces it (this runs after secureHeaders below).
   app.use("/files/*", async (c, next) => {
