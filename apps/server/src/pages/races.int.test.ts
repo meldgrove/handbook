@@ -202,6 +202,17 @@ describe("page core races", () => {
       expect(result).toMatchObject({ ok: false, error: { status: 422 } });
       expect((await pageAt(page.id)).revision).toBe(1);
     });
+
+    it("keeps a page in the trash that no longer fits the space", async () => {
+      const { space, page } = await setup();
+      await getDb().transaction((tx) => save(tx, space, page.id));
+      await getDb().transaction((tx) => trash(tx, space, page.id));
+      // The property went away while the page was in the trash (only live pages are checked then).
+      await getDb().update(spaces).set({ properties: [] }).where(eq(spaces.id, space.id));
+      const result = await settle(getDb().transaction((tx) => restore(tx, space, page.id)));
+      expect(result).toMatchObject({ ok: false, error: { status: 422 } });
+      expect((await pageAt(page.id)).deletedAt).not.toBeNull();
+    });
   });
 
   it("rebuilds the search data of a page saved meanwhile from its new file", async () => {

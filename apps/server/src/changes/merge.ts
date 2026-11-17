@@ -167,7 +167,8 @@ async function applyItem(tx: DbOrTx, access: ChangeSetAccess, state: ItemState, 
         // file. One restored live meanwhile keeps the changes saved since.
         let page = existing;
         const baseRevision = page.deletedAt === null ? await restoredAt(tx, page.id) : null;
-        if (page.deletedAt !== null) page = await restoreDeletedPage(tx, { space, page, author });
+        if (page.deletedAt !== null)
+          page = await restoreDeletedPage(tx, { space, page, author, checkFile: false });
         if (page.path !== item.path)
           page = await moveLivePage(tx, { space, page, newPath: item.path, author });
         await saveLivePage(tx, {
@@ -358,12 +359,13 @@ export async function revertChangeSet(
               .from(pageRevisions)
               .where(and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.number, first.number - 1)));
       if (first.number === 1 || before?.kind === "delete") {
-        // Created by the change set, or taken out of the trash: delete it (if it still exists).
+        // Created by the change set, or taken out of the trash: delete it (if it
+        // still exists). Edits made since then make the deletion a conflict.
         if (page.deletedAt === null) {
           items.push({
             ...base,
             action: "delete",
-            baseRevision: page.revision,
+            baseRevision: last.number,
             path: page.path,
             markdown: null,
           });

@@ -344,10 +344,11 @@ export async function refreshTokens(
     return { tokens: await issueTokens(tx, grant, client.name) };
   });
   if (result.tokens) return result.tokens;
-  // A refresh token used after it was replaced may have been stolen: end everything its grant gave.
+  // A refresh token used after it was replaced may have been stolen: end the
+  // connection, so connecting again starts a new one the old token cannot reach.
   if (result.reusedGrantId) {
     const grantId = result.reusedGrantId;
-    await db.transaction((tx) => revokeGrantTokens(tx, grantId, { grant: false }));
+    await db.transaction((tx) => revokeGrantTokens(tx, grantId, { grant: true }));
     logger.warn({ grantId }, "refresh token reused; the grant's tokens were revoked");
   }
   throw invalid;

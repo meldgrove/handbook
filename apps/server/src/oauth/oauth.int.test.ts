@@ -235,17 +235,17 @@ describe("OAuth for connected apps", () => {
     });
     expect(refreshed.status).toBe(200);
     expect(refreshed.body.refresh_token).not.toBe(fresh.body.refresh_token);
-    const reused = await form("/oauth/token", {
-      grant_type: "refresh_token",
-      refresh_token: fresh.body.refresh_token,
-      client_id: client.client_id,
-    });
-    expect(reused.body).toMatchObject({ error: "invalid_grant" });
 
     expect(
       (await request("DELETE", `/api/v1/connected-apps/${apps.body.items[0].id}`, { userId: ada.id })).status,
     ).toBe(204);
     expect((await mcpCall(refreshed.body.access_token)).status).toBe(401);
+    const afterDisconnect = await form("/oauth/token", {
+      grant_type: "refresh_token",
+      refresh_token: refreshed.body.refresh_token,
+      client_id: client.client_id,
+    });
+    expect(afterDisconnect.body).toMatchObject({ error: "invalid_grant" });
   });
 
   it("checks confidential clients, redirect URIs and PKCE", async () => {
@@ -443,8 +443,15 @@ describe("OAuth for connected apps", () => {
     });
     expect(afterReplay.body).toMatchObject({ error: "invalid_grant" });
 
-    // Connecting again works.
+    // Connecting again works, and the old token cannot end the new connection.
     const again = await connectAndExchange(ada.id, clientId);
+    expect((await mcpCall(again.access_token)).status).toBe(200);
+    const replayedAgain = await form("/oauth/token", {
+      grant_type: "refresh_token",
+      refresh_token: first.refresh_token,
+      client_id: clientId,
+    });
+    expect(replayedAgain.body).toMatchObject({ error: "invalid_grant" });
     expect((await mcpCall(again.access_token)).status).toBe(200);
   });
 

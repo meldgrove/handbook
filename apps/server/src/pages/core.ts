@@ -559,9 +559,20 @@ export async function deleteLivePage(tx: DbOrTx, input: { space: SpaceRow; page:
 /** Takes a page out of the trash, at its old path (which must be free, below a live parent). */
 export async function restoreDeletedPage(
   tx: DbOrTx,
-  input: { space: SpaceRow; page: PageRow; author: Author },
+  input: {
+    space: SpaceRow;
+    page: PageRow;
+    author: Author;
+    /** False when the caller saves a checked file right after (a merge brings the page back). */
+    checkFile?: boolean;
+  },
 ): Promise<PageRow> {
   const { space, page, author } = input;
+  // Its file must fit the space as it is now: properties may have changed while it was in the trash.
+  const current = await spaceForWrite(tx, space.id);
+  if (input.checkFile !== false && !canonicalPageFile(page.markdown, schemaOf(current)).ok) {
+    throw validationError({}, "The page no longer fits the space's properties and page types.");
+  }
   if (await findLivePage(tx, space.id, page.path)) {
     throw conflict(`Another page has the path “${page.path}” now. Move it first.`, "path_taken");
   }

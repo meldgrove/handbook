@@ -659,6 +659,31 @@ describe("change sets", () => {
     expect((await getDb().select().from(pages).where(eq(pages.id, old.id)))[0]?.deletedAt).not.toBeNull();
   });
 
+  it("keeps a page that was edited after a change set restored it when that change set is reverted", async () => {
+    const { editor, space } = await setup();
+    const old = await createPage(space, { title: "Old" });
+    const number = (
+      await request("POST", "/api/v1/change-sets", {
+        userId: editor.id,
+        body: { space: "it", title: "Tidy" },
+      })
+    ).body.number as number;
+    await request("POST", `/api/v1/change-sets/${number}/pages/${old.id}/delete`, { userId: editor.id });
+    await request("POST", `/api/v1/change-sets/${number}/merge`, { userId: editor.id });
+    const restore = await request("POST", `/api/v1/change-sets/${number}/revert`, { userId: editor.id });
+    expect(restore.body).toMatchObject({ merged: true });
+    const restored = (await getDb().select().from(pages).where(eq(pages.id, old.id)))[0]!;
+    await liveSave(old.id, `${restored.markdown}\nAdded after the restore.\n`, restored.revision);
+
+    const undo = await request("POST", `/api/v1/change-sets/${restore.body.number}/revert`, {
+      userId: editor.id,
+    });
+    expect(undo.body).toMatchObject({ merged: false });
+    const live = (await getDb().select().from(pages).where(eq(pages.id, old.id)))[0]!;
+    expect(live.deletedAt).toBeNull();
+    expect(live.markdown).toContain("Added after the restore.");
+  });
+
   it("leaves no revert behind when merging it fails, and keeps one open revert", async () => {
     const { editor, laptop } = await setup();
     const number = (
