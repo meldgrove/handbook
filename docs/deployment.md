@@ -152,7 +152,6 @@ refused: email domain not allowed`, `… not in ACCESS_GROUPS`, `… blocked`,
 - When someone leaves, block them in the app for immediate effect
   ([Identity and access](identity-and-access.md#when-someone-leaves)).
 - Keep `ADMIN_EMAILS` to one or two people.
-- When someone leaves, see [Offboarding](identity-and-access.md#offboarding).
 - Agents only propose changes; editors decide. Read a change set's diff
   before merging it, also when an agent made it: page content can contain
   instructions meant to mislead agents.
