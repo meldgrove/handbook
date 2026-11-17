@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
@@ -31,6 +31,44 @@ const AUTH_ROUTES = new Set([
   "POST /api/auth/sign-out",
   "GET /api/auth/error",
 ]);
+
+/**
+ * PostgreSQL errors of a request that ran into another one at the same time:
+ * unique violation (e.g. two creates at one path), deadlock, serialization
+ * failure. Trying again gives the right answer.
+ */
+const CONCURRENT_CHANGE_CODES = new Set(["23505", "40P01", "40001"]);
+
+/** The SQLSTATE of a database error, also when Drizzle wrapped it (`cause`). */
+function databaseErrorCode(error: unknown): string | undefined {
+  let current = error;
+  for (let depth = 0; depth < 3 && current instanceof Error; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+    current = current.cause;
+  }
+  return undefined;
+}
+
+/**
+ * A 409 for a request that ran into a concurrent change; null for other
+ * errors. The database's message names constraints and values, so the
+ * response leaves it out.
+ */
+export function concurrentChangeResponse(error: Error, c: Context<AppEnv>) {
+  const code = databaseErrorCode(error);
+  if (!code || !CONCURRENT_CHANGE_CODES.has(code)) return null;
+  logger.warn(
+    { err: error, requestId: c.get("requestId"), route: `${c.req.method} ${c.req.routePath}`, code },
+    "request ran into a concurrent change",
+  );
+  return c.json(
+    {
+      error: { code: "concurrent_change", message: "Someone else changed this at the same time. Try again." },
+    },
+    409,
+  );
+}
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -90,6 +128,8 @@ export function createApp() {
         error.status,
       );
     }
+    const concurrent = concurrentChangeResponse(error, c);
+    if (concurrent) return concurrent;
     logger.error(
       { err: error, requestId: c.get("requestId"), route: `${c.req.method} ${c.req.routePath}` },
       "unhandled error",

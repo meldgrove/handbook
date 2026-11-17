@@ -51,18 +51,19 @@ See [Agents and MCP](agents.md).
 
 ## Processes and server
 
-| Variable                         | Default                          | Meaning                                                                                                            |
-| -------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `APP_ROLE`                       | `all`                            | `all`, `web`, `worker` or `migrate`; the image's command sets it.                                                  |
-| `APP_NAME`                       | `Knowledge`                      | The name in the app, on the sign-in page and for agents.                                                           |
-| `PORT`, `HOST`                   | `3000`, 0.0.0.0                  | Where the web process listens.                                                                                     |
-| `TRUST_PROXY`                    | `0`                              | Proxies in front that append to `X-Forwarded-For`: `true` (one), a number, or `false`. `compose.yaml` sets `true`. |
-| `RUN_MIGRATIONS`                 | `false`                          | Apply migrations at start (single-container setups).                                                               |
-| `DATABASE_POOL_SIZE`             | `10`                             | Connections per process.                                                                                           |
-| `LOG_LEVEL`                      | `info`                           | `fatal` … `trace`, or `silent`.                                                                                    |
-| `AUDIT_LOG_DAYS`                 | `365`                            | Days the audit log keeps entries; the worker deletes older ones. `0` keeps them all.                               |
-| `WORKER_HEARTBEAT_FILE`          | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds, for health checks.                                                        |
-| `WEB_DIST_DIR`, `MIGRATIONS_DIR` | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
+| Variable                             | Default                          | Meaning                                                                                                            |
+| ------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `APP_ROLE`                           | `all`                            | `all`, `web`, `worker` or `migrate`; the image's command sets it.                                                  |
+| `APP_NAME`                           | `Knowledge`                      | The name in the app, on the sign-in page and for agents.                                                           |
+| `PORT`, `HOST`                       | `3000`, 0.0.0.0                  | Where the web process listens.                                                                                     |
+| `TRUST_PROXY`                        | `0`                              | Proxies in front that append to `X-Forwarded-For`: `true` (one), a number, or `false`. `compose.yaml` sets `true`. |
+| `RUN_MIGRATIONS`                     | `false`                          | Apply migrations at start (single-container setups).                                                               |
+| `DATABASE_POOL_SIZE`                 | `10`                             | Connections per process.                                                                                           |
+| `DATABASE_STATEMENT_TIMEOUT_SECONDS` | `60`                             | Longest database statement of the web app and the worker; `0`: no limit. Migrations have none.                     |
+| `LOG_LEVEL`                          | `info`                           | `fatal` … `trace`, or `silent`.                                                                                    |
+| `AUDIT_LOG_DAYS`                     | `365`                            | Days the audit log keeps entries; the worker deletes older ones. `0` keeps them all.                               |
+| `WORKER_HEARTBEAT_FILE`              | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds while no job hangs, for health checks.                                     |
+| `WEB_DIST_DIR`, `MIGRATIONS_DIR`     | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
 
 Behind a reverse proxy, set `TRUST_PROXY`: the rate limits of sign-in and of
 connected apps (OAuth) count per client address, and without it every

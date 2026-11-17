@@ -38,6 +38,8 @@ const schema = z
     APP_NAME: withDefault(z.string().min(1).max(100), "Knowledge"),
     DATABASE_URL: z.string().min(1),
     DATABASE_POOL_SIZE: withDefault(z.coerce.number().int().min(1).max(200), 10),
+    /** Longest database statement of the web app and the worker, in seconds; 0: no limit. */
+    DATABASE_STATEMENT_TIMEOUT_SECONDS: withDefault(z.coerce.number().int().min(0).max(86_400), 60),
     /** Signs sessions. At least 32 characters. */
     AUTH_SECRET: z.string().min(32),
     LOG_LEVEL: withDefault(z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]), "info"),

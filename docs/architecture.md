@@ -344,6 +344,9 @@ All under `/api/v1`, JSON, contracts in `packages/shared/src/api/`. Errors:
 Long lists come in pages: `?limit=` (default 50, at most 200) and `?offset=`,
 with `total` in the answer (`GET /pages/:id/revisions`, newest first, without
 the files; `GET /admin/audit`).
+A request that ran into another change at the same time (two pages created
+at one path, a deadlock) answers 409 `concurrent_change`; trying again
+helps.
 
 | Area        | Routes                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

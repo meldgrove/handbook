@@ -72,7 +72,13 @@ process. Mount a volume at `/data/files`.
 - `GET /-/livez`: the web process runs.
 - `GET /-/readyz`: it reaches the database.
 - The worker touches `/tmp/worker-heartbeat` every few seconds;
-  `compose.yaml` checks its age.
+  `compose.yaml` checks its age. It stops while a job runs far longer than
+  it should (the hourly cleanup 30 minutes, rebuilding the search index 4
+  hours), so the check fails and the platform can restart the worker.
+- Database connections give up after 10 seconds of waiting for a
+  connection, end statements after `DATABASE_STATEMENT_TIMEOUT_SECONDS`
+  and transactions left idle for a minute, and probe idle connections for
+  lost ones.
 
 Docker Compose marks a container whose check fails as unhealthy, but does
 not restart it. Set up an uptime check from outside the server (your
