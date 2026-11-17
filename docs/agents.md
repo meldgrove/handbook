@@ -95,11 +95,22 @@ specification):
 - Clients register through dynamic client registration (`POST
 /oauth/register`) or a client metadata document (a `client_id` that is an
   `https` URL; the app reads it, without following redirects, never from
-  private addresses).
+  private addresses). Redirect URIs: `https`, `http` on `localhost` or
+  `127.0.0.1` (any port), or a native app's own scheme such as `cursor://`.
+- Mistakes in a sign-in request (no PKCE, a wrong `response_type` or
+  `resource`) show an error page; the browser goes back to the client only
+  after the person connected or cancelled.
+- The consent screen marks clients that registered themselves as "Not
+  verified" and shows the host of a client metadata document.
 - `/mcp` without a valid token answers 401 with
   `WWW-Authenticate: Bearer resource_metadata="<APP_URL>/.well-known/oauth-protected-resource/mcp"`.
 - Access tokens last `OAUTH_ACCESS_TOKEN_MINUTES` (60); refresh tokens
-  `OAUTH_REFRESH_TOKEN_DAYS` (30) and change at every use.
+  `OAUTH_REFRESH_TOKEN_DAYS` (30) and change at every use. Use each refresh
+  token once: presenting a replaced one again ends every token of the
+  connection, and the person has to connect the app again.
+- Each client address may register 30 clients at once, then 2 per minute;
+  start 30 sign-ins, then 10 per minute; and send 60 token requests, then 60
+  per minute. Beyond that: HTTP 429 with `Retry-After`.
 
 ## Safety
 

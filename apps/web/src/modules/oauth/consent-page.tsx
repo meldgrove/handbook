@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { BookOpen, Check, CircleSlash, ExternalLink, X } from "lucide-react";
+import { BookOpen, Check, CircleSlash, ShieldAlert, X } from "lucide-react";
 import { LoadingState } from "@/components/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
@@ -23,6 +24,8 @@ function Frame({ children }: { children: ReactNode }) {
 /**
  * The consent screen of a connected app (OAuth): the person approves or
  * denies, and the browser returns to the app with a code or an error.
+ * The app's name is its own claim: the screen shows what was checked (the
+ * host of a metadata document) and where the browser goes next.
  */
 export function ConsentPage(props: { requestId: string; onRedirect?: (url: string) => void }) {
   const t = useT(messages);
@@ -78,6 +81,31 @@ export function ConsentPage(props: { requestId: string; onRedirect?: (url: strin
           <CardDescription>{t("description", { app: data.clientName, appName })}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
+          <dl className="divide-y rounded-lg border">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
+              <dt className="text-muted-foreground">{t("identifiedBy")}</dt>
+              <dd>
+                {data.clientHost ? (
+                  <span className="font-mono font-medium break-all">{data.clientHost}</span>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-600/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                  >
+                    <ShieldAlert aria-hidden />
+                    {t("notVerified")}
+                  </Badge>
+                )}
+              </dd>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
+              <dt className="text-muted-foreground">{t("returnsTo")}</dt>
+              <dd className="font-mono font-medium break-all">{data.redirectHost}</dd>
+            </div>
+          </dl>
+          <p className="text-muted-foreground">
+            {data.clientHost ? t("registeredDocument", { host: data.clientHost }) : t("registeredDynamic")}
+          </p>
           <div className="space-y-2">
             <p className="font-medium">{t("mayTitle")}</p>
             <ul className="space-y-1.5">
@@ -95,21 +123,6 @@ export function ConsentPage(props: { requestId: string; onRedirect?: (url: strin
               </li>
             </ul>
           </div>
-          <p className="text-muted-foreground">
-            {data.registration === "dynamic" ? t("registeredDynamic") : t("registeredDocument")}{" "}
-            {data.clientUri ? (
-              <a
-                href={data.clientUri}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 underline"
-              >
-                {t("website")}
-                <ExternalLink className="size-3" aria-hidden />
-              </a>
-            ) : null}
-          </p>
-          <p className="text-muted-foreground">{t("returnsTo", { host: data.redirectHost })}</p>
           <p className="text-muted-foreground">{t("disconnect")}</p>
           {decide.isError ? (
             <Alert variant="destructive">

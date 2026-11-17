@@ -49,7 +49,8 @@ One Docker image, one Node.js entry point (`apps/server/src/main.ts`);
   `/files/*`, Markdown files `/s/<space>/<path>.md`, `/s/<space>.md` and
   `/llms.txt`, health checks under `/-/`, and the built web app.
 - **worker**: rebuilds the search index when `SEARCH_LANGUAGES` changed and
-  removes expired locks, OAuth requests and tokens, and unused uploads.
+  removes expired locks, OAuth requests and tokens, OAuth clients that never
+  got a grant (after 3 days), and unused uploads.
 - **migrate**: applies the Drizzle migrations under an advisory lock.
 - **all**: web and worker in one process.
 
@@ -254,21 +255,41 @@ Claude Code, …), following the MCP authorization specification:
   `token_endpoint_auth_methods_supported: none, client_secret_post,
 client_secret_basic`, `client_id_metadata_document_supported: true`.
 - `POST /oauth/register`: dynamic client registration (RFC 7591).
-  Redirect URIs must be `https`, or `http` on `localhost`/`127.0.0.1`.
+  Redirect URIs must be `https`, `http` on `localhost`, `127.0.0.1` or
+  `[::1]` (any port), or a native app's own scheme (RFC 8252, e.g. Cursor's
+  `cursor://anysphere.cursor-mcp/oauth/callback`); `javascript:`, `data:`,
+  `file:` and similar schemes are refused.
 - Client metadata documents: a `client_id` that is an `https` URL is
   fetched (5 seconds, 64 KB, JSON, no redirects, never private or loopback
   addresses unless `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`), must name itself as
-  `client_id` and list the `redirect_uri`; cached for an hour.
+  `client_id` and list the `redirect_uri`; cached for an hour. One fetch
+  at a time per `client_id` and at most 8 at once per process; beyond that,
+  the sign-in page asks to try again.
 - `GET /oauth/authorize`: checks client, redirect URI, `code_challenge`
   (S256), `resource` (must be the MCP URL when given); stores a request
   (10 minutes) and sends the browser to the sign-in page if needed, then to
-  the consent screen `/oauth/consent?request=<id>` in the web app.
-  Approve or deny there (`/api/v1/oauth/requests/:id/approve|deny`) returns
-  the redirect with `code` and `state`, or `error=access_denied`.
+  the consent screen `/oauth/consent?request=<id>` in the web app. Every
+  problem shows an error page: anyone can register a redirect URI, so the
+  browser goes back to the app only after the person decided (RFC 9700
+  4.11.2, no open redirect). Approve or deny there
+  (`/api/v1/oauth/requests/:id/approve|deny`) returns the redirect with
+  `code` and `state`, or `error=access_denied`.
+- The consent screen shows the app's name as the app's own claim: the
+  host of its metadata document when it has one, "Not verified" when it
+  registered itself, and where the browser returns (the host; with the
+  scheme when it is not `https`). It shows no link from `client_uri`.
 - `POST /oauth/token`: `authorization_code` (one use, PKCE checked,
   `redirect_uri` must match) and `refresh_token` (rotating: the old refresh
-  token stops working). Responses `Cache-Control: no-store`.
+  token stops working). A used code or a replaced refresh token presented
+  again revokes every token of its grant: someone may have stolen it.
+  Responses `Cache-Control: no-store`.
 - `POST /oauth/revoke` (RFC 7009).
+- Rate limits per client address (`X-Forwarded-For` behind `TRUST_PROXY`;
+  IPv6 by /64 network), as token buckets in memory, so each web process
+  counts on its own: `/oauth/register` 30 at once, then 2 per minute;
+  `/oauth/authorize` 30, then 10; `/oauth/token` 60, then 60;
+  `/oauth/revoke` 30, then 30 (`apps/server/src/oauth/rate-limit.ts`).
+  Beyond: 429 with `Retry-After` (an error page for `/oauth/authorize`).
 - `/mcp` without a valid token answers 401 with
   `WWW-Authenticate: Bearer resource_metadata="<APP_URL>/.well-known/oauth-protected-resource/mcp"`.
 - CORS: the well-known documents, `/oauth/register`, `/oauth/token`,

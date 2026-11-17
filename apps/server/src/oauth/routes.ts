@@ -1,8 +1,10 @@
-import { Hono, type Context } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { config } from "../config";
 import { getDb } from "../db/client";
+import { clientIp } from "../http/client-ip";
 import type { AppEnv } from "../http/env";
 import { logger } from "../logger";
 import { authenticateClient, OAuthError, registerClient } from "./clients";
@@ -14,6 +16,7 @@ import {
   SCOPE,
   startAuthorization,
 } from "./flow";
+import { OAUTH_RATE_LIMITS, RateLimiter, rateLimitKey } from "./rate-limit";
 
 /**
  * The OAuth 2.1 authorization server for connected apps (MCP clients):
@@ -64,8 +67,8 @@ export function authorizationServerMetadata() {
   };
 }
 
-function oauthError(c: Context<AppEnv>, error: OAuthError) {
-  const headers: Record<string, string> = { "cache-control": "no-store" };
+function oauthError(c: Context<AppEnv>, error: OAuthError, extraHeaders: Record<string, string> = {}) {
+  const headers: Record<string, string> = { "cache-control": "no-store", ...extraHeaders };
   if (error.status === 401) headers["www-authenticate"] = 'Basic realm="oauth"';
   return c.json({ error: error.error, error_description: error.description }, error.status, headers);
 }
@@ -85,14 +88,54 @@ async function formBody(c: Context<AppEnv>): Promise<Record<string, string>> {
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 
-function errorPage(c: Context<AppEnv>, message: string) {
+function errorPage(
+  c: Context<AppEnv>,
+  message: string,
+  status: ContentfulStatusCode = 400,
+  headers: Record<string, string> = {},
+) {
   const name = escapeHtml(config().APP_NAME);
   return c.html(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name}: cannot connect</title></head>` +
       `<body style="font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.5">` +
       `<h1 style="font-size: 1.25rem">The app cannot connect to ${name}</h1><p>${escapeHtml(message)}</p></body></html>`,
-    400,
+    status,
+    headers,
   );
+}
+
+const limiters = {
+  register: new RateLimiter(OAUTH_RATE_LIMITS.register),
+  authorize: new RateLimiter(OAUTH_RATE_LIMITS.authorize),
+  token: new RateLimiter(OAUTH_RATE_LIMITS.token),
+  revoke: new RateLimiter(OAUTH_RATE_LIMITS.revoke),
+} satisfies Record<keyof typeof OAUTH_RATE_LIMITS, RateLimiter>;
+
+/** Tests only: forget what the rate limits counted. */
+export function resetRateLimitsForTests() {
+  for (const limiter of Object.values(limiters)) limiter.clear();
+}
+
+/** Refuses a client address's requests beyond `name`'s limit with 429: a JSON error, or a page for browsers. */
+function rateLimited(name: keyof typeof OAUTH_RATE_LIMITS, page = false): MiddlewareHandler<AppEnv> {
+  const limiter = limiters[name];
+  return async (c, next) => {
+    const wait = limiter.take(rateLimitKey(clientIp(c)));
+    if (!wait) return next();
+    const headers = { "retry-after": String(wait) };
+    if (page)
+      return errorPage(
+        c,
+        "Too many sign-in attempts from your network. Try again in a few minutes.",
+        429,
+        headers,
+      );
+    return oauthError(
+      c,
+      new OAuthError(429, "temporarily_unavailable", "Too many requests. Try again later."),
+      headers,
+    );
+  };
 }
 
 export function oauthRoutes() {
@@ -116,7 +159,7 @@ export function oauthRoutes() {
   app.get("/.well-known/oauth-protected-resource/mcp", (c) => c.json(protectedResourceMetadata()));
   app.get("/.well-known/oauth-authorization-server", (c) => c.json(authorizationServerMetadata()));
 
-  app.post("/oauth/register", async (c) => {
+  app.post("/oauth/register", rateLimited("register"), async (c) => {
     try {
       const body: unknown = await c.req.json().catch(() => null);
       return c.json(await registerClient(getDb(), body), 201, { "cache-control": "no-store" });
@@ -126,16 +169,16 @@ export function oauthRoutes() {
     }
   });
 
-  app.get("/oauth/authorize", async (c) => {
+  app.get("/oauth/authorize", rateLimited("authorize", true), async (c) => {
     try {
       return c.redirect(await startAuthorization(getDb(), c.req.query()), 302);
     } catch (error) {
-      if (error instanceof AuthorizePageError) return errorPage(c, error.message);
+      if (error instanceof AuthorizePageError) return errorPage(c, error.message, error.status);
       throw error;
     }
   });
 
-  app.post("/oauth/token", async (c) => {
+  app.post("/oauth/token", rateLimited("token"), async (c) => {
     try {
       const body = await formBody(c);
       const client = await authenticateClient(getDb(), body, c.req.header("authorization"));
@@ -154,7 +197,7 @@ export function oauthRoutes() {
     }
   });
 
-  app.post("/oauth/revoke", async (c) => {
+  app.post("/oauth/revoke", rateLimited("revoke"), async (c) => {
     try {
       const body = await formBody(c);
       const client = await authenticateClient(getDb(), body, c.req.header("authorization"));

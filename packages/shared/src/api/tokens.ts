@@ -48,8 +48,11 @@ export const connectedAppListSchema = z.object({ items: z.array(connectedAppSche
 /** The consent screen of an OAuth sign-in. */
 export const oauthRequestSchema = z.object({
   id: idSchema,
+  /** The name the app gave itself; nobody checked it. */
   clientName: z.string(),
-  clientUri: z.string().nullable(),
+  /** The host that publishes the app's metadata document (its client_id); null for apps that registered themselves. */
+  clientHost: z.string().nullable(),
+  /** Where the browser goes after the decision: the host, with the scheme when it is not https. */
   redirectHost: z.string(),
   /** How the app registered: dynamic registration or a client metadata document. */
   registration: z.enum(["dynamic", "metadata_document"]),

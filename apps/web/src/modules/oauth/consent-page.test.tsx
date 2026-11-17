@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OauthRequest } from "@knowledge/shared/api/tokens";
@@ -10,11 +10,17 @@ const REQUEST_ID = "0b5a3e5e-3c1f-4d8e-9f3a-444444444444";
 const request: OauthRequest = {
   id: REQUEST_ID,
   clientName: "Claude",
-  clientUri: "https://claude.ai",
+  clientHost: "claude.ai",
   redirectHost: "claude.ai",
   registration: "metadata_document",
   expiresAt: "2026-11-17T10:10:00.000Z",
 };
+
+/** The value next to a label in the facts list ("Identified by", "Returns to"). */
+function fact(label: string) {
+  const term = screen.getByText(label, { selector: "dt" });
+  return within(term.parentElement!).getByRole("definition");
+}
 
 type Reply = { status?: number; body?: unknown };
 
@@ -48,7 +54,10 @@ describe("consent page", () => {
     renderWithProviders(<ConsentPage requestId={REQUEST_ID} onRedirect={onRedirect} />);
 
     expect(await screen.findByRole("heading", { name: "Connect Claude?" })).toBeInTheDocument();
-    expect(screen.getByText(/go back to claude.ai/)).toBeInTheDocument();
+    expect(fact("Identified by")).toHaveTextContent("claude.ai");
+    expect(fact("Returns to")).toHaveTextContent("claude.ai");
+    expect(screen.getByText(/description published at claude.ai/)).toBeInTheDocument();
+    expect(screen.queryByText("Not verified")).not.toBeInTheDocument();
     expect(screen.getByText(/cannot publish or merge/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
@@ -57,6 +66,29 @@ describe("consent page", () => {
       `/api/v1/oauth/requests/${REQUEST_ID}/approve`,
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("marks an app that registered itself as not verified, and shows where it returns to", async () => {
+    // A self-chosen name and website must not look trustworthy.
+    routeFetch({
+      [`GET /api/v1/oauth/requests/${REQUEST_ID}`]: {
+        body: {
+          ...request,
+          clientHost: null,
+          redirectHost: "claude.example.org",
+          registration: "dynamic",
+          clientUri: "https://claude.ai",
+        },
+      },
+    });
+    renderWithProviders(<ConsentPage requestId={REQUEST_ID} onRedirect={vi.fn()} />);
+
+    expect(await screen.findByRole("heading", { name: "Connect Claude?" })).toBeInTheDocument();
+    expect(fact("Identified by")).toHaveTextContent("Not verified");
+    expect(fact("Returns to")).toHaveTextContent("claude.example.org");
+    expect(screen.getByText(/registered itself and chose its own name/)).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByText(/claude\.ai/)).not.toBeInTheDocument();
   });
 
   it("denies", async () => {

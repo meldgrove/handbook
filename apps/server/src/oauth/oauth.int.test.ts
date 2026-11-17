@@ -1,9 +1,16 @@
 import { createHash, randomBytes } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetConfigForTests } from "../config";
+import { getDb } from "../db/client";
+import { oauthClients } from "../db/schema";
 import { createUser, request, resetDatabase, testApp } from "../test/helpers";
+import { pruneExpired } from "../worker/prune";
+import { DOCUMENT_MAX_CONCURRENT } from "./clients";
+import { OAUTH_RATE_LIMITS } from "./rate-limit";
+import { resetRateLimitsForTests } from "./routes";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
 
@@ -25,9 +32,53 @@ async function form(path: string, fields: Record<string, string>, headers: Recor
   return { status: response.status, headers: response.headers, body: text ? JSON.parse(text) : null };
 }
 
-async function authorize(params: Record<string, string>) {
-  const response = await testApp().request(`/oauth/authorize?${new URLSearchParams(params).toString()}`);
-  return { status: response.status, location: response.headers.get("location"), text: await response.text() };
+async function authorize(params: Record<string, string>, headers: Record<string, string> = {}) {
+  const response = await testApp().request(`/oauth/authorize?${new URLSearchParams(params).toString()}`, {
+    headers,
+  });
+  return {
+    status: response.status,
+    headers: response.headers,
+    location: response.headers.get("location"),
+    text: await response.text(),
+  };
+}
+
+async function register(body: Record<string, unknown>, headers: Record<string, string> = {}) {
+  const response = await testApp().request("/oauth/register", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+  return {
+    status: response.status,
+    headers: response.headers,
+    body: (await response.json()) as Record<string, string>,
+  };
+}
+
+/** A public client (no secret) with the test redirect URI; returns its client_id. */
+async function registerPublic(name = "Test client") {
+  const registered = await register({
+    redirect_uris: [REDIRECT],
+    client_name: name,
+    token_endpoint_auth_method: "none",
+  });
+  expect(registered.status).toBe(201);
+  return registered.body.client_id!;
+}
+
+/** Connects a person with a public client and exchanges the code; returns the token response. */
+async function connectAndExchange(userId: string, clientId: string) {
+  const { code, verifier } = await connect(userId, clientId);
+  const tokens = await form("/oauth/token", {
+    grant_type: "authorization_code",
+    code,
+    code_verifier: verifier,
+    client_id: clientId,
+  });
+  expect(tokens.status).toBe(200);
+  return tokens.body as { access_token: string; refresh_token: string };
 }
 
 async function mcpCall(token: string | undefined, method = "tools/list") {
@@ -64,9 +115,13 @@ async function connect(userId: string, clientId: string, extra: Record<string, s
 }
 
 describe("OAuth for connected apps", () => {
-  beforeEach(resetDatabase);
+  beforeEach(async () => {
+    resetRateLimitsForTests();
+    await resetDatabase();
+  });
   afterEach(() => {
     delete process.env.OAUTH_ALLOW_PRIVATE_CLIENT_URLS;
+    delete process.env.TRUST_PROXY;
     resetConfigForTests();
   });
 
@@ -110,10 +165,13 @@ describe("OAuth for connected apps", () => {
     expect(client.client_secret).toBeUndefined();
 
     const { code, verifier, requestId, consent } = await connect(ada.id, client.client_id);
-    expect(consent).toMatchObject({
+    expect(consent).toEqual({
+      id: requestId,
       clientName: "Test client",
+      clientHost: null,
       redirectHost: "client.example.org",
       registration: "dynamic",
+      expiresAt: expect.any(String),
     });
 
     // Another person cannot use the same consent screen.
@@ -227,7 +285,8 @@ describe("OAuth for connected apps", () => {
       redirect_uri: REDIRECT,
       state: "s",
     });
-    expect(new URL(noPkce.location!).searchParams.get("error")).toBe("invalid_request");
+    expect(noPkce.status).toBe(400);
+    expect(noPkce.location).toBeNull();
 
     const { code, verifier } = await connect(ada.id, client.client_id);
     const basic = (secret: string) =>
@@ -295,7 +354,12 @@ describe("OAuth for connected apps", () => {
       process.env.OAUTH_ALLOW_PRIVATE_CLIENT_URLS = "true";
       resetConfigForTests();
       const { code, verifier, consent } = await connect(ada.id, clientId);
-      expect(consent).toMatchObject({ clientName: "Document client", registration: "metadata_document" });
+      expect(consent).toMatchObject({
+        clientName: "Document client",
+        clientHost: new URL(clientId).host,
+        redirectHost: "client.example.org",
+        registration: "metadata_document",
+      });
       const tokens = await form("/oauth/token", {
         grant_type: "authorization_code",
         code,
@@ -307,6 +371,191 @@ describe("OAuth for connected apps", () => {
       await connect(ada.id, clientId);
       expect(served).toBe(1);
     } finally {
+      server.close();
+    }
+  });
+  it("shows errors before consent on its own page instead of redirecting to the app", async () => {
+    const clientId = await registerPublic();
+    const valid = {
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      code_challenge: pkce().challenge,
+      code_challenge_method: "S256",
+      state: "s",
+    };
+    const { response_type: _responseType, ...withoutResponseType } = valid;
+    const { code_challenge: _challenge, ...withoutChallenge } = valid;
+    for (const params of [
+      withoutResponseType,
+      { ...valid, response_type: "token" },
+      withoutChallenge,
+      { ...valid, code_challenge_method: "plain" },
+      { ...valid, resource: "https://other.example.org/mcp" },
+    ]) {
+      const result = await authorize(params);
+      expect(result.status).toBe(400);
+      expect(result.location).toBeNull();
+      expect(result.text).toContain("cannot connect");
+      expect(result.text).not.toContain(REDIRECT);
+    }
+    // A valid request still goes to the consent screen.
+    const started = await authorize(valid);
+    expect(started.status).toBe(302);
+    expect(started.location).toMatch(/^http:\/\/localhost:3000\/oauth\/consent\?request=/);
+  });
+
+  it("ends the connection when a replaced refresh token is used again", async () => {
+    const ada = await createUser();
+    const clientId = await registerPublic();
+    const first = await connectAndExchange(ada.id, clientId);
+    const second = await form("/oauth/token", {
+      grant_type: "refresh_token",
+      refresh_token: first.refresh_token,
+      client_id: clientId,
+    });
+    expect(second.status).toBe(200);
+    expect((await mcpCall(second.body.access_token)).status).toBe(200);
+
+    // Another client cannot end someone else's connection with it.
+    const otherClient = await registerPublic("Other client");
+    const elsewhere = await form("/oauth/token", {
+      grant_type: "refresh_token",
+      refresh_token: first.refresh_token,
+      client_id: otherClient,
+    });
+    expect(elsewhere.body).toMatchObject({ error: "invalid_grant" });
+    expect((await mcpCall(second.body.access_token)).status).toBe(200);
+
+    // The replaced token again: someone else may have it, so every token of the connection ends.
+    const replayed = await form("/oauth/token", {
+      grant_type: "refresh_token",
+      refresh_token: first.refresh_token,
+      client_id: clientId,
+    });
+    expect(replayed.status).toBe(400);
+    expect(replayed.body).toMatchObject({ error: "invalid_grant" });
+    expect((await mcpCall(second.body.access_token)).status).toBe(401);
+    const afterReplay = await form("/oauth/token", {
+      grant_type: "refresh_token",
+      refresh_token: second.body.refresh_token,
+      client_id: clientId,
+    });
+    expect(afterReplay.body).toMatchObject({ error: "invalid_grant" });
+
+    // Connecting again works.
+    const again = await connectAndExchange(ada.id, clientId);
+    expect((await mcpCall(again.access_token)).status).toBe(200);
+  });
+
+  it("removes clients that never got a grant after a few days", async () => {
+    const ada = await createUser();
+    const unused = await registerPublic("Unused");
+    const connected = await registerPublic("Connected");
+    const pending = await registerPublic("Pending");
+    const recent = await registerPublic("Recent");
+    await connectAndExchange(ada.id, connected);
+    expect(
+      (
+        await authorize({
+          response_type: "code",
+          client_id: pending,
+          redirect_uri: REDIRECT,
+          code_challenge: pkce().challenge,
+          code_challenge_method: "S256",
+        })
+      ).status,
+    ).toBe(302);
+    await getDb()
+      .update(oauthClients)
+      .set({ createdAt: new Date(Date.now() - 4 * 86_400_000) })
+      .where(inArray(oauthClients.clientId, [unused, connected, pending]));
+
+    await pruneExpired(getDb());
+
+    const left = await getDb().select({ clientId: oauthClients.clientId }).from(oauthClients);
+    expect(left.map((row) => row.clientId).sort()).toEqual([connected, pending, recent].sort());
+  });
+
+  it("limits requests per address", async () => {
+    process.env.TRUST_PROXY = "1";
+    resetConfigForTests();
+    const from = (address: string) => ({ "x-forwarded-for": address });
+    const metadata = { redirect_uris: [REDIRECT], token_endpoint_auth_method: "none" };
+
+    for (let index = 0; index < OAUTH_RATE_LIMITS.register.burst; index += 1) {
+      expect((await register(metadata, from("203.0.113.7"))).status).toBe(201);
+    }
+    const refused = await register(metadata, from("203.0.113.7"));
+    expect(refused.status).toBe(429);
+    expect(refused.body).toMatchObject({ error: "temporarily_unavailable" });
+    expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
+    // Other addresses have their own limit; IPv6 addresses count by their /64 network.
+    expect((await register(metadata, from("203.0.113.8"))).status).toBe(201);
+
+    const params = { response_type: "code", client_id: "kn_client_unknown", redirect_uri: REDIRECT };
+    for (let index = 0; index < OAUTH_RATE_LIMITS.authorize.burst; index += 1) {
+      expect((await authorize(params, from("2001:db8:1:2::1"))).status).toBe(400);
+    }
+    const tooMany = await authorize(params, from("2001:db8:1:2::ffff"));
+    expect(tooMany.status).toBe(429);
+    expect(tooMany.location).toBeNull();
+    expect(tooMany.text).toContain("Too many");
+    expect((await authorize(params, from("2001:db8:1:3::1"))).status).toBe(400);
+
+    const token = {
+      grant_type: "refresh_token",
+      refresh_token: "kn_rt_unknown",
+      client_id: "kn_client_unknown",
+    };
+    for (let index = 0; index < OAUTH_RATE_LIMITS.token.burst; index += 1) {
+      expect((await form("/oauth/token", token, from("198.51.100.1"))).status).toBe(401);
+    }
+    expect((await form("/oauth/token", token, from("198.51.100.1"))).status).toBe(429);
+
+    const revoke = { token: "kn_rt_unknown", client_id: "kn_client_unknown" };
+    for (let index = 0; index < OAUTH_RATE_LIMITS.revoke.burst; index += 1) {
+      expect((await form("/oauth/revoke", revoke, from("198.51.100.2"))).status).toBe(401);
+    }
+    expect((await form("/oauth/revoke", revoke, from("198.51.100.2"))).status).toBe(429);
+  });
+
+  it("reads one metadata document per app at a time, and only a few at once", async () => {
+    process.env.OAUTH_ALLOW_PRIVATE_CLIENT_URLS = "true";
+    resetConfigForTests();
+    const held: { url: string; response: http.ServerResponse }[] = [];
+    const server = http.createServer((incoming, response) => {
+      held.push({ url: incoming.url!, response });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const params = (path: string) => ({
+      response_type: "code",
+      client_id: `${base}${path}`,
+      redirect_uri: REDIRECT,
+      code_challenge: pkce().challenge,
+      code_challenge_method: "S256",
+    });
+    try {
+      const limit = DOCUMENT_MAX_CONCURRENT;
+      const started = [authorize(params("/client-0.json"))];
+      for (let index = 0; index < limit; index += 1) started.push(authorize(params(`/client-${index}.json`)));
+      // The same document twice is read once.
+      await vi.waitFor(() => expect(held).toHaveLength(limit));
+      const refused = await authorize(params("/one-too-many.json"));
+      expect(refused.status).toBe(503);
+      expect(refused.location).toBeNull();
+      expect(refused.text).toContain("Try again");
+
+      for (const { url, response } of held) {
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify({ client_id: `${base}${url}`, redirect_uris: [REDIRECT] }));
+      }
+      const results = await Promise.all(started);
+      expect(results.map((result) => result.status)).toEqual(Array<number>(limit + 1).fill(302));
+      expect(held).toHaveLength(limit);
+    } finally {
+      for (const { response } of held) if (!response.writableEnded) response.end();
       server.close();
     }
   });

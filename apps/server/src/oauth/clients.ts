@@ -2,12 +2,12 @@ import { randomBytes } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import http from "node:http";
 import https from "node:https";
-import { eq } from "drizzle-orm";
+import { and, eq, lt, notExists, sql } from "drizzle-orm";
 import ipaddr from "ipaddr.js";
 import { z } from "zod";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
-import { oauthClients } from "../db/schema";
+import { oauthClients, oauthGrants, oauthRequests } from "../db/schema";
 import { hashToken, sameHash } from "../auth/credentials";
 import { logger } from "../logger";
 
@@ -18,6 +18,7 @@ import { logger } from "../logger";
  * - a client metadata document: the `client_id` is an https URL whose JSON
  *   names the app and its redirect URIs. It is fetched with SSRF protection
  *   and cached for an hour.
+ * Clients that never got a grant are removed after a few days.
  */
 
 export type ClientRow = typeof oauthClients.$inferSelect;
@@ -25,7 +26,7 @@ export type ClientRow = typeof oauthClients.$inferSelect;
 /** An OAuth error response: `{ error, error_description }`. */
 export class OAuthError extends Error {
   constructor(
-    readonly status: 400 | 401 | 403 | 404 | 500 | 502,
+    readonly status: 400 | 401 | 403 | 404 | 429 | 500 | 502 | 503,
     readonly error: string,
     readonly description: string,
   ) {
@@ -37,10 +38,18 @@ export class OAuthError extends Error {
 const DOCUMENT_CACHE_MS = 60 * 60 * 1000;
 const DOCUMENT_MAX_BYTES = 64 * 1024;
 const DOCUMENT_TIMEOUT_MS = 5_000;
+/** Metadata documents read at the same time, per process. */
+export const DOCUMENT_MAX_CONCURRENT = 8;
+const UNUSED_CLIENT_DAYS = 3;
 const FORBIDDEN_SCHEMES = new Set(["javascript:", "data:", "file:", "vbscript:", "blob:", "about:"]);
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** Why a redirect URI is not allowed; null when fine. https, http on loopback, or an app's own scheme. */
+/**
+ * Why a redirect URI is not allowed; null when fine. https, http on
+ * loopback, or a native app's own scheme (RFC 8252 7.1, e.g. Cursor's
+ * `cursor://anysphere.cursor-mcp/oauth/callback`); never schemes that run
+ * or show content in the browser (javascript:, data:, …).
+ */
 export function redirectUriProblem(value: string): string | null {
   let url: URL;
   try {
@@ -54,6 +63,22 @@ export function redirectUriProblem(value: string): string | null {
     return LOOPBACK_HOSTS.has(url.hostname) ? null : "Use https (http only on localhost)";
   if (FORBIDDEN_SCHEMES.has(url.protocol)) return "This scheme is not allowed";
   return /^[a-z][a-z0-9+.-]*:$/.test(url.protocol) ? null : "Not a valid scheme";
+}
+
+/**
+ * Where a redirect URI leads, for people to check: the host for https,
+ * with the scheme for anything else (`http://127.0.0.1:8787`,
+ * `cursor://anysphere.cursor-mcp`), so another scheme cannot pass for a website.
+ */
+export function redirectTarget(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return value;
+  }
+  if (url.protocol === "https:" && url.host) return url.host;
+  return url.host ? `${url.protocol}//${url.host}` : url.protocol;
 }
 
 /**
@@ -277,6 +302,28 @@ export async function fetchMetadataDocument(clientId: string): Promise<unknown> 
   });
 }
 
+const documentFetches = new Map<string, Promise<unknown>>();
+
+/**
+ * Reads a metadata document once at a time per client, and at most
+ * DOCUMENT_MAX_CONCURRENT documents at once, so that sign-in requests
+ * cannot make the server fetch many URLs.
+ */
+function fetchDocumentOnce(clientId: string): Promise<unknown> {
+  const running = documentFetches.get(clientId);
+  if (running) return running;
+  if (documentFetches.size >= DOCUMENT_MAX_CONCURRENT) {
+    throw new OAuthError(
+      503,
+      "temporarily_unavailable",
+      "Too many apps are connecting right now. Try again in a minute.",
+    );
+  }
+  const fetching = fetchMetadataDocument(clientId).finally(() => documentFetches.delete(clientId));
+  documentFetches.set(clientId, fetching);
+  return fetching;
+}
+
 const documentSchema = z.looseObject({
   client_id: z.string(),
   redirect_uris: z.array(z.string().max(2000)).min(1).max(10),
@@ -294,7 +341,7 @@ async function clientFromDocument(
   cached: ClientRow | null,
 ): Promise<ClientRow> {
   if (cached?.fetchedAt && Date.now() - cached.fetchedAt.getTime() < DOCUMENT_CACHE_MS) return cached;
-  const parsed = documentSchema.safeParse(await fetchMetadataDocument(clientId));
+  const parsed = documentSchema.safeParse(await fetchDocumentOnce(clientId));
   if (!parsed.success)
     throw new OAuthError(400, "invalid_client", "The client's metadata document is not valid");
   const document = parsed.data;
@@ -380,4 +427,29 @@ export async function authenticateClient(
     }
   }
   return client;
+}
+
+/**
+ * Removes clients that never got a grant (no one connected them) and have
+ * no sign-in in progress, a few days after they registered or their
+ * metadata document was first read.
+ */
+export async function pruneUnusedClients(db: DbOrTx) {
+  await db.delete(oauthClients).where(
+    and(
+      lt(oauthClients.createdAt, sql`now() - make_interval(days => ${UNUSED_CLIENT_DAYS})`),
+      notExists(
+        db
+          .select({ one: sql`1` })
+          .from(oauthGrants)
+          .where(sql`"oauth_grants"."client_id" = "oauth_clients"."id"`),
+      ),
+      notExists(
+        db
+          .select({ one: sql`1` })
+          .from(oauthRequests)
+          .where(sql`"oauth_requests"."client_id" = "oauth_clients"."id"`),
+      ),
+    ),
+  );
 }

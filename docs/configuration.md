@@ -60,6 +60,10 @@ See [Agents and MCP](agents.md).
 | `WORKER_HEARTBEAT_FILE`          | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds, for health checks.                                                        |
 | `WEB_DIST_DIR`, `MIGRATIONS_DIR` | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
 
+Behind a reverse proxy, set `TRUST_PROXY`: the rate limits of sign-in and of
+connected apps (OAuth) count per client address, and without it every
+request seems to come from the proxy.
+
 ## Error reports (Sentry)
 
 | Variable                    | Default               | Meaning                                                          |

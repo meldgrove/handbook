@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { OauthRequest } from "@knowledge/shared/api/tokens";
 import { config } from "../config";
 import type { Db, DbOrTx } from "../db/client";
@@ -8,7 +8,13 @@ import { hashToken, issueCredential } from "../auth/credentials";
 import type { UserPrincipal } from "../auth/principal";
 import { conflict, notFound } from "../http/errors";
 import { logger } from "../logger";
-import { clientForAuthorization, matchesRedirectUri, OAuthError, type ClientRow } from "./clients";
+import {
+  clientForAuthorization,
+  matchesRedirectUri,
+  OAuthError,
+  redirectTarget,
+  type ClientRow,
+} from "./clients";
 
 /**
  * The authorization code flow with PKCE for connected apps:
@@ -30,9 +36,17 @@ export function isOurResource(resource: string): boolean {
 }
 
 /** An error the authorization endpoint shows itself, because redirecting would not be safe. */
-export class AuthorizePageError extends Error {}
+export class AuthorizePageError extends Error {
+  constructor(
+    message: string,
+    readonly status: 400 | 503 = 400,
+  ) {
+    super(message);
+    this.name = "AuthorizePageError";
+  }
+}
 
-/** A redirect back to the client with an error (RFC 6749 4.1.2.1, with RFC 9207 `iss`). */
+/** A redirect back to the client with an error (RFC 6749 4.1.2.1, with RFC 9207 `iss`); only after the person decided. */
 export function errorRedirect(
   redirectUri: string,
   error: string,
@@ -48,9 +62,10 @@ export function errorRedirect(
 }
 
 /**
- * Checks an authorization request. Returns where to send the browser: the
- * consent screen, or the client with an error. Throws AuthorizePageError
- * when the client or redirect URI is not valid.
+ * Checks an authorization request and returns the consent screen's address.
+ * Throws AuthorizePageError for every problem: anyone can register a client
+ * with any redirect URI, so before the person has decided, errors are shown
+ * here and never sent to the app (RFC 9700 4.11.2, no open redirect).
  */
 export async function startAuthorization(db: Db, query: Record<string, string>): Promise<string> {
   const clientId = query.client_id;
@@ -59,7 +74,8 @@ export async function startAuthorization(db: Db, query: Record<string, string>):
   try {
     client = await clientForAuthorization(db, clientId);
   } catch (error) {
-    if (error instanceof OAuthError) throw new AuthorizePageError(error.description);
+    if (error instanceof OAuthError)
+      throw new AuthorizePageError(error.description, error.status === 503 ? 503 : 400);
     throw error;
   }
   if (!client)
@@ -74,11 +90,8 @@ export async function startAuthorization(db: Db, query: Record<string, string>):
   }
   const state = query.state && query.state.length <= 1000 ? query.state : undefined;
   if (query.response_type !== "code") {
-    return errorRedirect(
-      redirectUri,
-      "unsupported_response_type",
-      "Only response_type=code is supported",
-      state,
+    throw new AuthorizePageError(
+      "The app asked for a kind of sign-in that is not supported (response_type).",
     );
   }
   if (
@@ -86,15 +99,10 @@ export async function startAuthorization(db: Db, query: Record<string, string>):
     query.code_challenge_method !== "S256" ||
     !CHALLENGE.test(query.code_challenge)
   ) {
-    return errorRedirect(
-      redirectUri,
-      "invalid_request",
-      "PKCE with code_challenge_method=S256 is required",
-      state,
-    );
+    throw new AuthorizePageError("The app did not protect its sign-in with PKCE (code_challenge, S256).");
   }
   if (query.resource && !isOurResource(query.resource)) {
-    return errorRedirect(redirectUri, "invalid_target", "Unknown resource", state);
+    throw new AuthorizePageError("The app asked for access to another server (resource).");
   }
   const [row] = await db
     .insert(oauthRequests)
@@ -132,12 +140,13 @@ async function pendingRequest(db: DbOrTx, principal: UserPrincipal, id: string) 
 export async function describeRequest(db: Db, principal: UserPrincipal, id: string): Promise<OauthRequest> {
   return db.transaction(async (tx) => {
     const { request, client } = await pendingRequest(tx, principal, id);
+    const document = client.registration === "metadata_document";
     return {
       id: request.id,
       clientName: client.name,
-      clientUri: client.clientUri,
-      redirectHost: new URL(request.redirectUri).host || request.redirectUri,
-      registration: client.registration === "metadata_document" ? "metadata_document" : "dynamic",
+      clientHost: document ? new URL(client.clientId).host : null,
+      redirectHost: redirectTarget(request.redirectUri),
+      registration: document ? "metadata_document" : "dynamic",
       expiresAt: request.expiresAt.toISOString(),
     };
   });
@@ -299,7 +308,10 @@ export async function exchangeCode(
   throw invalid;
 }
 
-/** grant_type=refresh_token: rotating; the old refresh token stops working. */
+/**
+ * grant_type=refresh_token: rotating; the old refresh token stops working.
+ * An old one used again ends every token of its grant (RFC 9700 4.14.2).
+ */
 export async function refreshTokens(
   db: Db,
   client: ClientRow,
@@ -307,26 +319,38 @@ export async function refreshTokens(
 ): Promise<TokenResponse> {
   const token = body.refresh_token;
   if (!token) throw new OAuthError(400, "invalid_request", "Send refresh_token");
-  return db.transaction(async (tx) => {
+  const invalid = new OAuthError(400, "invalid_grant", "The refresh token is invalid, expired or used");
+  const result = await db.transaction(async (tx) => {
     const [row] = await tx
-      .select()
+      .select({
+        credential: credentials,
+        grantClientId: oauthGrants.clientId,
+        grantRevokedAt: oauthGrants.revokedAt,
+      })
       .from(credentials)
-      .where(
-        and(
-          eq(credentials.tokenHash, hashToken(token)),
-          eq(credentials.kind, "oauth_refresh"),
-          isNull(credentials.revokedAt),
-          gt(credentials.expiresAt, new Date()),
-        ),
-      )
-      .for("update");
-    const invalid = new OAuthError(400, "invalid_grant", "The refresh token is invalid, expired or used");
-    if (!row) throw invalid;
-    const grant = await activeGrant(tx, row.grantId, client.id);
+      .innerJoin(oauthGrants, eq(oauthGrants.id, credentials.grantId))
+      .where(and(eq(credentials.tokenHash, hashToken(token)), eq(credentials.kind, "oauth_refresh")))
+      .for("update", { of: credentials });
+    if (!row || row.grantClientId !== client.id) throw invalid;
+    if (row.credential.revokedAt) {
+      // Nothing is left to end once the person disconnected the app.
+      if (row.grantRevokedAt) throw invalid;
+      return { reusedGrantId: row.credential.grantId };
+    }
+    if (!row.credential.expiresAt || row.credential.expiresAt <= new Date()) throw invalid;
+    const grant = await activeGrant(tx, row.credential.grantId, client.id);
     if (!grant) throw invalid;
-    await tx.update(credentials).set({ revokedAt: new Date() }).where(eq(credentials.id, row.id));
-    return issueTokens(tx, grant, client.name);
+    await tx.update(credentials).set({ revokedAt: new Date() }).where(eq(credentials.id, row.credential.id));
+    return { tokens: await issueTokens(tx, grant, client.name) };
   });
+  if (result.tokens) return result.tokens;
+  // A refresh token used after it was replaced may have been stolen: end everything its grant gave.
+  if (result.reusedGrantId) {
+    const grantId = result.reusedGrantId;
+    await db.transaction((tx) => revokeGrantTokens(tx, grantId, { grant: false }));
+    logger.warn({ grantId }, "refresh token reused; the grant's tokens were revoked");
+  }
+  throw invalid;
 }
 
 /** RFC 7009: revoking a refresh token ends the whole connection; an access token only itself. */
