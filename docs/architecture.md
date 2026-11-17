@@ -207,10 +207,12 @@ Statuses: `open → in_review → merged`, or `closed` (and back to `open`).
 
 - Pages: title (weight A), search terms and tags (B), description (C).
   Sections: heading path (A), text (D).
-- A query ranks sections with their page's rank, keeps the best section per
-  page, and returns a snippet (`ts_headline`) with matched words between
-  `HIGHLIGHT_START` and `HIGHLIGHT_END`. Titles also match with a trigram
-  similarity (`pg_trgm`) for typos.
+- A query takes the matching pages and sections from their GIN indexes,
+  ranks each page by its own rank plus its best matching section, and
+  returns a snippet (`ts_headline`, built only for the results) with matched
+  words between `HIGHLIGHT_START` and `HIGHLIGHT_END`. With fewer results
+  than asked for, titles also match by trigram similarity (`pg_trgm`'s `%`
+  through the title index, threshold 0.3 set per transaction) for typos.
 - Drafts only appear for editors of their space; deleted pages never.
 
 ## Files
