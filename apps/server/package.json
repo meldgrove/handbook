@@ -18,7 +18,7 @@
     "@hono/node-server": "2.1.6",
     "@knowledge/shared": "*",
     "@modelcontextprotocol/sdk": "1.32.2",
-    "@sentry/node": "11.11.0",
+    "@sentry/node": "11.12.0",
     "better-auth": "1.7.20",
     "drizzle-orm": "0.45.4",
     "fflate": "0.8.3",
