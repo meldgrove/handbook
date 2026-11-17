@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isDocument, parseDocument, stringify } from "yaml";
+import { isDocument, isMap, isScalar, parseDocument, stringify } from "yaml";
 
 /**
  * A page is one Markdown file: YAML frontmatter, then the body.
@@ -160,6 +160,11 @@ const FRONTMATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n?---[ \t]*(?:\r?\n|$)/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** An email address has at most 254 characters (longer text also makes the pattern slow). */
+function isEmail(text: string): boolean {
+  return text.length <= 254 && EMAIL.test(text);
+}
+
 /** Splits a file into its raw frontmatter text and body; null when it has no frontmatter. */
 export function splitFrontmatter(markdown: string): { yaml: string; body: string } | null {
   const text = normalizeNewlines(markdown).replace(/^\uFEFF/, "");
@@ -177,12 +182,26 @@ export function readFrontmatterValues(
   yamlText: string,
 ): { values: Record<string, unknown> } | { error: string } {
   if (yamlText.trim() === "") return { values: {} };
-  const document = parseDocument(yamlText, { schema: "core", uniqueKeys: true, prettyErrors: false });
+  // Keys are checked below: the parser's own check takes quadratic time.
+  const document = parseDocument(yamlText, { schema: "core", uniqueKeys: false, prettyErrors: false });
   if (!isDocument(document) || document.errors.length > 0) {
     const first = document.errors[0];
     return { error: `The frontmatter is not valid YAML${first ? `: ${first.message.split("\n")[0]}` : ""}` };
   }
-  const value: unknown = document.toJS({ maxAliasCount: 0 });
+  if (isMap(document.contents)) {
+    const keys = new Set<string>();
+    for (const { key } of document.contents.items) {
+      const name = isScalar(key) ? String(key.value) : String(key);
+      if (keys.has(name)) return { error: "The frontmatter is not valid YAML: Map keys must be unique" };
+      keys.add(name);
+    }
+  }
+  let value: unknown;
+  try {
+    value = document.toJS({ maxAliasCount: 0 });
+  } catch {
+    return { error: "The frontmatter is not valid YAML: aliases (*name) are not supported" };
+  }
   if (value === null || value === undefined) return { values: {} };
   if (typeof value !== "object" || Array.isArray(value)) {
     return { error: "The frontmatter must be a list of `key: value` lines" };
@@ -290,7 +309,7 @@ export function validateFrontmatter(
   let owner: string | null = null;
   if (!isBlank(values.owner)) {
     owner = asText(values.owner)?.toLowerCase() ?? null;
-    if (!owner || !EMAIL.test(owner)) fail("owner", "Use an email address");
+    if (!owner || !isEmail(owner)) fail("owner", "Use an email address");
   }
 
   let reviewed: string | null = null;
@@ -432,7 +451,7 @@ function validateCustomValue(
     }
     case "person": {
       const text = asText(value)?.toLowerCase();
-      if (!text || !EMAIL.test(text)) return { error: "Use an email address" };
+      if (!text || !isEmail(text)) return { error: "Use an email address" };
       return { value: text };
     }
   }
@@ -465,7 +484,8 @@ export const MAX_PAGE_CHARACTERS = 500_000;
 export function normalizeBody(body: string): string {
   const text = normalizeNewlines(body)
     .replace(/^(?:[ \t]*\n)+/, "")
-    .replace(/\s+$/, "");
+    // Not /\s+$/: a regex takes quadratic time on long runs of spaces inside the text.
+    .trimEnd();
   return text === "" ? "" : `${text}\n`;
 }
 

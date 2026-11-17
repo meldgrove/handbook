@@ -26,8 +26,12 @@ export type Section = {
   content: string;
 };
 
-/** GitHub-style callout markers ("[!NOTE]") are formatting, not text. */
-const CALLOUT_MARKER = /^\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/gim;
+/**
+ * GitHub-style callout markers ("[!NOTE]") are formatting, not text. Only
+ * spaces before them: `^\s*` would search on through every blank line below
+ * each line start (quadratic on blank lines).
+ */
+const CALLOUT_MARKER = /^[ \t]*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/gim;
 
 function plainText(nodes: RootContent[]): string {
   return nodes
