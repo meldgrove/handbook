@@ -73,7 +73,7 @@ PostgreSQL holds everything except uploaded files (`FILES_DIR`).
   itself as `markdown`, `search_vector`). `deleted_at` puts it in the trash.
 - `page_revisions`: every version: number, kind (save, move, delete,
   restore), path and title then, the whole file, author, `via` (web, api,
-  mcp, import, merge, revert, restore), `client_name`, `change_set_id`,
+  mcp, merge, revert, restore), `client_name`, `change_set_id`,
   added and removed lines.
 - `page_sections`: live pages split at headings, with anchors and heading
   paths, for search. `page_links`: links between pages (backlinks, broken
@@ -100,7 +100,7 @@ The body itself is kept as written, so diffs show real changes only.
 
 A file without frontmatter or with unknown keys is refused with field
 errors (`properties.<key>`). Unknown keys must be defined in the space
-first; imports can define them (owners).
+first.
 
 Markdown is CommonMark with GitHub's extensions (tables, task lists,
 strikethrough, autolinks) and GitHub callouts (`> [!NOTE]`, `[!TIP]`,
@@ -125,8 +125,10 @@ permissions, then call it inside a transaction with a page locked by
 - `saveLivePage`: canonical form; when the page changed since
   `baseRevision`, a three-way merge (`packages/shared/src/merge.ts`, diff3
   over a Myers line diff with a work limit: past it, all lines between the
-  first and the last change count as changed) combines both changes;
-  overlapping changes throw `PageConflictError` (409
+  first and the last change count as changed) combines both changes. Lines
+  both sides changed (a paragraph is one line) are merged the same way word
+  by word, within one work budget per merge; changes to the same words
+  throw `PageConflictError` (409
   `page_changed`, with the current file and a merged text with conflict
   blocks). Saving the same file again changes nothing.
 - `createLivePage`, `moveLivePage` (with sub-pages; old paths redirect; each
@@ -141,8 +143,7 @@ permissions, then call it inside a transaction with a page locked by
   and links, and resolves links that pointed at the page's path (on
   restore also its old paths).
 
-Change set merges, imports (through change sets), restores and the REST API
-all use these functions.
+Change set merges, restores and the REST API all use these functions.
 
 ## Links
 
@@ -168,6 +169,9 @@ Times in `packages/shared/src/limits.ts`.
    another tab takes the lock from the first tab.
 4. A takeover replaces the token; the previous editor's next renewal gets
    409 `lock_lost` with who took it, and its text stays in its draft.
+   A lock that ended without anybody taking it answers `lock_lost` without
+   `takenOverBy`: the editor keeps the token and renews with `active: true`
+   at the next keystroke, which takes the lock again while it is free.
 5. The editor stores unsaved text as a draft every 5 seconds (per person
    and page) and offers it when the person opens the editor again. Drafts
    of a page in the trash stay and come back with it.
@@ -191,7 +195,9 @@ Statuses: `open → in_review → merged`, or `closed` (and back to `open`).
   `create` item's path, else live paths not deleted or moved away).
 - **Who may change it**: its author and the space's editors, while open or
   in review. Every change records an `edited` event.
-- **Submit** (author or editors) → `in_review`. **Request changes**
+- **Submit** (author or editors) → `in_review`; the web app submits a
+  suggestion when its first change is saved (editors' start page lists
+  change sets in review only). **Request changes**
   (editors, with a comment) → `open`. **Merge** (editors; not agents) from
   `open` or `in_review`. **Close** (author or editors), **reopen** (author or
   editors).
@@ -246,28 +252,20 @@ text calls it too. The worker removes uploads older than a day that were
 never used; a used upload stays, also when the text that mentioned it is
 gone.
 
-## Import and export
+## Export
 
-- **Export** (`GET /api/v1/spaces/:space/export`): a zip with one file per
-  live page (`<path>.md`, sub-pages in folders named like the page) and
-  `_space.yaml` (name, description, properties, page types, page order).
-  Readers get no drafts.
-- **Import** (`POST /api/v1/spaces/:space/import`, editors): a zip of
-  Markdown files becomes one change set (created and updated pages) to
-  review and merge. `x/index.md` and `x.md` both become page `x`; folders
-  without a file get a page titled after the folder. Files and folders
-  starting with `_` or `.` are skipped (except `_space.yaml`). Frontmatter
-  conventions of other tools are mapped: `page_type` → `type`; `slug`,
-  `last_updated` are dropped. Keys the space does not define are dropped
-  and listed, or, for owners with `defineProperties`, added to the space
-  (text, list, number, yes/no or date, from the values). VitePress boxes
-  (`::: tip`, `info`, `warning`, `danger`, `details`) become callouts; heading
-  anchors `{#id}` are removed. Limits: `MAX_IMPORT_BYTES`, `MAX_IMPORT_FILES`,
-  unpacked files together four times `MAX_IMPORT_BYTES` (by the sizes the
-  zip declares; inflating a file stops at its declared size, and a file
-  that grows past it fails the import as damaged), Markdown files 2 MB each,
-  `_space.yaml` 1 MB (larger ones are skipped and listed). The import yields
-  to other requests between files.
+`GET /api/v1/spaces/:space/export` (`apps/server/src/exports/export.ts`): a
+zip with one file per live page (`<path>.md`, sub-pages in folders named
+like the page), `_space.yaml` (name, description, properties, page types,
+page order) and every upload these texts mention (`/files/<id>`) as
+`files/<id>/<name>`, so the pages' links resolve from the zip's folder.
+Readers get no drafts, nor uploads only drafts use. The database is read
+before the answer starts; the zip then streams, packing the next file only
+when the client took the previous ones (texts deflated, uploads stored as
+they are). An upload missing on disk is left out and logged.
+
+There is no import: agents bring existing content in by writing pages
+into a change set (MCP), which editors review like any other.
 
 ## Agents
 
@@ -369,7 +367,7 @@ helps.
 | Area        | Routes                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Meta        | `GET /auth-config`, `GET /me`                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Spaces      | `GET /spaces`, `POST /spaces` (admin), `GET /spaces/:space`, `PATCH /spaces/:space` (owner), `POST /spaces/:space/archive`, `/unarchive` (admin), `GET /spaces/:space/members`, `PUT /spaces/:space/members` (owner; owners: admin), `DELETE /spaces/:space/members/:userId`, `GET /spaces/:space/tree`, `GET /spaces/:space/trash`, `GET /spaces/:space/export`, `POST /spaces/:space/import`, `POST /spaces/:space/files`                                              |
+| Spaces      | `GET /spaces`, `POST /spaces` (admin), `GET /spaces/:space`, `PATCH /spaces/:space` (owner), `POST /spaces/:space/archive`, `/unarchive` (admin), `GET /spaces/:space/members`, `PUT /spaces/:space/members` (owner; owners: admin), `DELETE /spaces/:space/members/:userId`, `GET /spaces/:space/tree`, `GET /spaces/:space/trash`, `GET /spaces/:space/export`, `POST /spaces/:space/files`                                                                            |
 | Pages       | `GET /spaces/:space/pages/by-path?path=`, `POST /spaces/:space/pages`, `GET /pages/:id`, `PUT /pages/:id`, `POST /pages/:id/move`, `DELETE /pages/:id`, `POST /pages/:id/restore`, `GET /pages/:id/revisions`, `GET /pages/:id/revisions/:number`, `POST /pages/:id/revisions/:number/restore`, `POST /pages/:id/lock`, `POST /pages/:id/lock/renew`, `POST /pages/:id/lock/takeover`, `DELETE /pages/:id/lock?token=`, `GET`/`PUT`/`DELETE /pages/:id/draft`            |
 | Search      | `GET /search`, `GET /tags`, `GET /tags/:tag/pages`, `GET /recent`                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Change sets | `GET /change-sets`, `POST /change-sets`, `GET /change-sets/:number`, `PATCH /change-sets/:number`, `GET /change-sets/:number/pages/:pageId`, `GET /change-sets/:number/pages/by-path?path=`, `PUT /change-sets/:number/pages`, `POST /change-sets/:number/pages/:pageId/edit`, `/move`, `/delete`, `/rebase`, `DELETE /change-sets/:number/pages/:pageId`, `POST /change-sets/:number/comments`, `/submit`, `/request-changes`, `/merge`, `/close`, `/reopen`, `/revert` |

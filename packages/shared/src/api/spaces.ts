@@ -82,35 +82,6 @@ export const spaceMemberPutSchema = z.object({
 });
 export type SpaceMemberPut = z.infer<typeof spaceMemberPutSchema>;
 
-/** Result of importing a zip of Markdown files into a space. */
-export const importResultSchema = z.object({
-  /** The change set that holds the imported pages, for review and merge. */
-  changeSet: z.object({ number: z.number().int() }).nullable(),
-  created: z.number().int(),
-  updated: z.number().int(),
-  unchanged: z.number().int(),
-  /** Files that were not imported, with the reason. */
-  skipped: z.array(z.object({ file: z.string(), reason: z.string() })),
-  /** Frontmatter keys that were removed from imported pages. */
-  droppedProperties: z.array(z.string()),
-  /** Properties and page types added to the space (owners, with defineProperties). */
-  definedProperties: z.array(z.string()),
-  definedPageTypes: z.array(z.string()),
-  /** Notes about converted syntax, e.g. VitePress boxes turned into callouts. */
-  notes: z.array(z.string()),
-});
-export type ImportResult = z.infer<typeof importResultSchema>;
-
-export const importOptionsSchema = z.object({
-  /** Owners: add unknown frontmatter keys and page types to the space instead of dropping them. */
-  defineProperties: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
-  /** Title of the change set; defaults to "Import <file name>". */
-  title: z.string().trim().max(200).optional(),
-});
-
 /** An uploaded file. `markdown` is ready to paste into a page. */
 export const fileInfoSchema = z.object({
   id: idSchema,

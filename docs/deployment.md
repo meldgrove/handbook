@@ -116,8 +116,9 @@ Test a restore once, and again after larger changes to the setup: restore
 the database and the `files` volume on another machine (or into a new
 Compose project), start the app there, and open a few pages with images.
 
-Each space can also be exported as a zip of Markdown files (space menu →
-Export), for a copy outside the app; uploaded files are not in it.
+Each space can also be exported as a zip of its Markdown files and the
+uploads its pages use (space menu → Export), for a copy outside the app.
+It is not a backup of the app: history, change sets and people are not in it.
 
 ## Error reports and performance data (Sentry)
 

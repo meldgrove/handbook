@@ -20,7 +20,7 @@ export const CHANNELS = ["web", "token", "oauth", "service"] as const;
 export type Channel = (typeof CHANNELS)[number];
 
 /** Through which way a change was made; shown in histories. */
-export const VIAS = ["web", "api", "mcp", "import", "merge", "revert", "restore"] as const;
+export const VIAS = ["web", "api", "mcp", "merge", "revert", "restore"] as const;
 export const viaSchema = z.enum(VIAS);
 export type Via = z.infer<typeof viaSchema>;
 

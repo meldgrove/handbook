@@ -21,6 +21,9 @@ function filePath(storageKey: string): string {
   return path.join(root(), storageKey);
 }
 
+/** The path on disk of a stored file (exports read it in chunks). */
+export const storedFilePath = filePath;
+
 /** A safe file name: no paths, no control characters, at most 200 characters. */
 export function cleanFilename(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? "";

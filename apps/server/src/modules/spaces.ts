@@ -1,19 +1,17 @@
 import { Hono } from "hono";
 import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import {
-  importOptionsSchema,
   spaceCreateSchema,
   spaceListQuerySchema,
   spaceMemberPutSchema,
   spaceUpdateSchema,
 } from "@knowledge/shared/api/spaces";
-import { MAX_IMPORT_BYTES } from "@knowledge/shared/limits";
 import { getDb } from "../db/client";
 import { pages, users } from "../db/schema";
 import type { AppEnv } from "../http/env";
-import { badRequest, forbidden } from "../http/errors";
+import { forbidden } from "../http/errors";
 import { idParam, jsonBody, queryOf, requireAdmin, requirePrincipal, requireUser } from "../http/middleware";
-import { getSpace, requireAbility, spaceContext } from "../spaces/access";
+import { getSpace, spaceContext } from "../spaces/access";
 import {
   createSpace,
   listMembers,
@@ -25,8 +23,7 @@ import {
   updateSpace,
 } from "../spaces/service";
 import { actorOf, iso, pageSummary, pageSummaryColumns } from "../pages/views";
-import { multipartBody } from "./util";
-import { exportSpace, importSpace } from "../imports/import";
+import { exportSpace } from "../exports/export";
 
 const router = new Hono<AppEnv>();
 
@@ -135,28 +132,7 @@ router.get("/spaces/:space/export", async (c) => {
   c.header("content-type", "application/zip");
   c.header("content-disposition", `attachment; filename="${context.space.slug}.zip"`);
   c.header("cache-control", "private, no-store");
-  return c.body(zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer);
-});
-
-router.post("/spaces/:space/import", async (c) => {
-  const actor = requireUser(c);
-  const context = await spaceContext(getDb(), actor, c.req.param("space"));
-  requireAbility(context, "editLive");
-  const body = await multipartBody(c);
-  const file = body.file;
-  if (!(file instanceof File)) throw badRequest("Choose a zip file");
-  if (file.size > MAX_IMPORT_BYTES) throw badRequest("The zip file is too large");
-  const options = importOptionsSchema.parse({
-    defineProperties: typeof body.defineProperties === "string" ? body.defineProperties : undefined,
-    title: typeof body.title === "string" ? body.title : undefined,
-  });
-  const result = await importSpace(getDb(), actor, context, {
-    data: new Uint8Array(await file.arrayBuffer()),
-    fileName: file.name || "upload.zip",
-    defineProperties: options.defineProperties,
-    title: options.title,
-  });
-  return c.json(result, 201);
+  return c.body(zip);
 });
 
 export default router;

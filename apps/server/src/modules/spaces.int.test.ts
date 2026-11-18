@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { strFromU8, unzipSync } from "fflate";
+import { rm } from "node:fs/promises";
+import path from "node:path";
+import { strFromU8, strToU8, unzipSync } from "fflate";
 import { eq } from "drizzle-orm";
+import { config } from "../config";
 import { getDb } from "../db/client";
-import { auditLog, changeSetEvents, changeSetItems, changeSets, spaces, users } from "../db/schema";
-import { zipOf } from "../imports/import";
+import { auditLog, spaces, users } from "../db/schema";
 import {
   createPage,
   createSpace,
@@ -15,13 +17,6 @@ import {
 } from "../test/helpers";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
-
-function zipForm(files: Record<string, string>, fields: Record<string, string> = {}) {
-  const form = new FormData();
-  form.append("file", new File([zipOf(files).slice()], "export.zip", { type: "application/zip" }));
-  for (const [key, value] of Object.entries(fields)) form.append(key, value);
-  return form;
-}
 
 describe("spaces API", () => {
   beforeEach(resetDatabase);
@@ -160,99 +155,70 @@ describe("spaces API", () => {
     expect(renamed.body.name).toBe("Tech");
   });
 
-  it("imports a zip as one change set and exports the space", async () => {
+  it("exports the space with the uploads its pages use", async () => {
     const editor = await createUser();
-    const owner = await createUser();
-    const space = await createSpace({ slug: "it", members: { [editor.id]: "editor", [owner.id]: "owner" } });
-    await createPage(space, { title: "Existing", body: "Old text.\n" });
-    const files = {
-      "docs/index.md": "---\ntitle: Start here\n---\n\n# Start here\n",
-      "docs/existing.md": "---\ntitle: Existing\n---\n\nNew text.\n",
-      "docs/workflows/email-aliases.md":
-        "---\ntitle: Email aliases\npage_type: workflow\nslug: email-aliases\nlast_updated: 2026-10-21\nagent_id: x.y\n---\n\n::: warning Careful\nCheck the domain.\n:::\n\n## Steps {#steps}\n",
-      "docs/_templates/tool.md": "---\ntitle: Template\n---\n",
-      "docs/logo.png": "png",
+    const space = await createSpace({ slug: "it", members: { [editor.id]: "editor" } });
+    const upload = async (name: string, type: string, content: Uint8Array) => {
+      const form = new FormData();
+      form.append("file", new File([content.slice()], name, { type }));
+      const response = await request("POST", "/api/v1/spaces/it/files", { userId: editor.id, form });
+      expect(response.status).toBe(201);
+      return response.body as { id: string; url: string; markdown: string };
     };
-    const asEditor = await request("POST", "/api/v1/spaces/it/import", {
-      userId: editor.id,
-      form: zipForm(files),
+    // Bytes that do not survive a text round trip, and a name with a space.
+    const pngBytes = Uint8Array.from({ length: 300_000 }, (_, index) => (index * 7919) % 256);
+    const image = await upload("vpn screen.png", "image/png", pngBytes);
+    const pdf = await upload("guide.pdf", "application/pdf", strToU8("%PDF-1.7 guide"));
+    await upload("unused.png", "image/png", strToU8("not used"));
+    await createPage(space, { title: "Existing", body: "Old text.\n" });
+    await createPage(space, { title: "VPN", slug: "vpn", body: `${image.markdown}\n\n${pdf.markdown}\n` });
+    await createPage(space, {
+      title: "Draft",
+      slug: "draft",
+      markdown: `---\ntitle: Draft\nstatus: draft\n---\n\n${pdf.markdown}\n`,
     });
-    expect(asEditor.status).toBe(201);
-    expect(asEditor.body).toMatchObject({
-      created: 3,
-      updated: 1,
-      unchanged: 0,
-      droppedProperties: ["agent_id", "type"],
-    });
-    expect(asEditor.body.skipped.map((item: { file: string }) => item.file).sort()).toEqual([
-      "_templates/tool.md",
-      "logo.png",
-    ]);
-    expect(asEditor.body.notes.join(" ")).toContain("1 VitePress boxes");
-    const [changeSet] = await getDb()
-      .select()
-      .from(changeSets)
-      .where(eq(changeSets.number, asEditor.body.changeSet.number));
-    expect(changeSet).toMatchObject({ status: "open", channel: "web", authorId: editor.id });
-    const items = await getDb()
-      .select()
-      .from(changeSetItems)
-      .where(eq(changeSetItems.changeSetId, changeSet!.id));
-    expect(items.map((item) => [item.path, item.action]).sort()).toEqual([
-      ["existing", "update"],
-      ["home", "create"],
-      ["workflows", "create"],
-      ["workflows/email-aliases", "create"],
-    ]);
-    const aliases = items.find((item) => item.path === "workflows/email-aliases")!;
-    expect(aliases.markdown).toBe(
-      "---\ntitle: Email aliases\n---\n\n> [!WARNING]\n> **Careful**\n>\n> Check the domain.\n\n## Steps\n",
-    );
-    const events = await getDb()
-      .select()
-      .from(changeSetEvents)
-      .where(eq(changeSetEvents.changeSetId, changeSet!.id));
-    expect(events.map((event) => event.kind).sort()).toEqual([
-      "created",
-      "edited",
-      "edited",
-      "edited",
-      "edited",
-    ]);
-
-    // Owners may add the unknown keys and page types to the space instead.
-    const asOwner = await request("POST", "/api/v1/spaces/it/import", {
-      userId: owner.id,
-      form: zipForm(files, { defineProperties: "true", title: "IT pages" }),
-    });
-    expect(asOwner.body).toMatchObject({
-      definedProperties: ["agent_id"],
-      definedPageTypes: ["workflow"],
-      droppedProperties: [],
-    });
-    const [second] = await getDb()
-      .select()
-      .from(changeSets)
-      .where(eq(changeSets.number, asOwner.body.changeSet.number));
-    expect(second!.title).toBe("IT pages");
 
     const reader = await createUser();
-    expect(
-      (await request("POST", "/api/v1/spaces/it/import", { userId: reader.id, form: zipForm(files) })).status,
-    ).toBe(403);
-    const notZip = new FormData();
-    notZip.append("file", new File(["hello"], "a.zip"));
-    expect(
-      (await request("POST", "/api/v1/spaces/it/import", { userId: editor.id, form: notZip })).status,
-    ).toBe(400);
-
     const response = await testApp().request("/api/v1/spaces/it/export", {
       headers: { "x-test-user": reader.id },
     });
+    expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/zip");
     const exported = unzipSync(new Uint8Array(await response.arrayBuffer()));
-    expect(Object.keys(exported).sort()).toEqual(["_space.yaml", "existing.md"]);
+    expect(Object.keys(exported).sort()).toEqual(
+      [
+        "_space.yaml",
+        "existing.md",
+        `files/${image.id}/vpn screen.png`,
+        `files/${pdf.id}/guide.pdf`,
+        "vpn.md",
+      ].sort(),
+    );
     expect(strFromU8(exported["existing.md"]!)).toBe("---\ntitle: Existing\n---\n\nOld text.\n");
+    // Pages link to /files/<id>/<name>: from the zip's folder, the file is there.
+    expect(strFromU8(exported["vpn.md"]!)).toContain(`(/files/${image.id}/vpn%20screen.png)`);
+    expect(exported[`files/${image.id}/vpn screen.png`]).toEqual(pngBytes);
+    expect(strFromU8(exported[`files/${pdf.id}/guide.pdf`]!)).toBe("%PDF-1.7 guide");
     expect(strFromU8(exported["_space.yaml"]!)).toContain("pageTypes:");
+
+    // Editors get drafts, and uploads only drafts use.
+    const asEditor = await testApp().request("/api/v1/spaces/it/export", {
+      headers: { "x-test-user": editor.id },
+    });
+    const withDrafts = unzipSync(new Uint8Array(await asEditor.arrayBuffer()));
+    expect(Object.keys(withDrafts)).toContain("draft.md");
+
+    // An upload missing on disk is left out; the rest still exports.
+    await rm(path.join(config().FILES_DIR, image.id.slice(0, 2), image.id), { force: true });
+    const again = await testApp().request("/api/v1/spaces/it/export", {
+      headers: { "x-test-user": reader.id },
+    });
+    const partial = unzipSync(new Uint8Array(await again.arrayBuffer()));
+    expect(Object.keys(partial).sort()).toEqual([
+      "_space.yaml",
+      "existing.md",
+      `files/${pdf.id}/guide.pdf`,
+      "vpn.md",
+    ]);
   });
 });

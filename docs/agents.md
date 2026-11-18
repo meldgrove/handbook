@@ -72,6 +72,13 @@ When a page changed live after the change set started, merging combines
 both changes; overlapping changes block the merge until someone uses
 "Update from live" and resolves them.
 
+## Moving content in
+
+There is no import of files: to bring documents from another tool, give
+them to an agent and let it create the pages (`get_space_schema`, then
+`create_page` in a change set). An editor reviews the change set and
+merges it. Images and attachments are uploaded in the web editor.
+
 ## Files and search without MCP
 
 - Every page as a Markdown file: `<APP_URL>/s/<space>/<path>.md`, a space's

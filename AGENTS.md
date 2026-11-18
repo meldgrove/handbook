@@ -35,7 +35,7 @@ apps/server/src/
   changes/         change sets: items, checks, merge, revert
   spaces/          spaces, members, abilities (access.ts)
   search/          search queries and the index
-  imports/         import and export of spaces (zip)
+  exports/         export of spaces (zip of pages and their uploads)
   files/           uploaded files on disk
   oauth/           OAuth 2.1 server for connected apps (MCP clients)
   mcp/             MCP server and tools (call the REST API in-process)

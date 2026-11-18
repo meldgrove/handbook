@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
@@ -10,7 +9,6 @@ import {
   MoreHorizontal,
   Settings,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { Page as PageLayout, PageHeader } from "@/components/layout/page";
 import { PageTree } from "@/components/page/tree-view";
@@ -28,7 +26,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ApiError, apiUrl } from "@/lib/api";
 import { useT } from "@/i18n";
-import { ImportDialog } from "./import-dialog";
 import { messages } from "./messages";
 
 /** The start page of a space: its pages as a tree and recent changes. */
@@ -36,7 +33,6 @@ export function SpacePage({ space: slug }: { space: string }) {
   const t = useT(messages);
   const space = useQuery(spaceQuery(slug));
   const tree = useQuery(treeQuery(slug));
-  const [importing, setImporting] = useState(false);
 
   if (!space.data) {
     const missing = space.error instanceof ApiError && space.error.status === 404;
@@ -93,12 +89,6 @@ export function SpacePage({ space: slug }: { space: string }) {
                       <GitPullRequestArrow />
                       {t("suggestPage")}
                     </Link>
-                  </DropdownMenuItem>
-                ) : null}
-                {abilities.editLive ? (
-                  <DropdownMenuItem onSelect={() => setImporting(true)}>
-                    <Upload />
-                    {t("import")}
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem asChild>
@@ -187,14 +177,6 @@ export function SpacePage({ space: slug }: { space: string }) {
           <RecentChanges space={slug} limit={10} />
         </section>
       </div>
-      {importing ? (
-        <ImportDialog
-          space={slug}
-          canDefine={abilities.manage}
-          open={importing}
-          onOpenChange={setImporting}
-        />
-      ) : null}
     </PageLayout>
   );
 }
