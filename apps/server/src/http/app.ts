@@ -14,7 +14,6 @@ import { API_MODULES } from "../modules";
 import health from "../modules/health";
 import { logger } from "../logger";
 import { errorReportingSources, tracingMiddleware } from "../error-reporting";
-import { MAX_IMPORT_BYTES } from "@knowledge/shared/limits";
 import { config } from "../config";
 import { mcpRoutes } from "../mcp/routes";
 import { oauthRoutes } from "../oauth/routes";
@@ -168,13 +167,11 @@ export function createApp() {
 
   const api = new Hono<AppEnv>();
   const uploadLimit = bodyLimit({ maxSize: config().MAX_UPLOAD_MB * 1024 * 1024 + 64 * 1024 });
-  const importLimit = bodyLimit({ maxSize: MAX_IMPORT_BYTES + 64 * 1024 });
   const jsonLimit = bodyLimit({ maxSize: 2 * 1024 * 1024 });
   api.use(
     "*",
     (c, next) => {
       if (c.req.method === "POST" && c.req.path.endsWith("/files")) return uploadLimit(c, next);
-      if (c.req.method === "POST" && c.req.path.endsWith("/import")) return importLimit(c, next);
       return jsonLimit(c, next);
     },
     sameOrigin,

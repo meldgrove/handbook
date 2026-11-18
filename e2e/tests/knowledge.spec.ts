@@ -104,20 +104,19 @@ test("a reader suggests a change and an editor merges it", async ({ browser }) =
   await rita.getByRole("button", { name: "Save suggestion" }).click();
   const dialog = rita.getByRole("dialog");
   await dialog.getByLabel("Title").fill("Add the first step");
-  await dialog
-    .getByRole("button")
-    .filter({ hasText: /Save|Create|Suggest/ })
-    .last()
-    .click();
+  await dialog.getByRole("button", { name: "Send for review" }).click();
   await rita.waitForURL(/\/changes\/\d+$/);
   const number = rita.url().split("/").at(-1)!;
-  await rita.getByRole("button", { name: "Submit for review" }).click();
+  // Sent for review with the dialog: no second step.
   await expect(rita.getByText("In review").first()).toBeVisible();
+  await expect(rita.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
   await expect(rita.getByRole("button", { name: "Merge" })).toHaveCount(0);
 
   const eddie = await signIn(browser, "eddie");
   await home(eddie);
-  await eddie.goto(`/changes/${number}`);
+  // The editor finds it on the start page.
+  await eddie.getByRole("link", { name: `#${number} Add the first step` }).click();
+  await eddie.waitForURL(new RegExp(`/changes/${number}$`));
   await eddie.getByRole("button", { name: "Merge" }).click();
   const confirm = eddie.getByRole("alertdialog");
   if (await confirm.isVisible().catch(() => false))

@@ -50,16 +50,58 @@ export function diffBlocks(lines: DiffLine[], context = CONTEXT): DiffBlock[] {
 const LINE_STYLES: Record<DiffLine["kind"], string> = {
   same: "text-foreground/80",
   added: "bg-emerald-500/10 text-emerald-900 dark:text-emerald-200",
-  removed: "bg-rose-500/10 text-rose-900 line-through decoration-rose-500/40 dark:text-rose-200",
+  removed: "bg-rose-500/10 text-rose-900 dark:text-rose-200",
+};
+
+/** The words that changed within an edited line. */
+const CHANGED_STYLES: Record<DiffLine["kind"], string> = {
+  same: "",
+  added: "rounded-sm bg-emerald-500/30",
+  removed: "rounded-sm bg-rose-500/30 line-through decoration-rose-500/60",
 };
 
 const PREFIX: Record<DiffLine["kind"], string> = { same: " ", added: "+", removed: "−" };
+
+/**
+ * The text of a diff line, wrapped: in an edited line only the changed
+ * words are marked; a line without parts is marked whole.
+ */
+export function DiffLineText({ line }: { line: DiffLine }) {
+  if (!line.parts) {
+    return (
+      <span
+        className={cn(
+          "min-w-0 flex-1 [overflow-wrap:anywhere]",
+          line.kind === "removed" && "line-through decoration-rose-500/40",
+        )}
+      >
+        {line.text || " "}
+      </span>
+    );
+  }
+  return (
+    <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+      {line.parts.map((part, index) =>
+        part.changed ? (
+          <mark key={index} className={cn("text-inherit", CHANGED_STYLES[line.kind])}>
+            {part.text}
+          </mark>
+        ) : (
+          <span key={index}>{part.text}</span>
+        ),
+      )}
+    </span>
+  );
+}
 
 /** A unified line diff of two texts (Markdown files), with long unchanged runs folded. */
 export function LineDiff(props: { before: string; after: string; className?: string }) {
   const t = useT(messages);
   const [expanded, setExpanded] = useState(false);
-  const lines = useMemo(() => diffTextLines(props.before, props.after), [props.before, props.after]);
+  const lines = useMemo(
+    () => diffTextLines(props.before, props.after, { words: true }),
+    [props.before, props.after],
+  );
   const blocks = useMemo(
     () => (expanded ? [{ kind: "lines" as const, lines }] : diffBlocks(lines)),
     [expanded, lines],
@@ -68,7 +110,7 @@ export function LineDiff(props: { before: string; after: string; className?: str
     return <p className="text-muted-foreground text-sm">{t("noChanges")}</p>;
   }
   return (
-    <div className={cn("overflow-x-auto rounded-md border font-mono text-xs leading-5", props.className)}>
+    <div className={cn("rounded-md border font-mono text-xs leading-5", props.className)}>
       {blocks.map((block, blockIndex) =>
         block.kind === "gap" ? (
           <div
@@ -84,13 +126,13 @@ export function LineDiff(props: { before: string; after: string; className?: str
           block.lines.map((line, lineIndex) => (
             <div
               key={`${blockIndex}-${lineIndex}`}
-              className={cn("flex min-w-fit px-3 whitespace-pre", LINE_STYLES[line.kind])}
+              className={cn("flex px-3 whitespace-pre-wrap", LINE_STYLES[line.kind])}
             >
               <span aria-hidden className="w-4 shrink-0 select-none">
                 {PREFIX[line.kind]}
               </span>
               {line.kind !== "same" ? <span className="sr-only">{t(line.kind)}: </span> : null}
-              <span>{line.text || " "}</span>
+              <DiffLineText line={line} />
             </div>
           ))
         ),

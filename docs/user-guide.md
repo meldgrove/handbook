@@ -67,11 +67,16 @@ in the editor, you see who and since when, and can read the page, suggest
 your change instead, or (editors) **Take over**. The other person then sees
 that you took over; their text stays saved as a draft.
 
+After a pause (30 minutes without typing, or a computer that went to sleep)
+others may open the page in the editor. The editor says so; when you type
+again it continues, unless someone else started editing meanwhile.
+
 The editor saves your unsaved text as a draft every few seconds and offers
 it when you come back (also after the page was deleted and restored). If
 the page changed while you edited it (for example after a takeover or a
-merged change set), saving combines both changes; if both changed the same
-lines, the editor shows them marked:
+merged change set), saving combines both changes, also two changes to
+different words of one paragraph; if both changed the same words, the
+editor shows both versions of those lines marked:
 
 ```
 <<<<<<< yours
@@ -91,11 +96,15 @@ them. Readers use **Suggest an edit** on a page (or **Suggest a new page**
 in a space); editors can use change sets for larger work too; AI agents
 always use them.
 
-1. **Suggest an edit** opens the editor. Saving asks for a title and why;
-   the change set opens. Add more pages with **Add a page** or **Edit** on
-   its pages.
-2. **Submit for review** asks the space's editors to look at it.
-3. Editors see each page's changes as a diff (or a preview), the
+1. **Suggest an edit** opens the editor. Saving asks for a title and why,
+   and **Send for review** asks the space's editors to look at it: they
+   find it on their start page under "Waiting for your review". The change
+   set opens; add more pages with **Add a page** or **Edit** on its pages.
+2. A change set that is open but not in review (one an agent or an editor
+   started, or one an editor asked to change) goes to the editors with
+   **Submit for review**.
+3. Editors see each page's changes as a diff, with the changed words marked
+   (or a preview), the
    **checks** (errors block merging, e.g. a missing parent page; warnings,
    e.g. a link to a page that would not exist), and the activity. They
    comment, **Request changes**, or **Merge**.
@@ -131,10 +140,14 @@ In the space's **Settings**:
 - **Page types**: a label, a key, a template for new pages and required
   properties.
 
-The space menu also has **Export** (a zip of Markdown files) and **Import**
-(a zip of Markdown files becomes a change set to review; frontmatter keys
-the space does not define are dropped and listed, or added to the space
-when you choose so; VitePress boxes such as `::: warning` become callouts).
+The space menu also has **Export**: a zip of the space's Markdown files
+(sub-pages in folders) and the images and attachments they use, in
+`files/<id>/<name>` where the pages' links (`/files/<id>/<name>`) find
+them.
+
+To bring existing content in, let an agent write it: it reads your
+documents and creates the pages in a change set, which an editor reviews
+and merges ([Agents and MCP](agents.md)).
 
 Built-in properties every page may have: `title` (required), `description`,
 `type`, `status`, `tags`, `owner` (an email address), `reviewed` (a date),

@@ -1,4 +1,5 @@
 import { diffTextLines } from "@knowledge/shared/merge";
+import { DiffLineText } from "@/components/changes/line-diff";
 import { cn } from "@/lib/utils";
 import { defineMessages, useT } from "@/i18n";
 
@@ -28,7 +29,7 @@ export function DiffView({
   className?: string;
 }) {
   const t = useT(messages);
-  const lines = diffTextLines(before, after);
+  const lines = diffTextLines(before, after, { words: true });
   const changed = lines.map((line) => line.kind !== "same");
   const visible = lines.map((_, index) => {
     for (let offset = -CONTEXT; offset <= CONTEXT; offset += 1) if (changed[index + offset]) return true;
@@ -45,7 +46,7 @@ export function DiffView({
   });
   return (
     <div
-      className={cn("overflow-x-auto rounded-md border font-mono text-xs leading-5", className)}
+      className={cn("rounded-md border font-mono text-xs leading-5", className)}
       role="table"
       aria-label={t("label")}
     >
@@ -67,7 +68,7 @@ export function DiffView({
             key={row.index}
             role="row"
             className={cn(
-              "flex min-w-max gap-2 px-3 whitespace-pre",
+              "flex gap-2 px-3 whitespace-pre-wrap",
               line.kind === "added" && "bg-green-500/10 text-green-900 dark:text-green-200",
               line.kind === "removed" && "bg-red-500/10 text-red-900 dark:text-red-200",
             )}
@@ -75,7 +76,7 @@ export function DiffView({
             <span aria-label={t(line.kind)} className="w-3 shrink-0 select-none">
               {line.kind === "added" ? "+" : line.kind === "removed" ? "−" : " "}
             </span>
-            <span>{line.text || " "}</span>
+            <DiffLineText line={line} />
           </div>
         );
       })}

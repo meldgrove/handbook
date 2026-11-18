@@ -9,9 +9,6 @@ export const DRAFT_SAVE_SECONDS = 5;
 
 /** Uploaded files (images and attachments of pages). */
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-/** Space imports (zip files). */
-export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
-export const MAX_IMPORT_FILES = 2000;
 
 /** Image types shown inline; every other file downloads. */
 export const INLINE_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;

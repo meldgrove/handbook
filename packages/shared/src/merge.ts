@@ -3,8 +3,9 @@ import { MAX_PAGE_CHARACTERS } from "./page";
 /**
  * Text merging for pages. Two people (or a person and a change set) that
  * started from the same revision changed a page: `mergeText` combines both
- * changes line by line, like Git. Overlapping changes become conflict
- * blocks that a person resolves:
+ * changes line by line, like Git, and where both changed the same lines
+ * (one paragraph is one line), word by word. Changes to the same words
+ * become conflict blocks that a person resolves:
  *
  *   <<<<<<< yours
  *   your lines
@@ -52,8 +53,25 @@ type Hunk = { oldStart: number; oldEnd: number; newStart: number; newEnd: number
  */
 const DIFF_WORK_LIMIT = 2_000_000;
 
+/** Work a diff may still take; diffs that share one take from it in turn. */
+type Budget = { left: number };
+
+/**
+ * The most work all word merges of one `mergeText` take together (comparing
+ * words, and the characters of the paragraphs they split). Past it, the
+ * paragraphs left are conflicts, as without word merges.
+ */
+const WORD_MERGE_WORK_LIMIT = 2_000_000;
+
+/** The same for the changed words that `diffTextLines` marks within changed lines. */
+const WORD_DIFF_WORK_LIMIT = 1_000_000;
+
 /** The changed parts between two texts (as line ids), in order. */
-function diffHunks(before: Int32Array, after: Int32Array): Hunk[] {
+function diffHunks(
+  before: Int32Array,
+  after: Int32Array,
+  budget: Budget = { left: DIFF_WORK_LIMIT },
+): Hunk[] {
   let start = 0;
   while (start < before.length && start < after.length && before[start] === after[start]) start += 1;
   let oldEnd = before.length;
@@ -69,7 +87,7 @@ function diffHunks(before: Int32Array, after: Int32Array): Hunk[] {
   // The common end stays in: the diff matches lines as early as it can (a
   // kept paragraph keeps the blank line after it), cutting the end off
   // first would match them as late as possible.
-  const hunks = shortestEdit(before.subarray(start), after.subarray(start), start);
+  const hunks = shortestEdit(before.subarray(start), after.subarray(start), start, budget);
   return hunks ? slideDown(hunks, before, after) : whole;
 }
 
@@ -101,14 +119,14 @@ function slideDown(hunks: Hunk[], before: Int32Array, after: Int32Array): Hunk[]
 
 /**
  * Myers' algorithm: the fewest lines removed and added that turn `a` into
- * `b`. Null when that takes more than DIFF_WORK_LIMIT. `offset` is added to
- * the line numbers of the hunks.
+ * `b`. Null when that takes more work than the budget has left (the work
+ * done is taken from it). `offset` is added to the line numbers of the hunks.
  */
-function shortestEdit(a: Int32Array, b: Int32Array, offset: number): Hunk[] | null {
+function shortestEdit(a: Int32Array, b: Int32Array, offset: number, budget: Budget): Hunk[] | null {
   const n = a.length;
   const m = b.length;
   // Round d takes at least 2d + 1 steps, so the limit also bounds the rounds.
-  const rounds = Math.min(n + m, Math.ceil(Math.sqrt(DIFF_WORK_LIMIT)));
+  const rounds = Math.min(n + m, Math.ceil(Math.sqrt(Math.max(budget.left, 0))));
   const zero = rounds + 1;
   // furthest[zero + k]: the furthest line of `a` reached on diagonal k (= line of a - line of b).
   const furthest = new Int32Array(2 * zero + 1);
@@ -126,15 +144,20 @@ function shortestEdit(a: Int32Array, b: Int32Array, offset: number): Hunk[] | nu
         y += 1;
       }
       furthest[zero + k] = x;
+      work += x - from + 1;
       if (x >= n && y >= m) {
+        budget.left -= work;
         trace.push(furthest.slice(zero - d, zero + d + 1));
         return hunksOf(trace, n, m, offset);
       }
-      work += x - from + 1;
-      if (work > DIFF_WORK_LIMIT) return null;
+      if (work > budget.left) {
+        budget.left = 0;
+        return null;
+      }
     }
     trace.push(furthest.slice(zero - d, zero + d + 1));
   }
+  budget.left = 0;
   return null;
 }
 
@@ -183,33 +206,116 @@ function sameLines(a: Int32Array, aStart: number, aEnd: number, b: Int32Array, b
   return true;
 }
 
+/** The lines (or words) of one region that both sides changed differently. */
+type Overlap = { base: string[]; yours: string[]; current: string[] };
+
 /**
  * Three-way merge: `base` is the text both started from, `yours` the change
  * being saved, `current` the text saved meanwhile. Like diff3: the changes
- * of both sides against the base are combined; where both changed the same
- * lines (or lines next to each other) differently, a conflict block shows both.
+ * of both sides against the base are combined. Where both changed the same
+ * lines (or lines next to each other) differently, their words are merged
+ * the same way; where both changed the same words, a conflict block shows
+ * both versions of those lines.
  */
 export function mergeText(base: string, yours: string, current: string): MergeResult {
   if (yours === current) return { clean: true, text: yours, conflicts: 0 };
   if (yours === base) return { clean: true, text: current, conflicts: 0 };
   if (current === base) return { clean: true, text: yours, conflicts: 0 };
-  const texts = { base: lines(base), yours: lines(yours), current: lines(current) };
+  const wordBudget = { left: WORD_MERGE_WORK_LIMIT };
+  let conflicts = 0;
+  const output = combine(lines(base), lines(yours), lines(current), true, (overlap) => {
+    const merged = mergeWords(overlap, wordBudget);
+    if (merged) return merged;
+    conflicts += 1;
+    return [CONFLICT_START, ...overlap.yours, CONFLICT_SEPARATOR, ...overlap.current, CONFLICT_END];
+  })!;
+  const text = output.length > 0 ? `${output.join("\n")}\n` : "";
+  return { clean: conflicts === 0, text, conflicts };
+}
+
+/**
+ * Words, the spaces between them, line breaks and single other characters:
+ * joined again, they are the text.
+ */
+const WORD = /[\p{L}\p{M}\p{N}_]+|[^\S\n]+|\n|[^\p{L}\p{M}\p{N}_\s]/gu;
+
+function words(text: string): string[] {
+  return text.match(WORD) ?? [];
+}
+
+/**
+ * Merges the words of lines both sides changed. Null when both changed the
+ * same words (or words next to each other), when the result does not keep
+ * each side's changes exactly once (`keepsBothChanges`), or when the work
+ * budget is spent.
+ */
+function mergeWords(overlap: Overlap, budget: Budget): string[] | null {
+  const text = (list: string[]) => list.map((line) => `${line}\n`).join("");
+  const texts = [text(overlap.base), text(overlap.yours), text(overlap.current)] as const;
+  const size = texts[0].length + texts[1].length + texts[2].length;
+  if (size > budget.left) return null;
+  budget.left -= size;
+  const [base, yours, current] = [words(texts[0]), words(texts[1]), words(texts[2])];
+  const merged = combine(base, yours, current, budget, () => null);
+  if (!merged || !keepsBothChanges(base, yours, current, merged)) return null;
+  const joined = merged.join("");
+  if (joined === "") return [];
+  // Whole lines went in, so whole lines come out; anything else counts as a conflict.
+  if (!joined.endsWith("\n")) return null;
+  return joined.slice(0, -1).split("\n");
+}
+
+/**
+ * True when the merge has every word as often as base plus both sides'
+ * changes (yours + current − base). Repeated words make alignments
+ * ambiguous: two diffs may match different copies of one word, and the
+ * "clean" result then duplicates or drops words. Changes both sides made
+ * alike also fail this, and conflict as before.
+ */
+function keepsBothChanges(base: string[], yours: string[], current: string[], merged: string[]): boolean {
+  const counts = new Map<string, number>();
+  const count = (list: string[], by: number) => {
+    for (const word of list) counts.set(word, (counts.get(word) ?? 0) + by);
+  };
+  count(yours, 1);
+  count(current, 1);
+  count(base, -1);
+  count(merged, -1);
+  for (const left of counts.values()) if (left !== 0) return false;
+  return true;
+}
+
+/**
+ * The diff3 core of `mergeText`, for lines or words: the items of `base`
+ * with the changes of both sides. `overlap` decides regions both sides
+ * changed differently: the items to put there, or null to give up (then
+ * `combine` returns null). `budget`: true gives each diff the usual work
+ * limit; a shared budget is used up by the diffs in turn.
+ */
+function combine(
+  base: string[],
+  yours: string[],
+  current: string[],
+  budget: Budget | true,
+  overlap: (region: Overlap) => string[] | null,
+): string[] | null {
+  const texts = { base, yours, current };
   const [baseIds, yoursIds, currentIds] = lineIds(texts.base, texts.yours, texts.current) as [
     Int32Array,
     Int32Array,
     Int32Array,
   ];
+  const budgetOf = () => (budget === true ? { left: DIFF_WORK_LIMIT } : budget);
   // Sorted by where they start in the base; your hunks first where both start at the same line.
   const hunks = [
-    ...diffHunks(baseIds, yoursIds).map((hunk) => ({ ...hunk, yours: true })),
-    ...diffHunks(baseIds, currentIds).map((hunk) => ({ ...hunk, yours: false })),
+    ...diffHunks(baseIds, yoursIds, budgetOf()).map((hunk) => ({ ...hunk, yours: true })),
+    ...diffHunks(baseIds, currentIds, budgetOf()).map((hunk) => ({ ...hunk, yours: false })),
   ].sort((first, second) => first.oldStart - second.oldStart);
 
   const output: string[] = [];
   const copy = (from: string[], start: number, end: number) => {
     for (let index = start; index < end; index += 1) output.push(from[index]!);
   };
-  let conflicts = 0;
   let position = 0;
   let index = 0;
   while (index < hunks.length) {
@@ -240,20 +346,20 @@ export function mergeText(base: string, yours: string, current: string): MergeRe
       if (sameLines(yoursIds, mine.start, mine.end, currentIds, theirs.start, theirs.end)) {
         copy(texts.yours, mine.start, mine.end);
       } else {
-        conflicts += 1;
-        output.push(CONFLICT_START);
-        copy(texts.yours, mine.start, mine.end);
-        output.push(CONFLICT_SEPARATOR);
-        copy(texts.current, theirs.start, theirs.end);
-        output.push(CONFLICT_END);
+        const resolved = overlap({
+          base: texts.base.slice(regionStart, regionEnd),
+          yours: texts.yours.slice(mine.start, mine.end),
+          current: texts.current.slice(theirs.start, theirs.end),
+        });
+        if (!resolved) return null;
+        for (const item of resolved) output.push(item);
       }
     }
     position = regionEnd;
     index = next;
   }
   copy(texts.base, position, texts.base.length);
-  const text = output.length > 0 ? `${output.join("\n")}\n` : "";
-  return { clean: conflicts === 0, text, conflicts };
+  return output;
 }
 
 /** True when the text still contains conflict blocks from a merge. */
@@ -372,25 +478,110 @@ export function lineStats(before: string, after: string): { added: number; remov
   return { added, removed };
 }
 
-export type DiffLine = { kind: "same" | "added" | "removed"; text: string };
+/** A piece of a changed line; `changed` marks the words that differ from the paired line. */
+export type DiffPart = { text: string; changed: boolean };
 
-/** A line diff for display. */
-export function diffTextLines(before: string, after: string): DiffLine[] {
+/**
+ * One line of a diff. Changed lines paired with a line of the other side
+ * (the first removed line of a change with its first added line, and so on)
+ * have `parts` when asked for `words`: the line split where words changed.
+ */
+export type DiffLine = { kind: "same" | "added" | "removed"; text: string; parts?: DiffPart[] };
+
+/**
+ * A line diff for display. With `words`, changed lines that were edited
+ * (not replaced) also mark which of their words changed.
+ */
+export function diffTextLines(before: string, after: string, options?: { words?: boolean }): DiffLine[] {
   const old = lines(before);
   const next = lines(after);
   const [oldIds, nextIds] = lineIds(old, next) as [Int32Array, Int32Array];
+  const budget = { left: WORD_DIFF_WORK_LIMIT };
   const result: DiffLine[] = [];
   let position = 0;
   for (const hunk of diffHunks(oldIds, nextIds)) {
     for (; position < hunk.oldStart; position += 1) result.push({ kind: "same", text: old[position]! });
+    const removed: DiffLine[] = [];
+    const added: DiffLine[] = [];
     for (let index = hunk.oldStart; index < hunk.oldEnd; index += 1) {
-      result.push({ kind: "removed", text: old[index]! });
+      removed.push({ kind: "removed", text: old[index]! });
     }
     for (let index = hunk.newStart; index < hunk.newEnd; index += 1) {
-      result.push({ kind: "added", text: next[index]! });
+      added.push({ kind: "added", text: next[index]! });
     }
+    if (options?.words) {
+      for (let index = 0; index < Math.min(removed.length, added.length); index += 1) {
+        const parts = wordParts(removed[index]!.text, added[index]!.text, budget);
+        if (parts) [removed[index]!.parts, added[index]!.parts] = parts;
+      }
+    }
+    // One push per line: a hunk can have more lines than a call takes arguments.
+    for (const line of removed) result.push(line);
+    for (const line of added) result.push(line);
     position = hunk.oldEnd;
   }
   for (; position < old.length; position += 1) result.push({ kind: "same", text: old[position]! });
   return result;
+}
+
+/**
+ * The words of two versions of a line, split where they differ. Null when
+ * they share no word (the line was replaced, not edited) or the budget is spent.
+ */
+function wordParts(before: string, after: string, budget: Budget): [DiffPart[], DiffPart[]] | null {
+  const size = before.length + after.length;
+  if (size > budget.left) return null;
+  budget.left -= size;
+  const oldWords = words(before);
+  const newWords = words(after);
+  const [oldIds, newIds] = lineIds(oldWords, newWords) as [Int32Array, Int32Array];
+  const hunks = diffHunks(oldIds, newIds, budget);
+  const oldParts: DiffPart[] = [];
+  const newParts: DiffPart[] = [];
+  let sharesWord = false;
+  let oldPosition = 0;
+  hunks.forEach((hunk, index) => {
+    const between = oldWords.slice(oldPosition, hunk.oldStart).join("");
+    // Spaces alone between two changes belong to the change: "the helpdesk", not "the", "helpdesk".
+    const changed = index > 0 && /^\s+$/.test(between);
+    if (!changed && /[\p{L}\p{N}]/u.test(between)) sharesWord = true;
+    pushPart(oldParts, between, changed);
+    pushPart(newParts, between, changed);
+    pushPart(oldParts, oldWords.slice(hunk.oldStart, hunk.oldEnd).join(""), true);
+    pushPart(newParts, newWords.slice(hunk.newStart, hunk.newEnd).join(""), true);
+    oldPosition = hunk.oldEnd;
+  });
+  const rest = oldWords.slice(oldPosition).join("");
+  if (/[\p{L}\p{N}]/u.test(rest)) sharesWord = true;
+  pushPart(oldParts, rest, false);
+  pushPart(newParts, rest, false);
+  return sharesWord ? [tidyParts(oldParts), tidyParts(newParts)] : null;
+}
+
+function pushPart(parts: DiffPart[], text: string, changed: boolean) {
+  if (text === "") return;
+  const last = parts.at(-1);
+  if (last && last.changed === changed) last.text += text;
+  else parts.push({ text, changed });
+}
+
+/** Spaces at the edges of a change go to the unchanged text next to it, so only words are marked. */
+function tidyParts(parts: DiffPart[]): DiffPart[] {
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index]!;
+    if (!part.changed) continue;
+    const next = parts[index + 1];
+    const trailing = part.text.slice(part.text.trimEnd().length);
+    if (next && trailing && trailing.length < part.text.length) {
+      part.text = part.text.slice(0, -trailing.length);
+      next.text = trailing + next.text;
+    }
+    const previous = parts[index - 1];
+    const leading = part.text.slice(0, part.text.length - part.text.trimStart().length);
+    if (previous && leading && leading.length < part.text.length) {
+      part.text = part.text.slice(leading.length);
+      previous.text += leading;
+    }
+  }
+  return parts;
 }

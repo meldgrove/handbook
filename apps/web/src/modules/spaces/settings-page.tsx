@@ -72,10 +72,12 @@ export function SettingsPage({ space: slug }: { space: string }) {
         {back}
         <PageHeader title={t("settingsTitle", { space: data.name })} />
       </div>
-      <GeneralCard key={`general-${data.updatedAt}`} space={data} />
+      {/* Each card starts over only when what it edits was saved (by it or anyone else), not
+          when something else of the space changes: `updatedAt` also moves with every page edit. */}
+      <GeneralCard key={`general:${JSON.stringify([data.name, data.description])}`} space={data} />
       <MembersCard space={data} />
-      <PropertiesCard key={`properties-${data.updatedAt}`} space={data} />
-      <PageTypesCard key={`types-${data.updatedAt}`} space={data} />
+      <PropertiesCard key={`properties:${JSON.stringify(data.properties)}`} space={data} />
+      <PageTypesCard key={`types:${JSON.stringify(data.pageTypes)}`} space={data} />
       {data.abilities.manageOwners ? (
         <Card>
           <CardHeader>
