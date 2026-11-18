@@ -10,7 +10,7 @@ import { hasConflictMarkers } from "@knowledge/shared/merge";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { readPageConflict, saveBlocker, type PageConflict } from "@/components/editor/conflict";
 import { LazyEditorWorkspace as EditorWorkspace } from "@/components/editor/lazy-workspace";
-import { lockToken } from "@/components/editor/lock";
+import { lockToken, readLockHolder } from "@/components/editor/lock";
 import { apiErrorOf, rawRequest } from "@/components/editor/raw-api";
 import { useEditLock } from "@/components/editor/use-edit-lock";
 import { discardDraft, useDraftAutosave } from "@/components/editor/use-draft";
@@ -231,6 +231,9 @@ function Editor({ init }: { init: EditorInit }) {
         toast.warning(t("conflictTitle"));
         return;
       }
+      // Someone else opened the editor while this one's lock had ended.
+      const holder = response.status === 423 ? readLockHolder(response.body) : null;
+      if (holder && !holder.mine) lock.lostTo(holder.user.name);
       const error = apiErrorOf(response);
       if (error.fields) setFields(error.fields);
       toast.error(error.message);

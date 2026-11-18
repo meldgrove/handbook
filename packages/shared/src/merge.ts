@@ -515,7 +515,9 @@ export function diffTextLines(before: string, after: string, options?: { words?:
         if (parts) [removed[index]!.parts, added[index]!.parts] = parts;
       }
     }
-    result.push(...removed, ...added);
+    // One push per line: a hunk can have more lines than a call takes arguments.
+    for (const line of removed) result.push(line);
+    for (const line of added) result.push(line);
     position = hunk.oldEnd;
   }
   for (; position < old.length; position += 1) result.push({ kind: "same", text: old[position]! });

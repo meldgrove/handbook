@@ -147,6 +147,8 @@ export function useEditLock(pageId: string, enabled: boolean) {
       void acquire(false);
     }, [acquire]),
     release,
+    /** A save found someone else's lock (423): they have the page now. */
+    lostTo: useCallback((by: string | null) => dispatch({ type: "lost", by }), []),
     /** After a successful save, the server released the lock. */
     forget: useCallback(() => {
       attempt.current += 1;

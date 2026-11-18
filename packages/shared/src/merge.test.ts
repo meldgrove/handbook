@@ -225,6 +225,9 @@ describe("merging large pages", () => {
     expect(
       timed(() => expect(lineStats(before, after)).toEqual({ added: 70_000, removed: 70_000 })),
     ).toBeLessThan(1500);
+    expect(
+      timed(() => expect(diffTextLines(before, after, { words: true })).toHaveLength(140_000)),
+    ).toBeLessThan(1500);
   });
 
   it("diffs pages of repeated lines in time", () => {
