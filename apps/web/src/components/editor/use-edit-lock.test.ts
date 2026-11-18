@@ -70,6 +70,43 @@ describe("useEditLock", () => {
     await waitFor(() => expect(result.current.state).toEqual({ status: "lost", by: "Kim" }));
   });
 
+  it("gives back a lock taken again while the editor closed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let answerReclaim: (response: Response) => void = () => {};
+    const sent: string[] = [];
+    let renewals = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        sent.push(`${init?.method} ${url.replace("/api/v1", "")}`);
+        if (url.endsWith("/lock")) {
+          return new Response(
+            JSON.stringify({ token: "t1", renewSeconds: 30, expireSeconds: 120, idleSeconds: 1800 }),
+          );
+        }
+        if (url.endsWith("/lock/renew")) {
+          renewals += 1;
+          if (renewals === 1) return new Response(JSON.stringify(lockLost(null).body), { status: 409 });
+          return new Promise<Response>((resolve) => (answerReclaim = resolve));
+        }
+        return new Response(null, { status: 204 });
+      }),
+    );
+    const { result, unmount } = renderHook(() => useEditLock(PAGE, true));
+    await waitFor(() => expect(result.current.state.status).toBe("held"));
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    await waitFor(() => expect(result.current.state.status).toBe("expired"));
+
+    act(() => result.current.markActivity());
+    await waitFor(() => expect(renewals).toBe(2));
+    // The editor closes while the server grants the lock again.
+    unmount();
+    answerReclaim(new Response(JSON.stringify({ ok: true })));
+    await waitFor(() =>
+      expect(sent.filter((request) => request === `DELETE /pages/${PAGE}/lock?token=t1`)).toHaveLength(2),
+    );
+  });
+
   it("reports a takeover as lost", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     serve({

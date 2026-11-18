@@ -144,12 +144,12 @@ function shortestEdit(a: Int32Array, b: Int32Array, offset: number, budget: Budg
         y += 1;
       }
       furthest[zero + k] = x;
+      work += x - from + 1;
       if (x >= n && y >= m) {
         budget.left -= work;
         trace.push(furthest.slice(zero - d, zero + d + 1));
         return hunksOf(trace, n, m, offset);
       }
-      work += x - from + 1;
       if (work > budget.left) {
         budget.left = 0;
         return null;
@@ -245,7 +245,9 @@ function words(text: string): string[] {
 
 /**
  * Merges the words of lines both sides changed. Null when both changed the
- * same words (or words next to each other), or when the work budget is spent.
+ * same words (or words next to each other), when the result does not keep
+ * each side's changes exactly once (`keepsBothChanges`), or when the work
+ * budget is spent.
  */
 function mergeWords(overlap: Overlap, budget: Budget): string[] | null {
   const text = (list: string[]) => list.map((line) => `${line}\n`).join("");
@@ -253,13 +255,34 @@ function mergeWords(overlap: Overlap, budget: Budget): string[] | null {
   const size = texts[0].length + texts[1].length + texts[2].length;
   if (size > budget.left) return null;
   budget.left -= size;
-  const merged = combine(words(texts[0]), words(texts[1]), words(texts[2]), budget, () => null);
-  if (!merged) return null;
+  const [base, yours, current] = [words(texts[0]), words(texts[1]), words(texts[2])];
+  const merged = combine(base, yours, current, budget, () => null);
+  if (!merged || !keepsBothChanges(base, yours, current, merged)) return null;
   const joined = merged.join("");
   if (joined === "") return [];
   // Whole lines went in, so whole lines come out; anything else counts as a conflict.
   if (!joined.endsWith("\n")) return null;
   return joined.slice(0, -1).split("\n");
+}
+
+/**
+ * True when the merge has every word as often as base plus both sides'
+ * changes (yours + current − base). Repeated words make alignments
+ * ambiguous: two diffs may match different copies of one word, and the
+ * "clean" result then duplicates or drops words. Changes both sides made
+ * alike also fail this, and conflict as before.
+ */
+function keepsBothChanges(base: string[], yours: string[], current: string[], merged: string[]): boolean {
+  const counts = new Map<string, number>();
+  const count = (list: string[], by: number) => {
+    for (const word of list) counts.set(word, (counts.get(word) ?? 0) + by);
+  };
+  count(yours, 1);
+  count(current, 1);
+  count(base, -1);
+  count(merged, -1);
+  for (const left of counts.values()) if (left !== 0) return false;
+  return true;
 }
 
 /**
@@ -546,13 +569,13 @@ function tidyParts(parts: DiffPart[]): DiffPart[] {
     const part = parts[index]!;
     if (!part.changed) continue;
     const next = parts[index + 1];
-    const trailing = /\s+$/.exec(part.text)?.[0] ?? "";
+    const trailing = part.text.slice(part.text.trimEnd().length);
     if (next && trailing && trailing.length < part.text.length) {
       part.text = part.text.slice(0, -trailing.length);
       next.text = trailing + next.text;
     }
     const previous = parts[index - 1];
-    const leading = /^\s+/.exec(part.text)?.[0] ?? "";
+    const leading = part.text.slice(0, part.text.length - part.text.trimStart().length);
     if (previous && leading && leading.length < part.text.length) {
       part.text = part.text.slice(leading.length);
       previous.text += leading;

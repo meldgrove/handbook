@@ -85,15 +85,21 @@ export function useEditLock(pageId: string, enabled: boolean) {
     return () => window.clearInterval(timer);
   }, [held, token, renewSeconds, pageId]);
 
+  const releaseToken = useCallback(
+    (token: string) =>
+      void rawRequest("DELETE", `/pages/${pageId}/lock?token=${encodeURIComponent(token)}`, {
+        keepalive: true,
+      }).catch(() => undefined),
+    [pageId],
+  );
+
   const release = useCallback(() => {
     attempt.current += 1;
     const current = stateRef.current;
-    if (current.status !== "held") return;
+    if (current.status !== "held" && current.status !== "expired") return;
     dispatch({ type: "released" });
-    void rawRequest("DELETE", `/pages/${pageId}/lock?token=${encodeURIComponent(current.token)}`, {
-      keepalive: true,
-    }).catch(() => undefined);
-  }, [pageId]);
+    releaseToken(current.token);
+  }, [releaseToken]);
 
   // Release when the editor closes: unmount, or the browser tab goes away.
   useEffect(() => {
@@ -110,8 +116,14 @@ export function useEditLock(pageId: string, enabled: boolean) {
     const current = stateRef.current;
     if (current.status !== "expired" || reclaiming.current) return;
     reclaiming.current = true;
+    const started = attempt.current;
     void rawRequest("POST", `/pages/${pageId}/lock/renew`, { body: { token: current.token, active: true } })
       .then((response) => {
+        if (attempt.current !== started) {
+          // Saved or closed meanwhile: give back the lock the server just granted.
+          if (response.ok) releaseToken(current.token);
+          return;
+        }
         if (response.ok) return dispatch({ type: "reclaimed" });
         const event = refusedRenewal(response.status, response.body);
         if (event && event.type !== "expired") dispatch(event);
@@ -120,7 +132,7 @@ export function useEditLock(pageId: string, enabled: boolean) {
       .finally(() => {
         reclaiming.current = false;
       });
-  }, [pageId]);
+  }, [pageId, releaseToken]);
 
   return {
     state,
@@ -136,6 +148,9 @@ export function useEditLock(pageId: string, enabled: boolean) {
     }, [acquire]),
     release,
     /** After a successful save, the server released the lock. */
-    forget: useCallback(() => dispatch({ type: "released" }), []),
+    forget: useCallback(() => {
+      attempt.current += 1;
+      dispatch({ type: "released" });
+    }, []),
   };
 }

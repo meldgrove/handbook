@@ -50,6 +50,8 @@ describe("edit lock", () => {
     const expired = lockReducer(held, { type: "expired" });
     expect(expired).toEqual({ status: "expired", token: "t", renewSeconds: 30 });
     expect(lockReducer(expired, { type: "reclaimed" })).toEqual(held);
+    // Saving sends it: the lock may have been taken again a moment ago.
+    expect(lockToken(expired)).toBe("t");
     expect(lockReducer(expired, { type: "lost", by: "Kim" })).toEqual({ status: "lost", by: "Kim" });
     // Only a held lock expires, and only an expired one is taken again.
     expect(lockReducer({ status: "released" }, { type: "expired" })).toEqual({ status: "released" });

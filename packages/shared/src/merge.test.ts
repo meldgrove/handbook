@@ -68,6 +68,14 @@ describe("merging within paragraphs", () => {
       "# VPN\n\n<<<<<<< yours\nConnect from the office with the client. Ask IT for an account.\n=======\nConnect from a café with the client. Ask IT for an account.\n>>>>>>> current\n\nEnd.\n",
     );
   });
+  it("marks changes whose words a diff could match in two ways", () => {
+    // Both sides turned "b" into "a" and changed a different "a": the two
+    // diffs match different copies of "a", and diff3 alone would give
+    // "a c a z a" (one "a" too many).
+    const result = mergeText("b a a a\n", "a c a a\n", "a a z a\n");
+    expect(result.clean).toBe(false);
+    expect(result.text).toBe("<<<<<<< yours\na c a a\n=======\na a z a\n>>>>>>> current\n");
+  });
   it("marks a paragraph one side removed and the other changed", () => {
     const result = mergeText(
       base,
@@ -142,6 +150,16 @@ describe("word diffs", () => {
   it("leaves replaced lines whole", () => {
     const lines = diffTextLines("One thing.\n", "Another story!\n", { words: true });
     expect(lines.map((line) => line.parts)).toEqual([undefined, undefined]);
+  });
+  it("marks changed words with long runs of spaces in time", () => {
+    const spaces = " ".repeat(60_000);
+    let lines = diffTextLines("", "");
+    const ms = timed(() => (lines = diffTextLines("Keep a\n", `Keep b${spaces}c\n`, { words: true })));
+    expect(ms).toBeLessThan(500);
+    expect(lines[1]!.parts).toEqual([
+      { text: "Keep ", changed: false },
+      { text: `b${spaces}c`, changed: true },
+    ]);
   });
   it("marks words only when asked", () => {
     expect(diffTextLines("a b\n", "a c\n").every((line) => line.parts === undefined)).toBe(true);

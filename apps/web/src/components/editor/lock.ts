@@ -70,7 +70,10 @@ export function readLost(body: unknown): { by: string } | "expired" | null {
   return parsed.data.takenOverBy ? { by: parsed.data.takenOverBy.name } : "expired";
 }
 
-/** The token of a held lock, for saving; null otherwise. */
+/**
+ * The token of a held or expired lock, for saving (an expired one may have
+ * been taken again a moment ago); null otherwise.
+ */
 export function lockToken(state: LockState): string | null {
-  return state.status === "held" ? state.token : null;
+  return state.status === "held" || state.status === "expired" ? state.token : null;
 }
