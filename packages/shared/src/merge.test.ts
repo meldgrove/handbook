@@ -40,6 +40,114 @@ describe("merging", () => {
   });
 });
 
+describe("merging within paragraphs", () => {
+  const base = "# VPN\n\nConnect from home with the client. Ask IT for an account.\n\nEnd.\n";
+  it("combines changes to different words of one paragraph", () => {
+    const yours = base.replace("from home", "from anywhere");
+    const current = base.replace("Ask IT", "Ask the helpdesk");
+    expect(mergeText(base, yours, current)).toEqual({
+      clean: true,
+      text: "# VPN\n\nConnect from anywhere with the client. Ask the helpdesk for an account.\n\nEnd.\n",
+      conflicts: 0,
+    });
+  });
+  it("combines a changed word with a line added next to it", () => {
+    const yours = base.replace("the client", "the new client");
+    const current = base.replace("an account.\n", "an account.\nIt takes a day.\n");
+    expect(mergeText(base, yours, current)).toEqual({
+      clean: true,
+      text: "# VPN\n\nConnect from home with the new client. Ask IT for an account.\nIt takes a day.\n\nEnd.\n",
+      conflicts: 0,
+    });
+  });
+  it("marks changes to the same words, with the whole lines", () => {
+    const result = mergeText(base, base.replace("home", "the office"), base.replace("home", "a café"));
+    expect(result.clean).toBe(false);
+    expect(result.conflicts).toBe(1);
+    expect(result.text).toBe(
+      "# VPN\n\n<<<<<<< yours\nConnect from the office with the client. Ask IT for an account.\n=======\nConnect from a café with the client. Ask IT for an account.\n>>>>>>> current\n\nEnd.\n",
+    );
+  });
+  it("marks a paragraph one side removed and the other changed", () => {
+    const result = mergeText(
+      base,
+      base.replace("Connect from home with the client. Ask IT for an account.\n\n", ""),
+      base.replace("Ask IT", "Ask the helpdesk"),
+    );
+    expect(result.clean).toBe(false);
+  });
+  it("keeps words of other scripts whole", () => {
+    const text = "Über den Zugang: bitte früh fragen.\n";
+    expect(mergeText(text, text.replace("Über", "Zu"), text.replace("früh", "rechtzeitig"))).toEqual({
+      clean: true,
+      text: "Zu den Zugang: bitte rechtzeitig fragen.\n",
+      conflicts: 0,
+    });
+  });
+  it("merges the words of many paragraphs in time", () => {
+    const base = paragraphs(12_000);
+    const yours = base.map((line, index) => (index % 40 === 0 ? line.replace("some", "many") : line));
+    const current = base.map((line, index) => (index % 40 === 0 ? line.replace("in it", "in there") : line));
+    let result = mergeText("", "", "");
+    const ms = timed(() => (result = mergeText(base.join("\n"), yours.join("\n"), current.join("\n"))));
+    expect(result.clean).toBe(true);
+    expect(result.text).toContain(
+      "Paragraph 0 with many words in there.\n\nParagraph 1 with some words in it.",
+    );
+    expect(result.text).toContain("Paragraph 11980 with many words in there.");
+    expect(ms).toBeLessThan(1500);
+  });
+  it("merges the words of the longest paragraphs in time", () => {
+    // A page as long as a page may be, every paragraph changed by both sides:
+    // word merges stop when their work budget is spent (the rest conflicts).
+    const paragraph = (index: number) =>
+      Array.from({ length: 2_000 }, (_, word) => `w${index}x${word}`).join(" ");
+    const base = Array.from({ length: 30 }, (_, index) => paragraph(index)).join("\n\n");
+    const yours = base.replace(/x10 /g, "x10a ");
+    const current = base.replace(/x1990 /g, "x1990b ");
+    expect(base.length).toBeGreaterThan(450_000);
+    let result = mergeText("", "", "");
+    expect(timed(() => (result = mergeText(base, yours, current)))).toBeLessThan(1500);
+    expect(result.text).toContain("w0x10a w0x11");
+    expect(result.text).toContain("w0x1990b w0x1991");
+  });
+});
+
+describe("word diffs", () => {
+  it("marks the changed words of an edited line", () => {
+    const lines = diffTextLines("Ask IT for an account.\n", "Ask the helpdesk for an account.\n", {
+      words: true,
+    });
+    expect(lines).toEqual([
+      {
+        kind: "removed",
+        text: "Ask IT for an account.",
+        parts: [
+          { text: "Ask ", changed: false },
+          { text: "IT", changed: true },
+          { text: " for an account.", changed: false },
+        ],
+      },
+      {
+        kind: "added",
+        text: "Ask the helpdesk for an account.",
+        parts: [
+          { text: "Ask ", changed: false },
+          { text: "the helpdesk", changed: true },
+          { text: " for an account.", changed: false },
+        ],
+      },
+    ]);
+  });
+  it("leaves replaced lines whole", () => {
+    const lines = diffTextLines("One thing.\n", "Another story!\n", { words: true });
+    expect(lines.map((line) => line.parts)).toEqual([undefined, undefined]);
+  });
+  it("marks words only when asked", () => {
+    expect(diffTextLines("a b\n", "a c\n").every((line) => line.parts === undefined)).toBe(true);
+  });
+});
+
 /** Milliseconds a call takes. */
 function timed(run: () => void): number {
   const start = performance.now();
