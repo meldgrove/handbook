@@ -3,17 +3,31 @@ import type { LockResponse } from "@knowledge/shared/api/pages";
 import { LOCK_RENEW_SECONDS } from "@knowledge/shared/limits";
 import { errorMessage } from "@/lib/api";
 import { apiErrorOf, rawRequest } from "./raw-api";
-import { lockReducer, readLockHolder, readLostBy, type LockState } from "./lock";
+import { lockReducer, readLockHolder, readLost, type LockEvent, type LockState } from "./lock";
+
+/** The lock event of a refused renewal: someone else has the lock, or it ended. */
+function refusedRenewal(status: number, body: unknown): LockEvent | null {
+  if (status === 409) {
+    const lost = readLost(body);
+    if (lost === "expired") return { type: "expired" };
+    return { type: "lost", by: lost?.by ?? null };
+  }
+  if (status === 423) return { type: "lost", by: readLockHolder(body)?.user.name ?? null };
+  if (status === 404) return { type: "lost", by: null };
+  return null;
+}
 
 /**
  * Takes and keeps the edit lock of a page while the live editor is open:
  * renews it every LOCK_RENEW_SECONDS (saying whether the person typed since
- * the last renewal), notices when someone took it over, and releases it on
+ * the last renewal), notices when someone took it over, takes it again on
+ * the next keystroke when it ended after a pause, and releases it on
  * unmount (best effort, also while the page closes).
  */
 export function useEditLock(pageId: string, enabled: boolean) {
   const [state, dispatch] = useReducer(lockReducer, { status: "acquiring" } as LockState);
   const typed = useRef(false);
+  const reclaiming = useRef(false);
   // Only the latest acquisition counts (React may mount the editor twice in development).
   const attempt = useRef(0);
   const stateRef = useRef(state);
@@ -63,12 +77,8 @@ export function useEditLock(pageId: string, enabled: boolean) {
       void rawRequest("POST", `/pages/${pageId}/lock/renew`, { body: { token, active } })
         .then((response) => {
           if (response.ok) return;
-          if (response.status === 409 || response.status === 404 || response.status === 423) {
-            dispatch({
-              type: "lost",
-              by: readLostBy(response.body) ?? readLockHolder(response.body)?.user.name ?? null,
-            });
-          }
+          const event = refusedRenewal(response.status, response.body);
+          if (event) dispatch(event);
         })
         .catch(() => undefined);
     }, renewSeconds * 1000);
@@ -95,12 +105,30 @@ export function useEditLock(pageId: string, enabled: boolean) {
     };
   }, [enabled, release]);
 
+  /** Takes an expired lock again: the server grants it to its token when the person typed. */
+  const reclaim = useCallback(() => {
+    const current = stateRef.current;
+    if (current.status !== "expired" || reclaiming.current) return;
+    reclaiming.current = true;
+    void rawRequest("POST", `/pages/${pageId}/lock/renew`, { body: { token: current.token, active: true } })
+      .then((response) => {
+        if (response.ok) return dispatch({ type: "reclaimed" });
+        const event = refusedRenewal(response.status, response.body);
+        if (event && event.type !== "expired") dispatch(event);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        reclaiming.current = false;
+      });
+  }, [pageId]);
+
   return {
     state,
     /** Call on every keystroke: the next renewal tells the server the person is active. */
     markActivity: useCallback(() => {
       typed.current = true;
-    }, []),
+      reclaim();
+    }, [reclaim]),
     takeOver: useCallback(() => acquire(true), [acquire]),
     retry: useCallback(() => {
       dispatch({ type: "retry" });

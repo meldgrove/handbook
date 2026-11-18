@@ -39,6 +39,7 @@ export const messages = defineMessages({
     created: "Page created",
     saveSuggestion: "Save suggestion",
     suggestionSaved: "Saved in change set #{number}",
+    suggestionSent: "Sent for review as change set #{number}",
     leaveTitle: "Leave without saving?",
     leaveText: "The new page is not saved anywhere yet.",
     leave: "Leave",

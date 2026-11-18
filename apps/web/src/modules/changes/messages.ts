@@ -41,6 +41,8 @@ export const messages = defineMessages({
 
     submit: "Submit for review",
     submitted: "Submitted for review",
+    notSubmittedTitle: "Not in review yet",
+    notSubmittedText: "The space's editors see this change set once you submit it for review.",
     requestChanges: "Request changes",
     requestChangesTitle: "Request changes",
     requestChangesHint: "Say what should change. The change set goes back to its author.",

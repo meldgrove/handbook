@@ -143,6 +143,9 @@ describe("change set page", () => {
     expect(await screen.findByRole("button", { name: "Submit for review" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Merge" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Request changes" })).not.toBeInTheDocument();
+    // Editors only see change sets in review: the author is told so.
+    expect(screen.getByText("Not in review yet")).toBeInTheDocument();
+    expect(screen.getByText(/editors see this change set once you submit it/)).toBeInTheDocument();
   });
 
   it("shows the conflicting pages when a merge fails", async () => {

@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LazyEditorWorkspace as EditorWorkspace } from "@/components/editor/lazy-workspace";
 import { bodyOf, valuesOf, withBody, withValues } from "@/components/editor/file";
 import { Page as PageLayout, PageHeader } from "@/components/layout/page";
-import { ChangeSetDialog } from "@/components/page/change-set-dialog";
+import { ChangeSetDialog, submitSuggestion } from "@/components/page/change-set-dialog";
 import { changeSetQuery, spaceQuery, treeQuery } from "@/components/page/queries";
 import { buildTree, flattenTree } from "@/components/page/tree";
 import { ErrorState, LoadingState } from "@/components/states";
@@ -93,6 +93,8 @@ function NewPageForm(props: {
     typeof props.changeSet === "number" ? props.changeSet : null,
   );
   const allowLeave = useRef(false);
+  // A change set made by this page's dialog: submitted for review once the page is in it.
+  const submitAfterSave = useRef(false);
 
   const suggesting = props.changeSet !== undefined;
   const read = valuesOf(file);
@@ -158,9 +160,20 @@ function NewPageForm(props: {
     setFields(undefined);
     try {
       await api.put<unknown>(`/change-sets/${number}/pages`, { path, markdown: file });
+      let sent = false;
+      if (submitAfterSave.current) {
+        sent = await submitSuggestion(number).then(
+          () => true,
+          (error: unknown) => {
+            toast.error(errorMessage(error));
+            return false;
+          },
+        );
+        submitAfterSave.current = false;
+      }
       await queryClient.invalidateQueries({ queryKey: ["change-set", number] });
       await queryClient.invalidateQueries({ queryKey: ["change-sets"] });
-      toast.success(t("suggestionSaved", { number }));
+      toast.success(t(sent ? "suggestionSent" : "suggestionSaved", { number }));
       done({ number });
     } catch (error) {
       if (error instanceof ApiError && error.fields) setFields(error.fields);
@@ -175,6 +188,7 @@ function NewPageForm(props: {
     setChangeSetErrors(undefined);
     try {
       const created = await api.post<ChangeSet>("/change-sets", { space: props.space.slug, ...value });
+      submitAfterSave.current = true;
       setCreatedNumber(created.number);
       setAskChangeSet(false);
       setSaving(false);

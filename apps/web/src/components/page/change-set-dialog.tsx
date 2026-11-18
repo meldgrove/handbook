@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
+import type { ChangeSet } from "@knowledge/shared/api/changes";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,6 +13,7 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { api } from "@/lib/api";
 import { defineMessages, useT } from "@/i18n";
 import { common } from "@/i18n/common";
 
@@ -19,15 +21,19 @@ const messages = defineMessages({
   en: {
     title: "Suggest this change",
     description:
-      "Editors of the space review your suggestion and publish it. Describe what you changed and why.",
+      "The space's editors are asked to review your suggestion and publish it. Describe what you changed and why.",
     name: "Title",
     namePlaceholder: "e.g. Update the VPN steps for new laptops",
     details: "Why and what (optional)",
-    submit: "Save suggestion",
+    submit: "Send for review",
   },
 });
 
-/** Asks for the title and description of a new change set (a suggestion). */
+/**
+ * Asks for the title and description of a new change set (a suggestion).
+ * The editor then saves the change into it and submits it for review
+ * (`submitSuggestion`), so the space's editors see it.
+ */
 export function ChangeSetDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -93,4 +99,13 @@ export function ChangeSetDialog(props: {
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Submits a new suggestion for review once its first change is saved: until
+ * then nobody else sees it. A failure leaves it open, with "Submit for
+ * review" on its page.
+ */
+export function submitSuggestion(number: number): Promise<ChangeSet> {
+  return api.post<ChangeSet>(`/change-sets/${number}/submit`, {});
 }

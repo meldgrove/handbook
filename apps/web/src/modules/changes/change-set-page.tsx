@@ -246,7 +246,8 @@ function Actions(props: { changeSet: ChangeSet; onConflicts: (conflicts: MergeCo
       ) : null}
       {permissions.submit ? (
         <Button
-          variant="outline"
+          // The next step for authors: editors only see change sets in review.
+          variant={permissions.merge ? "outline" : "default"}
           disabled={submit.isPending}
           onClick={() =>
             submit.mutate(undefined, {
@@ -476,6 +477,13 @@ export function ChangeSetView({ changeSet }: { changeSet: ChangeSet }) {
       </div>
       {conflicts && conflicts.length > 0 ? (
         <ConflictsAlert conflicts={conflicts} space={changeSet.space.slug} />
+      ) : null}
+      {changeSet.permissions.submit && !changeSet.permissions.merge ? (
+        <Alert>
+          <Send />
+          <AlertTitle>{t("notSubmittedTitle")}</AlertTitle>
+          <AlertDescription>{t("notSubmittedText")}</AlertDescription>
+        </Alert>
       ) : null}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-6">

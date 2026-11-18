@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lockReducer, lockToken, readLockHolder, readLostBy, type LockState } from "./lock";
+import { lockReducer, lockToken, readLockHolder, readLost, type LockState } from "./lock";
 
 const holder = {
   user: { id: null, name: "Kim", email: null },
@@ -39,9 +39,20 @@ describe("edit lock", () => {
       error: { code: "lock_lost", message: "Kim is editing this page now." },
       takenOverBy,
     });
-    expect(readLostBy(lost({ id: null, name: "Kim", email: null }))).toBe("Kim");
-    expect(readLostBy(lost(null))).toBeNull();
-    expect(readLostBy({ by: "Max" })).toBeNull();
-    expect(readLostBy(null)).toBeNull();
+    expect(readLost(lost({ id: null, name: "Kim", email: null }))).toEqual({ by: "Kim" });
+    expect(readLost(lost(null))).toBe("expired");
+    expect(readLost({ by: "Max" })).toBeNull();
+    expect(readLost(null)).toBeNull();
+  });
+
+  it("keeps an expired lock's token to take it again", () => {
+    const held: LockState = { status: "held", token: "t", renewSeconds: 30 };
+    const expired = lockReducer(held, { type: "expired" });
+    expect(expired).toEqual({ status: "expired", token: "t", renewSeconds: 30 });
+    expect(lockReducer(expired, { type: "reclaimed" })).toEqual(held);
+    expect(lockReducer(expired, { type: "lost", by: "Kim" })).toEqual({ status: "lost", by: "Kim" });
+    // Only a held lock expires, and only an expired one is taken again.
+    expect(lockReducer({ status: "released" }, { type: "expired" })).toEqual({ status: "released" });
+    expect(lockReducer(held, { type: "reclaimed" })).toBe(held);
   });
 });

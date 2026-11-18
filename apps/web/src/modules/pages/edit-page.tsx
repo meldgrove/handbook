@@ -15,7 +15,7 @@ import { apiErrorOf, rawRequest } from "@/components/editor/raw-api";
 import { useEditLock } from "@/components/editor/use-edit-lock";
 import { discardDraft, useDraftAutosave } from "@/components/editor/use-draft";
 import { Page as PageLayout } from "@/components/layout/page";
-import { ChangeSetDialog } from "@/components/page/change-set-dialog";
+import { ChangeSetDialog, submitSuggestion } from "@/components/page/change-set-dialog";
 import { changeSetPageQuery, changeSetQuery, pageQuery, spaceQuery } from "@/components/page/queries";
 import { ErrorState, LoadingState } from "@/components/states";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -148,6 +148,8 @@ function Editor({ init }: { init: EditorInit }) {
   const [suggesting, setSuggesting] = useState(init.mode === "changeSet");
   const [confirmTakeover, setConfirmTakeover] = useState(false);
   const allowLeave = useRef(false);
+  // A change set made by this editor's dialog: submitted for review once the change is in it.
+  const submitAfterSave = useRef(false);
 
   const live = init.mode === "live";
   const lock = useEditLock(init.pageId, live);
@@ -161,7 +163,7 @@ function Editor({ init }: { init: EditorInit }) {
     file,
     baseRevision,
     savedFile,
-    enabled: live && (lockStatus === "held" || lockStatus === "lost"),
+    enabled: live && (lockStatus === "held" || lockStatus === "expired" || lockStatus === "lost"),
   });
 
   const blocker = useBlocker({
@@ -250,10 +252,21 @@ function Editor({ init }: { init: EditorInit }) {
         baseRevision: baseRevision > 0 ? baseRevision : undefined,
       });
       setSavedFile(file);
+      let sent = false;
+      if (submitAfterSave.current) {
+        sent = await submitSuggestion(number).then(
+          () => true,
+          (error: unknown) => {
+            toast.error(errorMessage(error));
+            return false;
+          },
+        );
+        submitAfterSave.current = false;
+      }
       await queryClient.invalidateQueries({ queryKey: ["change-set", number] });
       await queryClient.invalidateQueries({ queryKey: ["change-sets"] });
       await queryClient.invalidateQueries({ queryKey: ["page", init.pageId] });
-      toast.success(t("suggestionSaved", { number }));
+      toast.success(t(sent ? "suggestionSent" : "suggestionSaved", { number }));
       leaveTo({ pathname: "changeSet", number });
     } catch (error) {
       if (error instanceof ApiError && error.fields) setFields(error.fields);
@@ -268,6 +281,7 @@ function Editor({ init }: { init: EditorInit }) {
     setChangeSetErrors(undefined);
     try {
       const created = await api.post<ChangeSet>("/change-sets", { space: spaceSlug, ...value });
+      submitAfterSave.current = true;
       setCreatedNumber(created.number);
       setAskChangeSet(false);
       setSaving(false);
@@ -314,7 +328,8 @@ function Editor({ init }: { init: EditorInit }) {
     : t("editTitle", { title: init.title });
   const lockBlocks =
     live && !suggesting && (lockStatus === "locked" || lockStatus === "acquiring" || lockStatus === "failed");
-  const canSaveLive = lockStatus === "held";
+  // An expired lock still saves when nobody else took the page meanwhile (the server checks).
+  const canSaveLive = lockStatus === "held" || lockStatus === "expired";
   const saveDisabled = saving || (!suggesting && !canSaveLive) || !dirty;
 
   return (
@@ -401,6 +416,13 @@ function Editor({ init }: { init: EditorInit }) {
               </Button>
             </span>
           </AlertDescription>
+        </Alert>
+      ) : null}
+      {live && !suggesting && lock.state.status === "expired" ? (
+        <Alert>
+          <Lock />
+          <AlertTitle>{t("expiredTitle")}</AlertTitle>
+          <AlertDescription>{t("expiredText")}</AlertDescription>
         </Alert>
       ) : null}
       {live && !suggesting && lock.state.status === "lost" ? (
