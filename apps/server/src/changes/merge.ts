@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
-import { lastSegment, parentPath } from "@knowledge/shared/paths";
+import { lastSegment, parentPath } from "@handbook/shared/paths";
 import type { Db, DbOrTx } from "../db/client";
 import { changeSetItems, changeSets, pageRevisions, pages } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";

@@ -6,8 +6,8 @@ import type {
   ChangeSetSummary,
   mergeConflictsSchema,
   revertResultSchema,
-} from "@knowledge/shared/api/changes";
-import type { ErrorBody } from "@knowledge/shared/api/common";
+} from "@handbook/shared/api/changes";
+import type { ErrorBody } from "@handbook/shared/api/common";
 import { api, ApiError, apiUrl } from "@/lib/api";
 
 export type ChangeSetFilters = {

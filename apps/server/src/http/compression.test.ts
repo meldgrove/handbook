@@ -52,7 +52,7 @@ describe("web app assets", () => {
   let app: Hono<AppEnv>;
 
   beforeAll(async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), "knowledge-web-"));
+    root = await mkdtemp(path.join(os.tmpdir(), "handbook-web-"));
     await mkdir(path.join(root, "assets"));
     await writeFile(path.join(root, "assets/index-abc.js"), "plain");
     await writeFile(path.join(root, "assets/index-abc.js.br"), "brotli");

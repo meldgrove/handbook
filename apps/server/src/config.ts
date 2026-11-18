@@ -33,9 +33,9 @@ const schema = z
     APP_ROLE: withDefault(z.enum(["all", "web", "worker", "migrate"]), "all"),
     PORT: withDefault(z.coerce.number().int().min(1).max(65535), 3000),
     HOST: withDefault(z.string(), "0.0.0.0"),
-    /** The public URL of the app, e.g. https://knowledge.example.org */
+    /** The public URL of the app, e.g. https://handbook.example.org */
     APP_URL: withDefault(z.url(), "http://localhost:3000"),
-    APP_NAME: withDefault(z.string().min(1).max(100), "Knowledge"),
+    APP_NAME: withDefault(z.string().min(1).max(100), "Handbook"),
     DATABASE_URL: z.string().min(1),
     DATABASE_POOL_SIZE: withDefault(z.coerce.number().int().min(1).max(200), 10),
     /** Longest database statement of the web app and the worker, in seconds; 0: no limit. */
@@ -178,7 +178,7 @@ export type Config = z.infer<typeof schema> & {
   accessGroups: string[];
   /** Text search configurations, always ending with `simple` (exact words). */
   searchConfigs: string[];
-  /** The MCP endpoint, e.g. https://knowledge.example.org/mcp */
+  /** The MCP endpoint, e.g. https://handbook.example.org/mcp */
   mcpUrl: string;
 };
 

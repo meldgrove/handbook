@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { and, arrayContains, asc, eq, isNull, sql } from "drizzle-orm";
-import { recentQuerySchema } from "@knowledge/shared/api/pages";
-import { searchQuerySchema } from "@knowledge/shared/api/search";
-import { normalizeTag } from "@knowledge/shared/page";
+import { recentQuerySchema } from "@handbook/shared/api/pages";
+import { searchQuerySchema } from "@handbook/shared/api/search";
+import { normalizeTag } from "@handbook/shared/page";
 import { getDb } from "../db/client";
 import { pages, spaces } from "../db/schema";
 import type { AppEnv } from "../http/env";

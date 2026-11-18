@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Space, SpaceCreate, SpaceSummary } from "@knowledge/shared/api/spaces";
-import type { ServiceToken, TokenCreate, TokenCreated } from "@knowledge/shared/api/tokens";
-import type { Person, PersonUpdate } from "@knowledge/shared/api/users";
+import type { Space, SpaceCreate, SpaceSummary } from "@handbook/shared/api/spaces";
+import type { ServiceToken, TokenCreate, TokenCreated } from "@handbook/shared/api/tokens";
+import type { Person, PersonUpdate } from "@handbook/shared/api/users";
 import { api } from "@/lib/api";
 
 export const adminKeys = {
@@ -66,7 +66,7 @@ export function useUpdatePerson() {
   });
 }
 
-/** Removes a person: their history stays under REMOVED_PERSON_NAME (`@knowledge/shared/api/users`). */
+/** Removes a person: their history stays under REMOVED_PERSON_NAME (`@handbook/shared/api/users`). */
 export function useRemovePerson() {
   const client = useQueryClient();
   return useMutation({

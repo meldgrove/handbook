@@ -3,8 +3,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, Info, Lightbulb, MessageSquareWarning, OctagonAlert } from "lucide-react";
-import { markdownProblem } from "@knowledge/shared/markdown";
-import { resolveLink } from "@knowledge/shared/paths";
+import { markdownProblem } from "@handbook/shared/markdown";
+import { resolveLink } from "@handbook/shared/paths";
 import { cn } from "@/lib/utils";
 import { defineMessages, useT } from "@/i18n";
 import { remarkCallouts, remarkHeadingIds, type CalloutType } from "./page/markdown-plugins";
@@ -13,7 +13,7 @@ import { remarkCallouts, remarkHeadingIds, type CalloutType } from "./page/markd
  * Renders a page body (Markdown, no HTML) the way every view shows it:
  * GitHub-flavored Markdown, callouts (`> [!NOTE]`), heading anchors that
  * match the server's search sections, and links between pages resolved
- * like files (`@knowledge/shared/paths`).
+ * like files (`@handbook/shared/paths`).
  */
 export type MarkdownViewProps = {
   /** The body without frontmatter. */

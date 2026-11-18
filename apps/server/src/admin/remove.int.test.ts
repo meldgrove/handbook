@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { REMOVED_PERSON_NAME } from "@knowledge/shared/api/users";
+import { REMOVED_PERSON_NAME } from "@handbook/shared/api/users";
 import { getDb } from "../db/client";
 import {
   accounts,

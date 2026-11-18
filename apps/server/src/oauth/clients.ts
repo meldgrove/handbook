@@ -190,7 +190,7 @@ export async function registerClient(db: DbOrTx, body: unknown) {
     token_endpoint_auth_method: method,
     grant_types: GRANT_TYPES,
     response_types: ["code"],
-    scope: "knowledge",
+    scope: "handbook",
   };
 }
 
@@ -255,7 +255,7 @@ export async function fetchMetadataDocument(clientId: string): Promise<unknown> 
       url,
       {
         method: "GET",
-        headers: { accept: "application/json", "user-agent": "Meldgrove-Knowledge" },
+        headers: { accept: "application/json", "user-agent": "Meldgrove-Handbook" },
         lookup: (_hostname, options, callback) => {
           if ((options as { all?: boolean }).all) {
             (callback as (error: null, addresses: { address: string; family: number }[]) => void)(null, [

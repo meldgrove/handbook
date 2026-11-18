@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { AuthConfig } from "@knowledge/shared/api/users";
+import type { AuthConfig } from "@handbook/shared/api/users";
 import { api } from "./api";
 
 export const authConfigQuery = {

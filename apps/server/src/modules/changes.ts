@@ -8,7 +8,7 @@ import {
   changeSetUpdateSchema,
   commentSchema,
   submitSchema,
-} from "@knowledge/shared/api/changes";
+} from "@handbook/shared/api/changes";
 import { z } from "zod";
 import { getDb } from "../db/client";
 import type { AppEnv } from "../http/env";

@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 /*
  * End-to-end tests: a real browser against the built app (npm run build),
  * signing in through the Keycloak of compose.dev.yaml. The app gets a fresh
- * database, knowledge_e2e.
+ * database, handbook_e2e.
  */
 const PORT = 3000;
 
@@ -37,12 +37,12 @@ export default defineConfig({
       NODE_ENV: "production",
       PORT: String(PORT),
       APP_URL: `http://localhost:${PORT}`,
-      DATABASE_URL: "postgres://knowledge:knowledge@localhost:55450/knowledge_e2e",
+      DATABASE_URL: "postgres://handbook:handbook@localhost:55450/handbook_e2e",
       RUN_MIGRATIONS: "true",
       AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-e2e-secret",
-      OIDC_ISSUER: "http://localhost:8104/realms/knowledge",
-      OIDC_CLIENT_ID: "knowledge",
-      OIDC_CLIENT_SECRET: "knowledge-dev-client-secret",
+      OIDC_ISSUER: "http://localhost:8104/realms/handbook",
+      OIDC_CLIENT_ID: "handbook",
+      OIDC_CLIENT_SECRET: "handbook-dev-client-secret",
       OIDC_PROVIDER_NAME: "Keycloak",
       ADMIN_EMAILS: "ada@example.org",
       ACCESS_GROUPS: "/staff",

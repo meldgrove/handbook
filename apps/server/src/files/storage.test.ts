@@ -9,7 +9,7 @@ describe("file mentions", () => {
       mentionedFileIds([
         `![Screen](/files/${id}/screen%20shot.png) and [again](/files/${id}/x)`,
         null,
-        `See https://knowledge.example.org/files/${other.toUpperCase()}/plan.pdf`,
+        `See https://handbook.example.org/files/${other.toUpperCase()}/plan.pdf`,
         "No files here; /files/not-an-id/x",
       ]),
     ).toEqual([id, other]);

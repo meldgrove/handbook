@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { FolderClosed, Plus } from "lucide-react";
-import type { ChangeSetSummary } from "@knowledge/shared/api/changes";
+import type { ChangeSetSummary } from "@handbook/shared/api/changes";
 import { spacesQuery } from "@/components/layout/app-layout";
 import { Page as PageLayout, PageHeader } from "@/components/layout/page";
 import { changeSetListQuery } from "@/components/page/queries";

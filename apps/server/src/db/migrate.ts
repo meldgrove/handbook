@@ -22,7 +22,7 @@ export async function runMigrations() {
   client.on("error", (error) => logger.warn({ err: error }, "database client error"));
   await client.connect();
   try {
-    await client.query("select pg_advisory_lock(hashtext('knowledge.migrations'))");
+    await client.query("select pg_advisory_lock(hashtext('handbook.migrations'))");
     logger.info({ folder: migrationsFolder() }, "applying database migrations");
     await migrate(drizzle(client), { migrationsFolder: migrationsFolder() });
     logger.info("database migrations applied");

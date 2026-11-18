@@ -1,13 +1,13 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { ChangeSet, ChangeSetPage, ChangeSetSummary } from "@knowledge/shared/api/changes";
-import type { Page, PageSummary, Revision, RevisionList } from "@knowledge/shared/api/pages";
-import type { SearchResponse } from "@knowledge/shared/api/search";
-import { HIGHLIGHT_END, HIGHLIGHT_START } from "@knowledge/shared/api/search";
-import type { Space, SpaceSummary } from "@knowledge/shared/api/spaces";
-import { BUILT_IN_PROPERTIES, BUILT_IN_KEYS } from "@knowledge/shared/page";
-import { diffTextLines } from "@knowledge/shared/merge";
+import type { ChangeSet, ChangeSetPage, ChangeSetSummary } from "@handbook/shared/api/changes";
+import type { Page, PageSummary, Revision, RevisionList } from "@handbook/shared/api/pages";
+import type { SearchResponse } from "@handbook/shared/api/search";
+import { HIGHLIGHT_END, HIGHLIGHT_START } from "@handbook/shared/api/search";
+import type { Space, SpaceSummary } from "@handbook/shared/api/spaces";
+import { BUILT_IN_PROPERTIES, BUILT_IN_KEYS } from "@handbook/shared/page";
+import { diffTextLines } from "@handbook/shared/merge";
 import { config } from "../config";
 import { ApiCallError, type ApiClient } from "./client";
 

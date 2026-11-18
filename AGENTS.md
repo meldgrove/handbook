@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Meldgrove Knowledge is a self-hosted knowledge base: spaces of Markdown pages
+Meldgrove Handbook is a self-hosted knowledge base: spaces of Markdown pages
 with YAML frontmatter, edited by staff in the browser and by AI agents
 through MCP. Agents and readers propose changes as change sets that editors
 review and merge. User documentation is in `docs/`; contributor setup is in
@@ -16,7 +16,7 @@ npm workspaces, Node.js 26, strict TypeScript.
   SDK, pino logs, Sentry, Vitest.
 - `apps/web`: Vite + React 19, TanStack Router and Query, shadcn/ui with
   Tailwind CSS 4, CodeMirror 6 (the editor), react-markdown. US English.
-- `packages/shared` (`@knowledge/shared/*`): zod schemas of the API
+- `packages/shared` (`@handbook/shared/*`): zod schemas of the API
   (`api/*.ts`), the page file model (`page.ts`), paths and links
   (`paths.ts`), merging and edits (`merge.ts`), roles and abilities
   (`roles.ts`), limits.

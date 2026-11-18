@@ -5,7 +5,7 @@ import { pruneExpiredCredentials } from "../auth/credentials";
 import { pruneUnusedUploads } from "../files/storage";
 import { pruneUnusedClients } from "../oauth/clients";
 import { pruneAuditLog } from "../core/audit";
-import { LOCK_EXPIRE_SECONDS, LOCK_IDLE_SECONDS } from "@knowledge/shared/limits";
+import { LOCK_EXPIRE_SECONDS, LOCK_IDLE_SECONDS } from "@handbook/shared/limits";
 
 /**
  * Removes expired edit locks, sign-in requests and tokens, unused OAuth

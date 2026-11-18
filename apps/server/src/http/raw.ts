@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import { Hono, type Context } from "hono";
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
-import { isValidPath, isValidSpaceSlug, pageMarkdownUrl } from "@knowledge/shared/paths";
+import { isValidPath, isValidSpaceSlug, pageMarkdownUrl } from "@handbook/shared/paths";
 import { config } from "../config";
 import { getDb } from "../db/client";
 import { files, pages, spaces } from "../db/schema";
@@ -20,7 +20,7 @@ import type { AppEnv } from "./env";
 
 function unauthorized(c: Context<AppEnv>) {
   return c.text("Sign in, or send a token: Authorization: Bearer <token>\n", 401, {
-    "WWW-Authenticate": 'Bearer realm="knowledge"',
+    "WWW-Authenticate": 'Bearer realm="handbook"',
   });
 }
 

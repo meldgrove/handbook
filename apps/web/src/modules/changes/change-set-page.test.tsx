@@ -9,7 +9,7 @@ import {
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ChangeSet } from "@knowledge/shared/api/changes";
+import type { ChangeSet } from "@handbook/shared/api/changes";
 import { ChangeSetPage } from "./change-set-page";
 
 const PAGE_ID = "0b5a3e5e-3c1f-4d8e-9f3a-111111111111";

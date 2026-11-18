@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { newPageFile } from "@knowledge/shared/page";
+import { newPageFile } from "@handbook/shared/page";
 import { getDb } from "../db/client";
 import { changeSetItems, changeSets, editLocks } from "../db/schema";
 import { issueCredential } from "../auth/credentials";

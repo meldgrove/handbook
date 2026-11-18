@@ -9,8 +9,8 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Page } from "@knowledge/shared/api/pages";
-import type { Space } from "@knowledge/shared/api/spaces";
+import type { Page } from "@handbook/shared/api/pages";
+import type { Space } from "@handbook/shared/api/spaces";
 import { PageView } from "./page-view";
 
 const abilities = {

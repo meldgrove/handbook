@@ -5,7 +5,7 @@ import {
   spaceListQuerySchema,
   spaceMemberPutSchema,
   spaceUpdateSchema,
-} from "@knowledge/shared/api/spaces";
+} from "@handbook/shared/api/spaces";
 import { getDb } from "../db/client";
 import { pages, users } from "../db/schema";
 import type { AppEnv } from "../http/env";

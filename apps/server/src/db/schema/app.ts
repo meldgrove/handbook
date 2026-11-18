@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { PageTypeDefinition, Properties, PropertyDefinition } from "@knowledge/shared/page";
+import type { PageTypeDefinition, Properties, PropertyDefinition } from "@handbook/shared/page";
 import { users } from "./auth";
 
 /** PostgreSQL full-text search vector; written with SQL (`to_tsvector`), never read by the app. */
@@ -70,7 +70,7 @@ export const spaceMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** owner or editor (`@knowledge/shared/roles`). */
+    /** owner or editor (`@handbook/shared/roles`). */
     role: text("role").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -150,7 +150,7 @@ export const pageRevisions = pgTable(
     title: text("title").notNull(),
     markdown: text("markdown").notNull(),
     authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
-    /** web, api, mcp, import, merge, revert or restore (`@knowledge/shared/roles`). */
+    /** web, api, mcp, import, merge, revert or restore (`@handbook/shared/roles`). */
     via: text("via").notNull(),
     /** The agent or app, e.g. "Claude". */
     clientName: text("client_name"),

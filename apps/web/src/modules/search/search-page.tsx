@@ -2,7 +2,7 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Search, X } from "lucide-react";
-import { HIGHLIGHT_END, HIGHLIGHT_START, type SearchResult } from "@knowledge/shared/api/search";
+import { HIGHLIGHT_END, HIGHLIGHT_START, type SearchResult } from "@handbook/shared/api/search";
 import { spacesQuery } from "@/components/layout/app-layout";
 import { Page as PageLayout, PageHeader } from "@/components/layout/page";
 import { searchQuery } from "@/components/page/queries";

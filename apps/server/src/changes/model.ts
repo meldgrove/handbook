@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
-import { readFrontmatterValues, splitFrontmatter } from "@knowledge/shared/page";
-import type { ChangeSetEventKind, ChangeSetStatus } from "@knowledge/shared/api/changes";
+import { readFrontmatterValues, splitFrontmatter } from "@handbook/shared/page";
+import type { ChangeSetEventKind, ChangeSetStatus } from "@handbook/shared/api/changes";
 import type { DbOrTx } from "../db/client";
 import { changeSetEvents, changeSetItems, changeSets, pageRevisions, pages, users } from "../db/schema";
 import type { Principal, UserPrincipal } from "../auth/principal";

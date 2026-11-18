@@ -1,5 +1,5 @@
 import { CircleCheck, CircleDot, CircleSlash, GitMerge } from "lucide-react";
-import type { ChangeSetStatus } from "@knowledge/shared/api/changes";
+import type { ChangeSetStatus } from "@handbook/shared/api/changes";
 import { Badge } from "@/components/ui/badge";
 import { defineMessages, useT } from "@/i18n";
 import { cn } from "@/lib/utils";

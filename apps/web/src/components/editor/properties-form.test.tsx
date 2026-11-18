@@ -2,7 +2,7 @@ import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import type { SpaceSchema } from "@knowledge/shared/page";
+import type { SpaceSchema } from "@handbook/shared/page";
 import { valuesOf, withValues } from "./file";
 import { PropertiesForm } from "./properties-form";
 

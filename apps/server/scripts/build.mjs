@@ -2,14 +2,14 @@
 // dist/instrument.mjs (loaded first with node --import). npm dependencies stay
 // external (they are installed in the image), @sentry/node too: its tracing
 // hooks into packages such as pg as they load, which does not work from
-// inside a bundle. The workspace package (@knowledge/shared) is bundled.
+// inside a bundle. The workspace package (@handbook/shared) is bundled.
 import { build } from "esbuild";
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-const external = Object.keys(pkg.dependencies).filter((name) => !name.startsWith("@knowledge/"));
+const external = Object.keys(pkg.dependencies).filter((name) => !name.startsWith("@handbook/"));
 
 await rm(path.join(root, "dist"), { recursive: true, force: true });
 await build({

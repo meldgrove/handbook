@@ -20,7 +20,7 @@ describe("config", () => {
     expect(configWith({ AUTH_SECRET: example, NODE_ENV: "development" })).not.toThrow();
     // A copied .env.example: NODE_ENV=development, but a public https address.
     expect(
-      configWith({ AUTH_SECRET: example, NODE_ENV: "development", APP_URL: "https://knowledge.example.org" }),
+      configWith({ AUTH_SECRET: example, NODE_ENV: "development", APP_URL: "https://handbook.example.org" }),
     ).toThrow(/AUTH_SECRET: Replace the example value/);
     expect(
       configWith({ AUTH_SECRET: example, NODE_ENV: "production", APP_URL: "http://localhost:3000" }),
@@ -35,7 +35,7 @@ describe("config", () => {
       configWith({
         OAUTH_ALLOW_PRIVATE_CLIENT_URLS: "true",
         NODE_ENV: "development",
-        APP_URL: "https://knowledge.example.org",
+        APP_URL: "https://handbook.example.org",
       }),
     ).toThrow(/OAUTH_ALLOW_PRIVATE_CLIENT_URLS/);
   });

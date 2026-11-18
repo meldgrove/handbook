@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { diffTextLines, type DiffLine } from "@knowledge/shared/merge";
+import { diffTextLines, type DiffLine } from "@handbook/shared/merge";
 import { Button } from "@/components/ui/button";
 import { defineMessages, useT } from "@/i18n";
 import { cn } from "@/lib/utils";

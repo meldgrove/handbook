@@ -51,12 +51,12 @@ jobs:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_USER: knowledge
-          POSTGRES_PASSWORD: knowledge
-          POSTGRES_DB: knowledge
+          POSTGRES_USER: handbook
+          POSTGRES_PASSWORD: handbook
+          POSTGRES_DB: handbook
         ports: ["55450:5432"]
         options: >-
-          --health-cmd "pg_isready -U knowledge -d knowledge"
+          --health-cmd "pg_isready -U handbook -d handbook"
           --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -85,7 +85,7 @@ jobs:
       - name: Wait for Keycloak
         run: |
           for i in $(seq 1 90); do
-            curl -fsS http://localhost:8104/realms/knowledge/.well-known/openid-configuration >/dev/null && exit 0
+            curl -fsS http://localhost:8104/realms/handbook/.well-known/openid-configuration >/dev/null && exit 0
             sleep 2
           done
           docker compose -f compose.dev.yaml logs keycloak
@@ -107,9 +107,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: docker build -t knowledge:ci .
+      - run: docker build -t handbook:ci .
       - name: The image runs as a non-root user
-        run: test "$(docker run --rm --entrypoint id knowledge:ci -u)" = "1000"
+        run: test "$(docker run --rm --entrypoint id handbook:ci -u)" = "1000"
       - name: The image starts its processes
         run: |
-          docker run --rm --entrypoint node knowledge:ci --import /app/apps/server/dist/instrument.mjs -e "process.exit(0)"
+          docker run --rm --entrypoint node handbook:ci --import /app/apps/server/dist/instrument.mjs -e "process.exit(0)"

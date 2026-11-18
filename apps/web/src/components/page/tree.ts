@@ -1,4 +1,4 @@
-import type { PageSummary } from "@knowledge/shared/api/pages";
+import type { PageSummary } from "@handbook/shared/api/pages";
 
 export type TreeNode = { page: PageSummary; children: TreeNode[] };
 

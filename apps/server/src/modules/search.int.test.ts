@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { HIGHLIGHT_END, HIGHLIGHT_START, searchQuerySchema } from "@knowledge/shared/api/search";
+import { HIGHLIGHT_END, HIGHLIGHT_START, searchQuerySchema } from "@handbook/shared/api/search";
 import { getDb } from "../db/client";
 import { issueCredential } from "../auth/credentials";
 import { searchPages } from "../search/query";

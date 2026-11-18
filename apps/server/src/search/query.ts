@@ -4,9 +4,9 @@ import {
   HIGHLIGHT_START,
   type SearchQuery,
   type SearchResult,
-} from "@knowledge/shared/api/search";
-import { normalizeTag } from "@knowledge/shared/page";
-import { pageUrl } from "@knowledge/shared/paths";
+} from "@handbook/shared/api/search";
+import { normalizeTag } from "@handbook/shared/page";
+import { pageUrl } from "@handbook/shared/paths";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
 import type { Principal } from "../auth/principal";

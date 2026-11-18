@@ -3,7 +3,7 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import { config } from "../config";
 
 /** Request header carrying the client IP from the app to the authentication library. */
-export const CLIENT_IP_HEADER = "x-knowledge-client-ip";
+export const CLIENT_IP_HEADER = "x-handbook-client-ip";
 
 /**
  * The client address in an X-Forwarded-For header behind `hops` trusted

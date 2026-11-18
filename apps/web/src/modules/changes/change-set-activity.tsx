@@ -12,7 +12,7 @@ import {
   Undo2,
   type LucideIcon,
 } from "lucide-react";
-import type { ChangeSet, ChangeSetEvent } from "@knowledge/shared/api/changes";
+import type { ChangeSet, ChangeSetEvent } from "@handbook/shared/api/changes";
 import { MarkdownView } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";

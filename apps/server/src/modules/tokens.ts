@@ -6,7 +6,7 @@ import {
   type ConnectInfo,
   type ServiceToken,
   type Token,
-} from "@knowledge/shared/api/tokens";
+} from "@handbook/shared/api/tokens";
 import { config } from "../config";
 import { getDb } from "../db/client";
 import { credentials, oauthClients, oauthGrants, users } from "../db/schema";

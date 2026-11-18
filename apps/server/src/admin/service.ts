@@ -1,12 +1,12 @@
 import { and, asc, eq, ilike, isNull, notLike, or, sql } from "drizzle-orm";
-import type { Person, PersonUpdate } from "@knowledge/shared/api/users";
+import type { Person, PersonUpdate } from "@handbook/shared/api/users";
 import {
   normalizeTag,
   readFrontmatterValues,
   splitFrontmatter,
   withFrontmatter,
-} from "@knowledge/shared/page";
-import { spaceRoleSchema } from "@knowledge/shared/roles";
+} from "@handbook/shared/page";
+import { spaceRoleSchema } from "@handbook/shared/roles";
 import type { Db } from "../db/client";
 import { pages, sessions, spaceMembers, spaces, users } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";

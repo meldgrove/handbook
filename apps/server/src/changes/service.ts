@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import type { ChangeSetCreate } from "@knowledge/shared/api/changes";
-import { applyEdits, lineStats, mergeText, type TextEdit } from "@knowledge/shared/merge";
-import { pathProblem } from "@knowledge/shared/paths";
+import type { ChangeSetCreate } from "@handbook/shared/api/changes";
+import { applyEdits, lineStats, mergeText, type TextEdit } from "@handbook/shared/merge";
+import { pathProblem } from "@handbook/shared/paths";
 import type { Db, DbOrTx } from "../db/client";
 import { changeSetItems, changeSets, pages } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";

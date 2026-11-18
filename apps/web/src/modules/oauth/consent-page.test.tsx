@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OauthRequest } from "@knowledge/shared/api/tokens";
+import type { OauthRequest } from "@handbook/shared/api/tokens";
 import { renderWithProviders } from "@/test-utils";
 import { ConsentPage } from "./consent-page";
 
@@ -45,7 +45,7 @@ describe("consent page", () => {
   it("approves and returns to the app with its redirect", async () => {
     const redirectUrl = "https://claude.ai/api/mcp/auth_callback?code=abc&state=xyz";
     const fetch = routeFetch({
-      "GET /api/v1/auth-config": { body: { appName: "Knowledge", providerName: "Keycloak" } },
+      "GET /api/v1/auth-config": { body: { appName: "Handbook", providerName: "Keycloak" } },
       [`GET /api/v1/oauth/requests/${REQUEST_ID}`]: { body: request },
       [`POST /api/v1/oauth/requests/${REQUEST_ID}/approve`]: { body: { redirectUrl } },
     });

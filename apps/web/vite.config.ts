@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-const server = process.env.KNOWLEDGE_SERVER_URL ?? "http://localhost:3000";
+const server = process.env.HANDBOOK_SERVER_URL ?? "http://localhost:3000";
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 
 export default defineConfig({

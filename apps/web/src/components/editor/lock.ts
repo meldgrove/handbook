@@ -1,4 +1,4 @@
-import { lockLostSchema, type LockHolder } from "@knowledge/shared/api/pages";
+import { lockLostSchema, type LockHolder } from "@handbook/shared/api/pages";
 
 /**
  * The edit lock of the live editor (docs/architecture.md, "Edit locks and

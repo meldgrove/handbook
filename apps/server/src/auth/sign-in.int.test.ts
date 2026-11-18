@@ -26,7 +26,7 @@ function idToken(claims: Record<string, unknown>) {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const input = `${encode({ alg: "RS256", typ: "JWT", kid: "test" })}.${encode({
     iss: ISSUER,
-    aud: "knowledge",
+    aud: "handbook",
     iat: now,
     exp: now + 300,
     ...claims,
@@ -100,7 +100,7 @@ async function signIn(claims: Record<string, unknown>) {
   const location = new URL(callback.headers.get("location")!, APP);
   const session = callback.headers
     .getSetCookie()
-    .find((value) => value.startsWith("knowledge.session_token="))
+    .find((value) => value.startsWith("handbook.session_token="))
     ?.split(";")[0];
   return { path: location.pathname, error: location.searchParams.get("error"), cookie: session ?? null };
 }

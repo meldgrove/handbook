@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
-import type { Actor } from "@knowledge/shared/api/common";
+import type { Actor } from "@handbook/shared/api/common";
 import type {
   LockHolder,
   Page,
@@ -7,10 +7,10 @@ import type {
   PageSummary,
   Revision,
   RevisionSummary,
-} from "@knowledge/shared/api/pages";
-import { LOCK_EXPIRE_SECONDS, LOCK_IDLE_SECONDS } from "@knowledge/shared/limits";
-import { pageStatusSchema } from "@knowledge/shared/page";
-import { viaSchema } from "@knowledge/shared/roles";
+} from "@handbook/shared/api/pages";
+import { LOCK_EXPIRE_SECONDS, LOCK_IDLE_SECONDS } from "@handbook/shared/limits";
+import { pageStatusSchema } from "@handbook/shared/page";
+import { viaSchema } from "@handbook/shared/roles";
 import type { DbOrTx } from "../db/client";
 import {
   changeSetItems,

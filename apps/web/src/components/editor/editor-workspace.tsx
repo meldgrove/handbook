@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AlertCircle, ChevronDown } from "lucide-react";
-import type { SpaceSchema } from "@knowledge/shared/page";
+import type { SpaceSchema } from "@handbook/shared/page";
 import { MarkdownView } from "@/components/markdown";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

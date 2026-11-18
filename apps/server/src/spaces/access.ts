@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import type { SpaceSchema } from "@knowledge/shared/page";
-import { spaceAbilities, spaceRoleSchema, type Abilities, type SpaceRole } from "@knowledge/shared/roles";
+import type { SpaceSchema } from "@handbook/shared/page";
+import { spaceAbilities, spaceRoleSchema, type Abilities, type SpaceRole } from "@handbook/shared/roles";
 import type { DbOrTx } from "../db/client";
 import { spaceMembers, spaces } from "../db/schema";
 import type { Principal } from "../auth/principal";

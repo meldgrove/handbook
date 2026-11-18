@@ -17,15 +17,10 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Page } from "@knowledge/shared/api/pages";
-import type { Space } from "@knowledge/shared/api/spaces";
-import {
-  BUILT_IN_KEYS,
-  BUILT_IN_PROPERTIES,
-  splitFrontmatter,
-  type PageStatus,
-} from "@knowledge/shared/page";
-import { pageMarkdownUrl, parentPath, resolveLink } from "@knowledge/shared/paths";
+import type { Page } from "@handbook/shared/api/pages";
+import type { Space } from "@handbook/shared/api/spaces";
+import { BUILT_IN_KEYS, BUILT_IN_PROPERTIES, splitFrontmatter, type PageStatus } from "@handbook/shared/page";
+import { pageMarkdownUrl, parentPath, resolveLink } from "@handbook/shared/paths";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Page as PageLayout } from "@/components/layout/page";
 import { MarkdownView } from "@/components/markdown";

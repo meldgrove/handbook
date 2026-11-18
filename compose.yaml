@@ -5,7 +5,7 @@
 #   cp .env.example .env    # then set the production values (docs/configuration.md)
 #   docker compose up -d
 #
-# KNOWLEDGE_VERSION in .env selects the release of ghcr.io/meldgrove/knowledge,
+# HANDBOOK_VERSION in .env selects the release of ghcr.io/meldgrove/handbook,
 # e.g. 0.1.0. To upgrade, read the release notes, change it, and run
 # `docker compose up -d` again. A tag that moves (0.1, latest) lets `updater`
 # install new releases (docs/deployment.md, Automatic updates). On a platform
@@ -15,11 +15,11 @@
 # Without a PostgreSQL of your own, add compose.postgres.yaml:
 #   docker compose -f compose.yaml -f compose.postgres.yaml up -d
 #
-# Put a TLS-terminating reverse proxy in front of port 3000 (KNOWLEDGE_PORT
+# Put a TLS-terminating reverse proxy in front of port 3000 (HANDBOOK_PORT
 # changes the host port) and set APP_URL to its public https URL. Uploaded
 # files live in the `files` volume: back it up with the database.
 
-x-image: &image ghcr.io/meldgrove/knowledge:${KNOWLEDGE_VERSION:?Set KNOWLEDGE_VERSION to a release, e.g. 0.1.0}
+x-image: &image ghcr.io/meldgrove/handbook:${HANDBOOK_VERSION:?Set HANDBOOK_VERSION to a release, e.g. 0.1.0}
 
 # Every variable in .env reaches the containers (docs/configuration.md); the
 # required ones are checked here so a missing value stops the start.
@@ -60,8 +60,8 @@ services:
     ports:
       # The host port for a reverse proxy on the host. Platforms with their own
       # proxy (Coolify) reach `web` over the Docker network; set
-      # KNOWLEDGE_PORT to any free port when 3000 is taken.
-      - "127.0.0.1:${KNOWLEDGE_PORT:-3000}:3000"
+      # HANDBOOK_PORT to any free port when 3000 is taken.
+      - "127.0.0.1:${HANDBOOK_PORT:-3000}:3000"
     healthcheck:
       test:
         - CMD
@@ -97,7 +97,7 @@ services:
 
   # Automatic updates (docs/deployment.md): off until UPDATE_DEPLOY_HOOK_URL
   # is set (Coolify) or the server watches the volume `updater` (Debian:
-  # `updater host-setup`). When the tag in KNOWLEDGE_VERSION points to a new
+  # `updater host-setup`). When the tag in HANDBOOK_VERSION points to a new
   # image, it calls that deploy link or leaves a request in the volume, and
   # Coolify or the server deploys the new release.
   updater:

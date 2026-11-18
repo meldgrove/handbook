@@ -35,7 +35,7 @@ RUN find apps/web/dist -name '*.map' -delete
 FROM base AS prod-deps
 # Optional packages here are build and test tools that libraries name as
 # optional peers (vitest, drizzle-kit, esbuild): the server needs none of them.
-RUN npm ci --omit=dev --omit=optional --workspace @knowledge/server --include-workspace-root=false --no-audit --no-fund
+RUN npm ci --omit=dev --omit=optional --workspace @handbook/server --include-workspace-root=false --no-audit --no-fund
 
 FROM node:26.13.0-bookworm-slim AS runtime
 ENV NODE_ENV=production \

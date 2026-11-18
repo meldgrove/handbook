@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { count, desc } from "drizzle-orm";
-import { tagRenameSchema } from "@knowledge/shared/api/pages";
-import { auditListQuerySchema, peopleQuerySchema, personUpdateSchema } from "@knowledge/shared/api/users";
+import { tagRenameSchema } from "@handbook/shared/api/pages";
+import { auditListQuerySchema, peopleQuerySchema, personUpdateSchema } from "@handbook/shared/api/users";
 import { getDb } from "../db/client";
 import { auditLog } from "../db/schema";
 import type { AppEnv } from "../http/env";

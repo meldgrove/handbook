@@ -1,8 +1,8 @@
 import { useId, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Page } from "@knowledge/shared/api/pages";
-import { isWithin, lastSegment, parentPath } from "@knowledge/shared/paths";
+import type { Page } from "@handbook/shared/api/pages";
+import { isWithin, lastSegment, parentPath } from "@handbook/shared/paths";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { newPageFile } from "@knowledge/shared/page";
+import { newPageFile } from "@handbook/shared/page";
 import { getDb } from "../db/client";
 import { drafts, pageLinks, pageRevisions, pageSections, pages } from "../db/schema";
 import { createPage, createSpace, createUser, resetDatabase } from "../test/helpers";

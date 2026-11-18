@@ -78,7 +78,7 @@ export function startWorker(): Stop {
       reindexIfLanguagesChanged(getDb()),
     ),
     every({ name: "prune", minutes: 60, firstDelayMs: 60_000, maxRunMinutes: 30 }, () =>
-      monitored("knowledge-prune", { minutes: 60 }, () => pruneExpired(getDb())),
+      monitored("handbook-prune", { minutes: 60 }, () => pruneExpired(getDb())),
     ),
   ];
   const heartbeat = config().WORKER_HEARTBEAT_FILE;

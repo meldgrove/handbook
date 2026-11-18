@@ -5,7 +5,7 @@ import type {
   Token,
   TokenCreate,
   TokenCreated,
-} from "@knowledge/shared/api/tokens";
+} from "@handbook/shared/api/tokens";
 import { api } from "@/lib/api";
 
 export const settingsKeys = {
