@@ -10,7 +10,7 @@ import {
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Me, Person } from "@knowledge/shared/api/users";
+import type { Me, Person } from "@handbook/shared/api/users";
 import { AdminPeoplePage } from "./people-page";
 import { spaceSlugFrom } from "./spaces-page";
 

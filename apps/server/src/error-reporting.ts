@@ -9,9 +9,9 @@ import type { AppEnv } from "./http/env";
  * requests, and check-ins of the scheduled jobs.
  */
 
-/** The release in reports: SENTRY_RELEASE, else `knowledge@<APP_VERSION>` for release images. */
+/** The release in reports: SENTRY_RELEASE, else `handbook@<APP_VERSION>` for release images. */
 export function errorReportRelease(settings: Pick<Config, "SENTRY_RELEASE" | "APP_VERSION">) {
-  return settings.SENTRY_RELEASE ?? (settings.APP_VERSION ? `knowledge@${settings.APP_VERSION}` : undefined);
+  return settings.SENTRY_RELEASE ?? (settings.APP_VERSION ? `handbook@${settings.APP_VERSION}` : undefined);
 }
 
 /** Sends pending reports; call it before the process exits. */
@@ -58,6 +58,6 @@ export function withErrorReportingSettings(indexHtml: string): string {
   }).replace(/[&"<>]/g, (character) => ATTRIBUTE_ESCAPES[character]!);
   return indexHtml.replace(
     "</head>",
-    `<meta name="knowledge-error-reporting" content="${content}" />\n</head>`,
+    `<meta name="handbook-error-reporting" content="${content}" />\n</head>`,
   );
 }

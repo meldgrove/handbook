@@ -41,7 +41,7 @@ describe("web app error reports", () => {
 
   it("report the route and stack, without the address or messages", async () => {
     const meta = document.createElement("meta");
-    meta.name = "knowledge-error-reporting";
+    meta.name = "handbook-error-reporting";
     meta.content = JSON.stringify({ dsn: DSN, environment: "production" });
     document.head.append(meta);
     window.history.replaceState(null, "", `/conversations?q=${PRIVATE}`);

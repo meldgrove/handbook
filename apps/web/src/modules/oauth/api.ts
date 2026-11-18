@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { OauthRequest } from "@knowledge/shared/api/tokens";
+import type { OauthRequest } from "@handbook/shared/api/tokens";
 import { api } from "@/lib/api";
 
 export function useOauthRequest(id: string) {

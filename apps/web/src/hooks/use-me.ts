@@ -1,6 +1,6 @@
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import type { Me } from "@knowledge/shared/api/users";
-import type { SpaceRole } from "@knowledge/shared/roles";
+import type { Me } from "@handbook/shared/api/users";
+import type { SpaceRole } from "@handbook/shared/roles";
 import { api } from "@/lib/api";
 
 export const meQuery = { queryKey: ["me"] as const, queryFn: () => api.get<Me>("/me"), staleTime: 60_000 };

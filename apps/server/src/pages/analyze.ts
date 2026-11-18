@@ -5,8 +5,8 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import { markdownProblem } from "@knowledge/shared/markdown";
-import { resolveLink } from "@knowledge/shared/paths";
+import { markdownProblem } from "@handbook/shared/markdown";
+import { resolveLink } from "@handbook/shared/paths";
 
 /**
  * What the server derives from a page body: sections for search (split at

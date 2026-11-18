@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import type { RevisionSummary } from "@knowledge/shared/api/pages";
+import type { RevisionSummary } from "@handbook/shared/api/pages";
 import { Page as PageLayout, PageHeader } from "@/components/layout/page";
 import { pageQuery, revisionsQuery } from "@/components/page/queries";
 import { Pager } from "@/components/pager";

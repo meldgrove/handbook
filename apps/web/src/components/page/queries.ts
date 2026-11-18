@@ -1,5 +1,5 @@
 import { keepPreviousData } from "@tanstack/react-query";
-import type { ChangeSet, ChangeSetPage, ChangeSetSummary } from "@knowledge/shared/api/changes";
+import type { ChangeSet, ChangeSetPage, ChangeSetSummary } from "@handbook/shared/api/changes";
 import type {
   Draft,
   Page,
@@ -7,9 +7,9 @@ import type {
   Revision,
   RevisionList,
   recentChangeSchema,
-} from "@knowledge/shared/api/pages";
-import type { SearchResponse } from "@knowledge/shared/api/search";
-import type { Space, SpaceMember } from "@knowledge/shared/api/spaces";
+} from "@handbook/shared/api/pages";
+import type { SearchResponse } from "@handbook/shared/api/search";
+import type { Space, SpaceMember } from "@handbook/shared/api/spaces";
 import type { z } from "zod";
 import { api } from "@/lib/api";
 

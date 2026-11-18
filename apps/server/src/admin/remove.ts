@@ -1,5 +1,5 @@
 import { eq, or, sql } from "drizzle-orm";
-import { REMOVED_PERSON_NAME } from "@knowledge/shared/api/users";
+import { REMOVED_PERSON_NAME } from "@handbook/shared/api/users";
 import type { Db } from "../db/client";
 import {
   accounts,

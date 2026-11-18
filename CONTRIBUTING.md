@@ -16,7 +16,7 @@ npm run dev
 ```
 
 Open http://localhost:5173 and sign in with one of the test users of
-`compose.dev.yaml` (password `knowledge-dev`): `ada@example.org` is an admin
+`compose.dev.yaml` (password `handbook-dev`): `ada@example.org` is an admin
 (`ADMIN_EMAILS`), `eddie@example.org` and `rita@example.org` are staff (make
 Eddie an editor of a space in its settings), and `gina@example.org` is
 refused because `.env.example` sets `ACCESS_GROUPS=/staff`. The Keycloak
@@ -54,7 +54,7 @@ still runs for a moment: add columns with defaults, don't rename in place.
 
 Unit tests sit next to the code (`*.test.ts`). Integration tests
 (`*.int.test.ts`) get a fresh database (`TEST_DATABASE_URL`, default
-`knowledge_test` on the development PostgreSQL). Tests never call real
+`handbook_test` on the development PostgreSQL). Tests never call real
 services. End-to-end tests in `e2e/` sign in through the development
 Keycloak in a real browser and connect an agent through OAuth.
 
@@ -69,7 +69,7 @@ in it. Update the docs when behavior or configuration changes.
 A release bundles everything merged to `main` since the previous one.
 Maintainers start it by hand with **Actions → Release → Run workflow**
 (the shared Meldgrove release workflow): it tags the next `vX.Y.Z` on a
-`main` commit that passed CI, publishes `ghcr.io/meldgrove/knowledge` for
+`main` commit that passed CI, publishes `ghcr.io/meldgrove/handbook` for
 amd64 and arm64, moves the branch `stable`, and writes the release notes from
 the pull request titles. No file holds the version.
 
@@ -84,7 +84,7 @@ maintainers.
 4. For a release that needs action, put the steps at the top of its notes.
 
 Release builds upload the source maps to the Sentry project
-`meldgrove/knowledge` with the organization secret `SENTRY_AUTH_TOKEN`
+`meldgrove/handbook` with the organization secret `SENTRY_AUTH_TOKEN`
 (Dockerfile). Without the secret, the release warns and uploads nothing.
 
 ## Data, secrets and privacy

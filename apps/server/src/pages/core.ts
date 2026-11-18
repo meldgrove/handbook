@@ -4,10 +4,10 @@ import {
   frontmatterObject,
   splitFrontmatter,
   type ParsedPage,
-} from "@knowledge/shared/page";
-import { lineStats, mergeText } from "@knowledge/shared/merge";
-import { isValidSlug, isWithin, joinPath, parentPath, pathProblem, slugify } from "@knowledge/shared/paths";
-import type { Via } from "@knowledge/shared/roles";
+} from "@handbook/shared/page";
+import { lineStats, mergeText } from "@handbook/shared/merge";
+import { isValidSlug, isWithin, joinPath, parentPath, pathProblem, slugify } from "@handbook/shared/paths";
+import type { Via } from "@handbook/shared/roles";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
 import { pageLinks, pageRevisions, pageSections, pages, redirects, spaces, users } from "../db/schema";

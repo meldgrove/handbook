@@ -5,10 +5,10 @@ import type {
   ChangeSetPage,
   ChangeSetSummary,
   Check,
-} from "@knowledge/shared/api/changes";
-import { canonicalPageFile } from "@knowledge/shared/page";
-import { hasConflictMarkers, lineStats, mergeText } from "@knowledge/shared/merge";
-import { parentPath, pathProblem } from "@knowledge/shared/paths";
+} from "@handbook/shared/api/changes";
+import { canonicalPageFile } from "@handbook/shared/page";
+import { hasConflictMarkers, lineStats, mergeText } from "@handbook/shared/merge";
+import { parentPath, pathProblem } from "@handbook/shared/paths";
 import type { DbOrTx } from "../db/client";
 import { changeSetEvents, changeSets, pages, redirects, spaces } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";

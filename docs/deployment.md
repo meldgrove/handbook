@@ -1,6 +1,6 @@
 # Deployment
 
-For the person who runs Meldgrove Knowledge on a server: requirements, the
+For the person who runs Meldgrove Handbook on a server: requirements, the
 setup on [Coolify](#coolify) or on a [Debian server](#debian), upgrades,
 automatic updates, backups, Sentry and troubleshooting. Every environment
 variable is described in [Configuration](configuration.md).
@@ -21,8 +21,8 @@ variable is described in [Configuration](configuration.md).
 
 ## What runs
 
-Each [release](https://github.com/meldgrove/knowledge/releases) publishes the
-image `ghcr.io/meldgrove/knowledge` for linux/amd64 and linux/arm64, tagged
+Each [release](https://github.com/meldgrove/handbook/releases) publishes the
+image `ghcr.io/meldgrove/handbook` for linux/amd64 and linux/arm64, tagged
 with its version (`0.1.0`), its series (`0.1`; from 1.0.0 the major version,
 `1`) and `latest`. A release that needs manual steps starts a new series, so
 the releases within a series install without anyone acting.
@@ -35,7 +35,7 @@ the releases within a series install without anyone acting.
 
 The image runs as an unprivileged user (uid 1000). `web` listens on port
 3000, published on `127.0.0.1:3000` for a reverse proxy on the same machine;
-`KNOWLEDGE_PORT` changes the host port. Uploaded files are stored in the
+`HANDBOOK_PORT` changes the host port. Uploaded files are stored in the
 volume `files` (`/data/files` in the container), shared by `web` and
 `worker`. The branch `stable` is at the newest release; `main` has changes
 that are not released yet.
@@ -59,15 +59,15 @@ process. Mount a volume at `/data/files`.
 1. **Database:** create a PostgreSQL resource (16 or later) and copy its
    internal URL.
 2. **Application:** create a Docker Compose resource from the public
-   repository `https://github.com/meldgrove/knowledge`, branch `stable`,
+   repository `https://github.com/meldgrove/handbook`, branch `stable`,
    Docker Compose location `/compose.yaml`. Under Advanced, set Auto deploy
    to "Manual deployments only", so that only releases deploy, and turn on
    "Connect To Predefined Network", so that the app reaches the database.
-3. **Domain:** assign the domain, such as `https://knowledge.example.org`,
+3. **Domain:** assign the domain, such as `https://handbook.example.org`,
    to `web`, port 3000.
 4. **Register the app at your provider** with the redirect URL
    `<APP_URL>/api/auth/callback/oidc` ([Identity and access](identity-and-access.md)).
-5. **Environment variables** of the resource: `KNOWLEDGE_VERSION` (a series
+5. **Environment variables** of the resource: `HANDBOOK_VERSION` (a series
    such as `0.1`, see [Automatic updates](#automatic-updates)), `APP_URL`
    (the domain), `DATABASE_URL` (the database's internal URL), a new
    `AUTH_SECRET` (`openssl rand -base64 32`), the `OIDC_*` values, your
@@ -89,14 +89,14 @@ run the commands as root (`sudo -i`).
 2. **Get the files** at the newest release:
 
    ```sh
-   git clone --branch stable https://github.com/meldgrove/knowledge.git /srv/knowledge
-   cd /srv/knowledge
+   git clone --branch stable https://github.com/meldgrove/handbook.git /srv/handbook
+   cd /srv/handbook
    ```
 
 3. **Register the app at your provider** with the redirect URL
    `<APP_URL>/api/auth/callback/oidc` ([Identity and access](identity-and-access.md)).
 4. **Create `.env`** from `.env.example` (`cp .env.example .env`,
-   `chmod 600 .env`) and set production values: `KNOWLEDGE_VERSION` (a
+   `chmod 600 .env`) and set production values: `HANDBOOK_VERSION` (a
    series such as `0.1`), `APP_URL`, `DATABASE_URL`, a new `AUTH_SECRET`
    (`openssl rand -base64 32`), the `OIDC_*` values, your address in
    `ADMIN_EMAILS`, and `SEARCH_LANGUAGES` for the languages your pages are
@@ -106,20 +106,20 @@ run the commands as root (`sudo -i`).
    `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`. Without a database of your own, add
    `COMPOSE_FILE=compose.yaml:compose.postgres.yaml`, a `POSTGRES_PASSWORD`
    (`openssl rand -hex 32`) and
-   `DATABASE_URL=postgres://knowledge:<POSTGRES_PASSWORD>@postgres:5432/knowledge`.
+   `DATABASE_URL=postgres://handbook:<POSTGRES_PASSWORD>@postgres:5432/handbook`.
 5. **Start:** `docker compose up -d --pull always`.
 6. **HTTPS:** point the domain's DNS at the server, install Caddy
    (`apt install caddy`), and replace `/etc/caddy/Caddyfile` with:
 
    ```text
-   knowledge.example.org {
+   handbook.example.org {
    	reverse_proxy 127.0.0.1:3000
    }
    ```
 
    Then `systemctl reload caddy`. Caddy gets the certificate itself, and it
    passes the event streams of `/mcp` through without buffering. With
-   `KNOWLEDGE_PORT` set, use that port instead of 3000.
+   `HANDBOOK_PORT` set, use that port instead of 3000.
 
 7. Open `APP_URL`, sign in, and create the first space under
    **Administration → Spaces**.
@@ -148,11 +148,11 @@ hears when the app is down.
 1. Read the release notes. Releases with **Upgrade steps needed** start a
    new series and list what to do.
 2. Take the steps, then move to the new series:
-   - **Coolify:** change `KNOWLEDGE_VERSION` in the resource's environment
+   - **Coolify:** change `HANDBOOK_VERSION` in the resource's environment
      variables and redeploy. Coolify reads `compose.yaml` from `stable`,
      which is at the newest release.
-   - **Debian:** in `/srv/knowledge`, run `git pull` (the newest release's
-     `compose.yaml`), change `KNOWLEDGE_VERSION` in `.env`, and run
+   - **Debian:** in `/srv/handbook`, run `git pull` (the newest release's
+     `compose.yaml`), change `HANDBOOK_VERSION` in `.env`, and run
      `docker compose up -d --pull always`.
 
 The `migrate` service applies database migrations before `web` and `worker`
@@ -161,7 +161,7 @@ start.
 ## Automatic updates
 
 The `updater` service installs new releases of the tag in
-`KNOWLEDGE_VERSION`: with a series such as `0.1`, every release that
+`HANDBOOK_VERSION`: with a series such as `0.1`, every release that
 installs without steps; with `latest`, every release, also those with
 upgrade steps. A release installs once the updater has seen it for three
 days (`UPDATE_COOLDOWN`: `0` installs within the hour, `7d` waits a week), and
@@ -174,7 +174,7 @@ watching. Details: [meldgrove/updater](https://github.com/meldgrove/updater).
 1. Under Settings > Advanced, turn on API Access if it is off.
 2. Under Keys & Tokens > API Tokens, create a token with only the `deploy`
    permission; clear `read`. Coolify shows it only once.
-3. In the Knowledge resource, select Webhooks and copy Deploy Webhook.
+3. In the Handbook resource, select Webhooks and copy Deploy Webhook.
 4. In the resource's environment variables, set `UPDATE_DEPLOY_HOOK_URL` to
    the webhook and `UPDATE_DEPLOY_HOOK_TOKEN` to the token, then redeploy.
 
@@ -182,7 +182,7 @@ The `updater` log then names the tag it watches.
 
 ### On Debian
 
-As root in `/srv/knowledge`, with `UPDATE_DEPLOY_HOOK_URL` empty:
+As root in `/srv/handbook`, with `UPDATE_DEPLOY_HOOK_URL` empty:
 
 ```sh
 docker compose up -d --pull always
@@ -195,7 +195,7 @@ takes as installed. The second writes the setup script from the updater's
 image; read it before you run it. The script installs a systemd unit that
 waits for the updater's request, then pulls the new image and runs
 `docker compose up -d`, migrations first. `docker compose logs updater` names
-the tag it watches, and `journalctl -u meldgrove-updater-knowledge.service`
+the tag it watches, and `journalctl -u meldgrove-updater-handbook.service`
 shows each installation. `sh updater-setup.sh remove` switches it off.
 
 ## Backups
@@ -217,7 +217,7 @@ It is not a backup of the app: history, change sets and people are not in it.
 ## Error reports and performance data (Sentry)
 
 With `SENTRY_DSN` set, the server and the web app send error reports to
-Sentry (or a compatible service). The release is `knowledge@<version>`, so
+Sentry (or a compatible service). The release is `handbook@<version>`, so
 reports link to the code: release builds upload their source maps to
 Sentry. The web app's source maps are not in the image, so browsers cannot
 download them.
@@ -227,7 +227,7 @@ download them.
 - **Performance:** set `SENTRY_TRACES_SAMPLE_RATE` (e.g. `0.2`) to trace
   that share of requests and page loads.
 - **Logs:** warnings and errors of the server.
-- **Cron monitor:** the worker's cleanup job checks in as `knowledge-prune`.
+- **Cron monitor:** the worker's cleanup job checks in as `handbook-prune`.
 
 Reports never contain page texts, titles, names, email addresses, tokens,
 request data or variables; error messages are left out because database

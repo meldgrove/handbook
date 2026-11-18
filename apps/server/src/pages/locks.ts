@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import type { LockResponse } from "@knowledge/shared/api/pages";
-import { LOCK_EXPIRE_SECONDS, LOCK_IDLE_SECONDS, LOCK_RENEW_SECONDS } from "@knowledge/shared/limits";
+import type { LockResponse } from "@handbook/shared/api/pages";
+import { LOCK_EXPIRE_SECONDS, LOCK_IDLE_SECONDS, LOCK_RENEW_SECONDS } from "@handbook/shared/limits";
 import type { DbOrTx } from "../db/client";
 import { editLocks, users } from "../db/schema";
 import { AppError } from "../http/errors";

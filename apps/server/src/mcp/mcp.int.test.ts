@@ -82,7 +82,7 @@ describe("MCP server", () => {
       clientInfo: { name: "test", version: "1" },
     });
     expect(init.status).toBe(200);
-    expect(init.body.result.serverInfo.name).toBe("meldgrove-knowledge");
+    expect(init.body.result.serverInfo.name).toBe("meldgrove-handbook");
     expect(init.body.result.instructions).toContain("change set");
     const list = await rpc(token, "tools/list");
     const tools = list.body.result.tools as { name: string; annotations?: { readOnlyHint?: boolean } }[];

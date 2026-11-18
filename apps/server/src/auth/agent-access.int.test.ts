@@ -90,7 +90,7 @@ describe("agents and their person's access", () => {
     expect(stale.status).toBe(401);
     expect(stale.body.error).toEqual({
       code: "sign_in_needed",
-      message: "Sign in to Knowledge again: agents work for 30 days after your last sign-in.",
+      message: "Sign in to Handbook again: agents work for 30 days after your last sign-in.",
     });
     const viaMcp = await mcp(app.access);
     expect(viaMcp.status).toBe(401);

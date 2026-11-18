@@ -199,7 +199,7 @@ describe("OAuth for connected apps", () => {
     });
     expect(tokens.status).toBe(200);
     expect(tokens.headers.get("cache-control")).toBe("no-store");
-    expect(tokens.body).toMatchObject({ token_type: "Bearer", expires_in: 3600, scope: "knowledge" });
+    expect(tokens.body).toMatchObject({ token_type: "Bearer", expires_in: 3600, scope: "handbook" });
     // The code works once.
     expect(
       (

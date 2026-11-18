@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Tags } from "lucide-react";
-import type { PageSummary } from "@knowledge/shared/api/pages";
+import type { PageSummary } from "@handbook/shared/api/pages";
 import { Page as PageLayout, PageHeader } from "@/components/layout/page";
 import { StatusBadge } from "@/components/page/status-badge";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";

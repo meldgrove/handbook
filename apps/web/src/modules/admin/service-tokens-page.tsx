@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { KeyRound, Plus } from "lucide-react";
-import type { ServiceToken } from "@knowledge/shared/api/tokens";
+import type { ServiceToken } from "@handbook/shared/api/tokens";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Page, PageHeader } from "@/components/layout/page";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";

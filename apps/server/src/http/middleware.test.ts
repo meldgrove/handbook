@@ -31,7 +31,7 @@ describe("sameOrigin", () => {
     ).toBe(403);
     // A cookie does not make a request with a foreign origin acceptable.
     expect(
-      (await post({ origin: "https://evil.example.net", cookie: "knowledge.session_token=x" })).status,
+      (await post({ origin: "https://evil.example.net", cookie: "handbook.session_token=x" })).status,
     ).toBe(403);
   });
 

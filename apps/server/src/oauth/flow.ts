@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import type { OauthRequest } from "@knowledge/shared/api/tokens";
+import type { OauthRequest } from "@handbook/shared/api/tokens";
 import { config } from "../config";
 import type { Db, DbOrTx } from "../db/client";
 import { credentials, oauthClients, oauthGrants, oauthRequests, users } from "../db/schema";
@@ -21,7 +21,7 @@ import {
  * /oauth/authorize → consent in the web app → code → /oauth/token.
  */
 
-export const SCOPE = "knowledge";
+export const SCOPE = "handbook";
 const REQUEST_MINUTES = 10;
 const CODE_SECONDS = 60;
 const VERIFIER = /^[A-Za-z0-9\-._~]{43,128}$/;

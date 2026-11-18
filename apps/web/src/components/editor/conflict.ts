@@ -1,4 +1,4 @@
-import { hasConflictMarkers } from "@knowledge/shared/merge";
+import { hasConflictMarkers } from "@handbook/shared/merge";
 
 /** The body of a 409 `page_changed` answer (contract: pageConflictSchema). */
 export type PageConflict = {

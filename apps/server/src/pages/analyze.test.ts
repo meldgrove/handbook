@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { markdownProblem } from "@knowledge/shared/markdown";
-import { MAX_PAGE_CHARACTERS } from "@knowledge/shared/page";
+import { markdownProblem } from "@handbook/shared/markdown";
+import { MAX_PAGE_CHARACTERS } from "@handbook/shared/page";
 import { pageLinksOf, parseMarkdown, sectionsOf } from "./analyze";
 
 /** Milliseconds a call takes. */

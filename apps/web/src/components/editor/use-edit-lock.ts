@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { LockResponse } from "@knowledge/shared/api/pages";
-import { LOCK_RENEW_SECONDS } from "@knowledge/shared/limits";
+import type { LockResponse } from "@handbook/shared/api/pages";
+import { LOCK_RENEW_SECONDS } from "@handbook/shared/limits";
 import { errorMessage } from "@/lib/api";
 import { apiErrorOf, rawRequest } from "./raw-api";
 import { lockReducer, readLockHolder, readLost, type LockEvent, type LockState } from "./lock";

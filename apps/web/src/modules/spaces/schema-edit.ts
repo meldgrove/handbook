@@ -1,5 +1,5 @@
-import type { PageTypeDefinition, PropertyDefinition, PropertyType } from "@knowledge/shared/page";
-import { slugify } from "@knowledge/shared/paths";
+import type { PageTypeDefinition, PropertyDefinition, PropertyType } from "@handbook/shared/page";
+import { slugify } from "@handbook/shared/paths";
 import { splitComma } from "@/components/editor/file";
 
 /** A property as the settings form edits it (options as comma-separated text). */

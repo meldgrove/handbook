@@ -1,6 +1,6 @@
 import { expect, type Browser, type Page } from "@playwright/test";
 
-export const PASSWORD = "knowledge-dev";
+export const PASSWORD = "handbook-dev";
 export const APP = "http://localhost:3000";
 
 /** Signs in through Keycloak in a fresh browser context; returns its page. */

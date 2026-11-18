@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { z } from "zod";
-import type { auditListSchema } from "@knowledge/shared/api/users";
+import type { auditListSchema } from "@handbook/shared/api/users";
 import { api } from "@/lib/api";
 
 export type AuditList = z.infer<typeof auditListSchema>;

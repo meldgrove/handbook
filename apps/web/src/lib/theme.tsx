@@ -10,7 +10,7 @@ const ThemeContext = createContext<ThemeState>({
   resolved: "light",
   setTheme: () => undefined,
 });
-const STORAGE_KEY = "knowledge.theme";
+const STORAGE_KEY = "handbook.theme";
 
 function systemTheme(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";

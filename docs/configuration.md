@@ -7,8 +7,8 @@ Spaces, editors, properties and page types are set up in the app.
 
 | Variable             | Meaning                                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `APP_URL`            | The public URL, e.g. `https://knowledge.example.org`. Sign-in, OAuth and links depend on it.                        |
-| `DATABASE_URL`       | PostgreSQL connection, e.g. `postgres://knowledge:secret@db:5432/knowledge`.                                        |
+| `APP_URL`            | The public URL, e.g. `https://handbook.example.org`. Sign-in, OAuth and links depend on it.                         |
+| `DATABASE_URL`       | PostgreSQL connection, e.g. `postgres://handbook:secret@db:5432/handbook`.                                          |
 | `AUTH_SECRET`        | Signs sessions; at least 32 characters (`openssl rand -base64 32`); example values are refused.                     |
 | `OIDC_ISSUER`        | The OpenID Connect provider, e.g. `https://login.example.org/realms/example`.                                       |
 | `OIDC_CLIENT_ID`     | The app's client at the provider.                                                                                   |
@@ -54,7 +54,7 @@ See [Agents and MCP](agents.md).
 | Variable                             | Default                          | Meaning                                                                                                            |
 | ------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `APP_ROLE`                           | `all`                            | `all`, `web`, `worker` or `migrate`; the image's command sets it.                                                  |
-| `APP_NAME`                           | `Knowledge`                      | The name in the app, on the sign-in page and for agents.                                                           |
+| `APP_NAME`                           | `Handbook`                       | The name in the app, on the sign-in page and for agents.                                                           |
 | `PORT`, `HOST`                       | `3000`, 0.0.0.0                  | Where the web process listens.                                                                                     |
 | `TRUST_PROXY`                        | `0`                              | Proxies in front that append to `X-Forwarded-For`: `true` (one), a number, or `false`. `compose.yaml` sets `true`. |
 | `RUN_MIGRATIONS`                     | `false`                          | Apply migrations at start (single-container setups).                                                               |
@@ -71,19 +71,19 @@ request seems to come from the proxy.
 
 ## Error reports (Sentry)
 
-| Variable                    | Default               | Meaning                                                          |
-| --------------------------- | --------------------- | ---------------------------------------------------------------- |
-| `SENTRY_DSN`                | (off)                 | Send error reports, logs (warnings and up) and traces to Sentry. |
-| `SENTRY_ENVIRONMENT`        |                       | e.g. `production`.                                               |
-| `SENTRY_RELEASE`            | `knowledge@<version>` | Release name; release images set the version.                    |
-| `SENTRY_TRACES_SAMPLE_RATE` | `0`                   | Share of requests and page loads traced, 0 to 1.                 |
+| Variable                    | Default              | Meaning                                                          |
+| --------------------------- | -------------------- | ---------------------------------------------------------------- |
+| `SENTRY_DSN`                | (off)                | Send error reports, logs (warnings and up) and traces to Sentry. |
+| `SENTRY_ENVIRONMENT`        |                      | e.g. `production`.                                               |
+| `SENTRY_RELEASE`            | `handbook@<version>` | Release name; release images set the version.                    |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0`                  | Share of requests and page loads traced, 0 to 1.                 |
 
 ## Docker Compose only
 
 | Variable                                                                                       | Meaning                                                                           |
 | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `KNOWLEDGE_VERSION`                                                                            | The image tag to run, e.g. `0.1.0`, or a series like `0.1`.                       |
-| `KNOWLEDGE_PORT`                                                                               | Host port of `web` (default 3000).                                                |
+| `HANDBOOK_VERSION`                                                                             | The image tag to run, e.g. `0.1.0`, or a series like `0.1`.                       |
+| `HANDBOOK_PORT`                                                                                | Host port of `web` (default 3000).                                                |
 | `PULL_POLICY`                                                                                  | `always` makes every start pull the image (platforms that do not pull on deploy). |
 | `POSTGRES_PASSWORD`                                                                            | With `compose.postgres.yaml`.                                                     |
 | `UPDATE_DEPLOY_HOOK_URL`, `UPDATE_DEPLOY_HOOK_TOKEN`, `UPDATE_COOLDOWN`, `UPDATE_WINDOW`, `TZ` | The optional updater ([Deployment](deployment.md#automatic-updates)).             |

@@ -6,9 +6,9 @@ import type {
   SpaceMemberPut,
   SpaceSummary,
   SpaceUpdate,
-} from "@knowledge/shared/api/spaces";
-import { parsePageFile, spaceSchemaProblems, type SpaceSchema } from "@knowledge/shared/page";
-import { spaceRoleSchema } from "@knowledge/shared/roles";
+} from "@handbook/shared/api/spaces";
+import { parsePageFile, spaceSchemaProblems, type SpaceSchema } from "@handbook/shared/page";
+import { spaceRoleSchema } from "@handbook/shared/roles";
 import type { Db, DbOrTx } from "../db/client";
 import { changeSets, pages, spaceMembers, spaces, users } from "../db/schema";
 import type { Principal, UserPrincipal } from "../auth/principal";

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Bot, KeyRound, Plug, Plus } from "lucide-react";
-import type { ConnectedApp, Token } from "@knowledge/shared/api/tokens";
+import type { ConnectedApp, Token } from "@handbook/shared/api/tokens";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { Page, PageHeader } from "@/components/layout/page";
@@ -45,9 +45,9 @@ function ConnectCard() {
       body: (
         <div className="space-y-2">
           <p>{t("clientClaudeCodeText")}</p>
-          <Code>{`claude mcp add --transport http knowledge ${url}`}</Code>
+          <Code>{`claude mcp add --transport http handbook ${url}`}</Code>
           <p>{t("clientClaudeCodeToken")}</p>
-          <Code>{`claude mcp add --transport http knowledge ${url} \\\n  --header "Authorization: Bearer <token>"`}</Code>
+          <Code>{`claude mcp add --transport http handbook ${url} \\\n  --header "Authorization: Bearer <token>"`}</Code>
         </div>
       ),
     },

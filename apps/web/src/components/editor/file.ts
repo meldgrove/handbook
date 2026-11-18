@@ -4,7 +4,7 @@ import {
   readFrontmatterValues,
   splitFrontmatter,
   type SpaceSchema,
-} from "@knowledge/shared/page";
+} from "@handbook/shared/page";
 
 /**
  * The editor keeps the whole page file as one string and edits two views of

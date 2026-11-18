@@ -30,7 +30,7 @@ Two ways to sign in, on the same address:
 | Claude (claude.ai, desktop, mobile)          | Settings → Connectors → Add custom connector → the MCP address. Claude signs in with OAuth.                                                  |
 | ChatGPT                                      | Turn on developer mode; add a connector with the MCP address and OAuth. Which plans may use write tools depends on OpenAI.                   |
 | Langdock                                     | Integrations → add a remote MCP server with the address; OAuth, or a personal token as API key with the header type `Authorization: Bearer`. |
-| Claude Code                                  | `claude mcp add --transport http knowledge <APP_URL>/mcp` (OAuth on first use), or add `--header "Authorization: Bearer <token>"`.           |
+| Claude Code                                  | `claude mcp add --transport http handbook <APP_URL>/mcp` (OAuth on first use), or add `--header "Authorization: Bearer <token>"`.            |
 | Codex, the OpenAI and Anthropic APIs, others | A remote (Streamable HTTP) MCP server with the address and `Authorization: Bearer <token>`.                                                  |
 
 ## Tools

@@ -1,4 +1,4 @@
-import type { Channel } from "@knowledge/shared/roles";
+import type { Channel } from "@handbook/shared/roles";
 
 /** A person, signed in through the web app or acting through an agent's credential. */
 export type UserPrincipal = {

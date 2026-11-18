@@ -4,7 +4,7 @@ import {
   scrubPath,
   scrubSpan,
   scrubText,
-} from "@knowledge/shared/error-reports";
+} from "@handbook/shared/error-reports";
 
 /**
  * Reports of web app errors to Sentry, only when the server sets SENTRY_DSN:
@@ -18,7 +18,7 @@ let report: ((error: unknown) => void) | undefined;
 let pending: unknown[] | undefined;
 
 function readSettings(): Settings | undefined {
-  const content = document.querySelector<HTMLMetaElement>('meta[name="knowledge-error-reporting"]')?.content;
+  const content = document.querySelector<HTMLMetaElement>('meta[name="handbook-error-reporting"]')?.content;
   if (!content) return undefined;
   try {
     return JSON.parse(content) as Settings;

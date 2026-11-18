@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SpaceSchema } from "@knowledge/shared/page";
+import type { SpaceSchema } from "@handbook/shared/page";
 import { bodyOf, joinFile, splitFile, valuesOf, withBody, withValues } from "./file";
 
 const schema: SpaceSchema = {

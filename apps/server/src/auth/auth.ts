@@ -38,7 +38,7 @@ function createAuth() {
     }),
     advanced: {
       database: { generateId: "uuid" },
-      cookiePrefix: "knowledge",
+      cookiePrefix: "handbook",
       useSecureCookies: appUrl.protocol === "https:",
       ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
     },

@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { GitPullRequestArrow } from "lucide-react";
-import type { ChangeSetSummary } from "@knowledge/shared/api/changes";
+import type { ChangeSetSummary } from "@handbook/shared/api/changes";
 import { ChangeSetStatusBadge } from "@/components/changes/status-badge";
 import { spacesQuery } from "@/components/layout/app-layout";
 import { Page, PageHeader } from "@/components/layout/page";

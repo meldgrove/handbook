@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { newPageFile } from "@knowledge/shared/page";
-import type { SpaceRole } from "@knowledge/shared/roles";
+import { newPageFile } from "@handbook/shared/page";
+import type { SpaceRole } from "@handbook/shared/roles";
 import { getDb } from "../db/client";
 import { spaceMembers, spaces, users } from "../db/schema";
 import { createApp } from "../http/app";

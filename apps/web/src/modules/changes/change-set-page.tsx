@@ -14,7 +14,7 @@ import {
   TriangleAlert,
   Undo2,
 } from "lucide-react";
-import type { ChangeSet } from "@knowledge/shared/api/changes";
+import type { ChangeSet } from "@handbook/shared/api/changes";
 import { ChangeSetStatusBadge } from "@/components/changes/status-badge";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Page } from "@/components/layout/page";

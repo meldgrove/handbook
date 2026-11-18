@@ -6,7 +6,7 @@ import {
   PAGE_STATUSES,
   type PropertyDefinition,
   type SpaceSchema,
-} from "@knowledge/shared/page";
+} from "@handbook/shared/page";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";

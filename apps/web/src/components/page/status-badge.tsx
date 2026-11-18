@@ -1,4 +1,4 @@
-import type { PageStatus } from "@knowledge/shared/page";
+import type { PageStatus } from "@handbook/shared/page";
 import { Badge } from "@/components/ui/badge";
 import { defineMessages, useT } from "@/i18n";
 

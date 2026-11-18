@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { HIGHLIGHT_END, HIGHLIGHT_START } from "@knowledge/shared/api/search";
+import { HIGHLIGHT_END, HIGHLIGHT_START } from "@handbook/shared/api/search";
 import { highlightParts } from "./search-page";
 
 describe("search snippets", () => {

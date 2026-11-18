@@ -1,6 +1,6 @@
 # Adds a PostgreSQL 18 next to the application:
 #   docker compose -f compose.yaml -f compose.postgres.yaml up -d
-# Set DATABASE_URL=postgres://knowledge:<POSTGRES_PASSWORD>@postgres:5432/knowledge in .env.
+# Set DATABASE_URL=postgres://handbook:<POSTGRES_PASSWORD>@postgres:5432/handbook in .env.
 # Back up the `postgres` volume (docs/deployment.md).
 
 services:
@@ -8,13 +8,13 @@ services:
     image: postgres:18
     restart: unless-stopped
     environment:
-      POSTGRES_USER: knowledge
+      POSTGRES_USER: handbook
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      POSTGRES_DB: knowledge
+      POSTGRES_DB: handbook
     volumes:
       - postgres:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U knowledge -d knowledge"]
+      test: ["CMD-SHELL", "pg_isready -U handbook -d handbook"]
       interval: 5s
       timeout: 3s
       retries: 20

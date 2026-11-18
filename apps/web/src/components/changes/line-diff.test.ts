@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffTextLines } from "@knowledge/shared/merge";
+import { diffTextLines } from "@handbook/shared/merge";
 import { diffBlocks } from "./line-diff";
 
 describe("diff blocks", () => {

@@ -1,6 +1,6 @@
 # Architecture
 
-How Meldgrove Knowledge works inside, for contributors. `AGENTS.md` has the
+How Meldgrove Handbook works inside, for contributors. `AGENTS.md` has the
 code rules; `docs/agents.md` explains agent access for people who connect
 agents.
 

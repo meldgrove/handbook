@@ -2,7 +2,7 @@ import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-route
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { BookOpen, ChevronsUpDown, FolderClosed, LogOut, Search, Settings, SunMoon } from "lucide-react";
-import type { SpaceSummary } from "@knowledge/shared/api/spaces";
+import type { SpaceSummary } from "@handbook/shared/api/spaces";
 import {
   Sidebar,
   SidebarContent,
@@ -66,7 +66,7 @@ export const spacesQuery = {
   staleTime: 60_000,
 };
 
-const DEFAULT_APP_NAME = "Knowledge";
+const DEFAULT_APP_NAME = "Handbook";
 
 export function initials(name: string) {
   return name

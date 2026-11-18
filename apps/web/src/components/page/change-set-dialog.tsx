@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
-import type { ChangeSet } from "@knowledge/shared/api/changes";
+import type { ChangeSet } from "@handbook/shared/api/changes";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

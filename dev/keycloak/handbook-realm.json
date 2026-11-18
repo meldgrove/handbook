@@ -1,6 +1,6 @@
 {
-  "realm": "knowledge",
-  "displayName": "Knowledge (development)",
+  "realm": "handbook",
+  "displayName": "Handbook (development)",
   "enabled": true,
   "sslRequired": "none",
   "registrationAllowed": false,
@@ -23,13 +23,13 @@
   ],
   "clients": [
     {
-      "clientId": "knowledge",
-      "name": "Knowledge (development)",
+      "clientId": "handbook",
+      "name": "Handbook (development)",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "knowledge-dev-client-secret",
+      "secret": "handbook-dev-client-secret",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
@@ -71,7 +71,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "knowledge-dev",
+          "value": "handbook-dev",
           "temporary": false
         }
       ],
@@ -87,7 +87,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "knowledge-dev",
+          "value": "handbook-dev",
           "temporary": false
         }
       ],
@@ -103,7 +103,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "knowledge-dev",
+          "value": "handbook-dev",
           "temporary": false
         }
       ],
@@ -119,7 +119,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "knowledge-dev",
+          "value": "handbook-dev",
           "temporary": false
         }
       ],

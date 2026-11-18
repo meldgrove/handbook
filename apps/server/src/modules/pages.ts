@@ -9,8 +9,8 @@ import {
   pageSaveSchema,
   revisionListQuerySchema,
   revisionRestoreSchema,
-} from "@knowledge/shared/api/pages";
-import { joinPath } from "@knowledge/shared/paths";
+} from "@handbook/shared/api/pages";
+import { joinPath } from "@handbook/shared/paths";
 import { getDb, type DbOrTx } from "../db/client";
 import { drafts, editLocks, pages } from "../db/schema";
 import type { AppEnv } from "../http/env";

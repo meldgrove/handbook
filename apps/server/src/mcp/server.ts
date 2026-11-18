@@ -18,7 +18,7 @@ Write plain Markdown (CommonMark, GitHub tables, callouts like > [!NOTE]); no HT
 /** A new MCP server with the knowledge base tools, acting through `api`. One per request (stateless). */
 export function createMcpServer(api: ApiClient): McpServer {
   const server = new McpServer(
-    { name: "meldgrove-knowledge", title: config().APP_NAME, version: "1.0.0" },
+    { name: "meldgrove-handbook", title: config().APP_NAME, version: "1.0.0" },
     { instructions: INSTRUCTIONS, capabilities: { tools: {} } },
   );
   registerTools(server, api);

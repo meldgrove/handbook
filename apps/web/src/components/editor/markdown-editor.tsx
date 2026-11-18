@@ -18,7 +18,7 @@ import {
   Table,
 } from "lucide-react";
 import { toast } from "sonner";
-import { HIGHLIGHT_END, HIGHLIGHT_START } from "@knowledge/shared/api/search";
+import { HIGHLIGHT_END, HIGHLIGHT_START } from "@handbook/shared/api/search";
 import { Button } from "@/components/ui/button";
 import {
   Command,

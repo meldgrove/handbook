@@ -11,7 +11,7 @@ import { useAuthConfig } from "@/lib/auth-config";
 import { useOauthDecision, useOauthRequest } from "./api";
 import { messages } from "./messages";
 
-const DEFAULT_APP_NAME = "Knowledge";
+const DEFAULT_APP_NAME = "Handbook";
 
 function Frame({ children }: { children: ReactNode }) {
   return (

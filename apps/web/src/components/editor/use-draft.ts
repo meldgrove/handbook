@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { DRAFT_SAVE_SECONDS } from "@knowledge/shared/limits";
+import { DRAFT_SAVE_SECONDS } from "@handbook/shared/limits";
 import { rawRequest } from "./raw-api";
 
 /**

@@ -1,4 +1,4 @@
-# Meldgrove Knowledge
+# Meldgrove Handbook
 
 A self-hosted knowledge base for an organization: spaces of Markdown pages
 that staff edit in the browser and AI agents read and change through MCP,
@@ -58,5 +58,5 @@ npm run dev
 ```
 
 Open http://localhost:5173 and sign in as `ada@example.org` (password
-`knowledge-dev`), an admin. Create a space under **Administration →
+`handbook-dev`), an admin. Create a space under **Administration →
 Spaces**.

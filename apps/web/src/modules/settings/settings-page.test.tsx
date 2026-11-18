@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TokenCreated } from "@knowledge/shared/api/tokens";
+import type { TokenCreated } from "@handbook/shared/api/tokens";
 import { renderWithProviders } from "@/test-utils";
 import { SettingsPage } from "./settings-page";
 
@@ -40,7 +40,7 @@ describe("settings page", () => {
     let tokens: unknown[] = [];
     const fetch = routeFetch({
       "GET /api/v1/connect-info": {
-        body: { appUrl: "https://knowledge.example.org", mcpUrl: "https://knowledge.example.org/mcp" },
+        body: { appUrl: "https://handbook.example.org", mcpUrl: "https://handbook.example.org/mcp" },
       },
       "GET /api/v1/connected-apps": { body: { items: [] } },
       "GET /api/v1/tokens": () => ({ body: { items: tokens } }),
@@ -53,7 +53,7 @@ describe("settings page", () => {
     const user = userEvent.setup();
     renderWithProviders(<SettingsPage />);
 
-    expect(await screen.findByText("https://knowledge.example.org/mcp")).toBeInTheDocument();
+    expect(await screen.findByText("https://handbook.example.org/mcp")).toBeInTheDocument();
     expect(await screen.findByText("No personal tokens.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "New token" }));

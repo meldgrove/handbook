@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Ban, Search, ShieldCheck, UsersRound } from "lucide-react";
-import { REMOVED_PERSON_NAME, type Person } from "@knowledge/shared/api/users";
+import { REMOVED_PERSON_NAME, type Person } from "@handbook/shared/api/users";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Page, PageHeader } from "@/components/layout/page";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";

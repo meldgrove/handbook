@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import type { AuthConfig, Me } from "@knowledge/shared/api/users";
-import { spaceRoleSchema } from "@knowledge/shared/roles";
+import type { AuthConfig, Me } from "@handbook/shared/api/users";
+import { spaceRoleSchema } from "@handbook/shared/roles";
 import { config } from "../config";
 import { getDb } from "../db/client";
 import { spaceMembers, spaces } from "../db/schema";

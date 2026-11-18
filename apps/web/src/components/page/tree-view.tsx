@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, FileText } from "lucide-react";
-import type { PageSummary } from "@knowledge/shared/api/pages";
+import type { PageSummary } from "@handbook/shared/api/pages";
 import { Button } from "@/components/ui/button";
 import { defineMessages, useT } from "@/i18n";
 import { cn } from "@/lib/utils";

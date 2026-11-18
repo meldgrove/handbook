@@ -1,4 +1,4 @@
-import type { ErrorBody } from "@knowledge/shared/api/common";
+import type { ErrorBody } from "@handbook/shared/api/common";
 
 /** An error response of the API, with its status, code and field messages. */
 export class ApiError extends Error {
@@ -88,7 +88,7 @@ async function upload<T>(path: string, file: File, signal?: AbortSignal): Promis
   return parse<T>(response);
 }
 
-/** Typed calls to the REST API. Types come from @knowledge/shared/api/*. */
+/** Typed calls to the REST API. Types come from @handbook/shared/api/*. */
 export const api = {
   get: <T>(path: string, query?: Query, signal?: AbortSignal) => request<T>("GET", path, { query, signal }),
   post: <T>(path: string, body?: unknown, query?: Query) =>
