@@ -1,22 +1,11 @@
 import type { ReactNode } from "react";
-import { fetchTransport, UpdateButton, UpdatesProvider, type UpdatesTransport } from "@meldgrove/ui/updates";
+import { UpdateButton, UpdatesProvider } from "@meldgrove/ui/updates";
 import { useIsAdmin } from "@/hooks/use-me";
 import { apiUrl, sessionEnded } from "@/lib/api";
 
 /** The deployment guide of the released version, for admins without an update service. */
 const DEPLOYMENT_GUIDE =
   "https://github.com/meldgrove/handbook/blob/stable/docs/deployment.md#automatic-updates";
-
-const routes = fetchTransport({ url: apiUrl("/admin/updates") });
-
-/** The app's four update routes; a 401 shows the sign-in page, as every API request does. */
-const transport: UpdatesTransport = {
-  async request(request) {
-    const answer = await routes.request(request);
-    if (answer.status === 401) sessionEnded();
-    return answer;
-  },
-};
 
 /**
  * Admins: the update status that the header button and the Updates page
@@ -30,9 +19,12 @@ export function AdminUpdates({ appName, children }: { appName: string; children:
       appName={appName}
       // The systemd unit of a server set up as in docs/deployment.md (/srv/handbook).
       project="handbook"
-      transport={transport}
+      url={apiUrl("/admin/updates")}
       guideUrl={DEPLOYMENT_GUIDE}
-      storageKey="handbook.update"
+      // US English dates, as everywhere in the app.
+      dateLocale="en-US"
+      // 401, 403, 404 or a sign-in page: the app's sign-in handler, as for a 401 of any API request.
+      onSignedOut={sessionEnded}
     >
       {children}
     </UpdatesProvider>
