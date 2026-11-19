@@ -40,6 +40,7 @@ test("an admin creates a space and names an editor", async ({ browser }) => {
   await dialog.getByLabel(/^Name/).fill("IT and devices");
   await dialog.getByLabel(/URL/).fill("it");
   await dialog.getByLabel(/Description/).fill("Devices, accounts and how to get help.");
+  await dialog.getByRole("radio", { name: /^IT/ }).click();
   await dialog.getByRole("button", { name: /Create/ }).click();
   await ada.waitForURL(/\/s\/it\/-\/settings/);
 
@@ -47,16 +48,18 @@ test("an admin creates a space and names an editor", async ({ browser }) => {
   await ada.getByRole("button", { name: "Add", exact: true }).click();
   await expect(ada.getByText("eddie@example.org").first()).toBeVisible();
 
-  await ada.getByRole("button", { name: "Add page type" }).click();
-  await ada.locator("#row-1-label").fill("Workflow");
-  await ada.locator("#row-1-key").fill("workflow");
-  await ada.locator("#row-1-template").fill("## Steps\n\n1. \n\n## Who helps\n");
+  // The IT template brought its page types; owners change them like anything else.
+  const troubleshooting = ada.getByRole("group", { name: "Troubleshooting" });
+  await troubleshooting.getByLabel(/What pages of this type are for/).fill("One problem and its fix.");
   const response = ada.waitForResponse(
     (r) => r.url().endsWith("/api/v1/spaces/it") && r.request().method() === "PATCH",
   );
   await ada.getByRole("button", { name: "Save" }).nth(2).click();
   expect((await response).ok()).toBe(true);
   await expect(ada.getByRole("link", { name: "IT and devices" }).first()).toBeVisible();
+  // And its section pages.
+  await ada.goto("/s/it");
+  await expect(ada.getByRole("link", { name: "Onboarding and offboarding" }).first()).toBeVisible();
 });
 
 test("people outside the access groups cannot sign in", async ({ browser }) => {
@@ -71,7 +74,7 @@ test("an admin writes a page in Markdown with properties", async ({ browser }) =
   await ada.goto("/s/it/-/new");
   await ada.getByLabel("Title").fill("Request a laptop");
   await ada.getByRole("combobox").nth(1).click();
-  await ada.getByRole("option", { name: "Workflow" }).click();
+  await ada.getByRole("option", { name: "How-to" }).click();
   await ada.getByLabel("Tags").fill("hardware, onboarding");
   await ada.locator(".cm-content").first().click();
   await ada.keyboard.press("Control+End");
@@ -84,7 +87,7 @@ test("an admin writes a page in Markdown with properties", async ({ browser }) =
 
   const file = await ada.request.get("/s/it/request-a-laptop.md");
   expect(await file.text()).toContain(
-    "title: Request a laptop\ntype: workflow\ntags:\n  - hardware\n  - onboarding\n",
+    "title: Request a laptop\ntype: how-to\ntags:\n  - hardware\n  - onboarding\n",
   );
 });
 

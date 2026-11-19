@@ -66,6 +66,14 @@ export const BUILT_IN_PROPERTIES: Record<BuiltInKey, { label: string; type: Prop
   },
 };
 
+/** Built-in properties a page type may require (title is always required; status has a default). */
+export const REQUIRABLE_BUILT_IN_KEYS = ["description", "tags", "owner", "reviewed", "search_terms"] as const;
+export type RequirableBuiltInKey = (typeof REQUIRABLE_BUILT_IN_KEYS)[number];
+
+export function isRequirableBuiltIn(key: string): key is RequirableBuiltInKey {
+  return (REQUIRABLE_BUILT_IN_KEYS as readonly string[]).includes(key);
+}
+
 export const PROPERTY_KEY_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
 
 export const propertyDefinitionSchema = z
@@ -98,9 +106,11 @@ export const pageTypeDefinitionSchema = z.object({
     .string()
     .regex(PAGE_TYPE_KEY_PATTERN, "Use 1 to 40 lowercase letters, digits or -, starting with a letter"),
   label: z.string().trim().min(1, "Add a label").max(60),
+  /** What pages of this type are for; shown when choosing a type. Missing on types saved before it existed. */
+  help: z.string().trim().max(200).optional(),
   /** Markdown body a new page of this type starts with. */
   template: z.string().max(20_000).default(""),
-  /** Custom property keys a page of this type must have. */
+  /** Property keys a page of this type must have: the space's own, or requirable built-in ones. */
   requiredProperties: z.array(z.string()).max(50).default([]),
 });
 export type PageTypeDefinition = z.infer<typeof pageTypeDefinitionSchema>;
@@ -126,7 +136,7 @@ export function spaceSchemaProblems(schema: SpaceSchema): Record<string, string>
     if (types.has(pageType.key)) problems[`pageTypes.${index}.key`] = "This key is used twice";
     types.add(pageType.key);
     for (const key of pageType.requiredProperties) {
-      if (!keys.has(key)) {
+      if (!keys.has(key) && !isRequirableBuiltIn(key)) {
         problems[`pageTypes.${index}.requiredProperties`] = `Unknown property “${key}”`;
       }
     }
@@ -366,9 +376,19 @@ export function validateFrontmatter(
   }
   if (type) {
     const pageType = schema.pageTypes.find((candidate) => candidate.key === type);
+    const builtIn: Record<RequirableBuiltInKey, boolean> = {
+      description: description !== null,
+      tags: tags.length > 0,
+      owner: owner !== null,
+      reviewed: reviewed !== null,
+      search_terms: searchTerms.length > 0,
+    };
     for (const key of pageType?.requiredProperties ?? []) {
-      if (custom[key] === undefined) {
-        const label = definitions.get(key)?.label ?? key;
+      const present = isRequirableBuiltIn(key) ? builtIn[key] : custom[key] !== undefined;
+      if (!present) {
+        const label = isRequirableBuiltIn(key)
+          ? BUILT_IN_PROPERTIES[key].label
+          : (definitions.get(key)?.label ?? key);
         fail(key, `Pages of type “${pageType?.label ?? type}” need “${label}”`);
       }
     }

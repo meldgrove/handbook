@@ -12,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Me, Person } from "@handbook/shared/api/users";
 import { AdminPeoplePage } from "./people-page";
-import { spaceSlugFrom } from "./spaces-page";
+import { AdminSpacesPage, spaceSlugFrom } from "./spaces-page";
 
 const me: Me = {
   id: "0b5a3e5e-3c1f-4d8e-9f3a-555555555555",
@@ -51,20 +51,21 @@ function routeFetch(routes: Record<string, unknown>) {
   );
 }
 
-function renderPeople() {
+function renderAdmin(path: "/admin/people" | "/admin/spaces") {
   const rootRoute = createRootRoute();
   const route = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/admin/people",
+    path,
     component: () => (
       <Suspense fallback={null}>
-        <AdminPeoplePage />
+        {path === "/admin/people" ? <AdminPeoplePage /> : <AdminSpacesPage />}
       </Suspense>
     ),
   });
+  const settings = createRoute({ getParentRoute: () => rootRoute, path: "/s/$space/-/settings" });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ["/admin/people"] }),
+    routeTree: rootRoute.addChildren([route, settings]),
+    history: createMemoryHistory({ initialEntries: [path] }),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -80,6 +81,38 @@ describe("admin", () => {
   it("makes space slugs from names", () => {
     expect(spaceSlugFrom("People & Culture")).toBe("people-culture");
     expect(spaceSlugFrom("A".repeat(60))).toHaveLength(40);
+  });
+
+  it("creates a space from the chosen template", async () => {
+    routeFetch({
+      "GET /api/v1/spaces": { items: [] },
+      "POST /api/v1/spaces": { slug: "it" },
+    });
+    renderAdmin("/admin/spaces");
+    const user = userEvent.setup();
+    await user.click((await screen.findAllByRole("button", { name: "New space" }))[0]!);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("radio", { name: /^Blank/ })).toBeChecked();
+    expect(dialog).toHaveTextContent("Starts without pages.");
+    await user.click(within(dialog).getByRole("radio", { name: /^IT/ }));
+    expect(dialog).toHaveTextContent(
+      "Page types: Overview, How-to, Policy, Reference, Tool, Troubleshooting. Starts with these pages: Software,",
+    );
+    await user.type(within(dialog).getByLabelText("Name"), "IT and devices");
+    await user.click(within(dialog).getByRole("button", { name: "Create space" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/spaces"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    const post = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(post[1]!.body as string)).toEqual({
+      name: "IT and devices",
+      slug: "it-and-devices",
+      description: "",
+      template: "it",
+    });
   });
 
   it("protects yourself and admins from ADMIN_EMAILS", async () => {
@@ -99,7 +132,7 @@ describe("admin", () => {
         ],
       },
     });
-    renderPeople();
+    renderAdmin("/admin/people");
     const self = (await screen.findByText("(you)")).closest("tr")!;
     expect(within(self).getByRole("switch")).toBeDisabled();
     expect(within(self).queryByRole("button", { name: "Block" })).not.toBeInTheDocument();
@@ -122,7 +155,7 @@ describe("admin", () => {
       "GET /api/v1/admin/people": { items: [rita] },
       [`DELETE /api/v1/admin/people/${rita.id}`]: {},
     });
-    renderPeople();
+    renderAdmin("/admin/people");
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Remove" }));
     const dialog = await screen.findByRole("alertdialog", { name: "Remove Rita Reader?" });

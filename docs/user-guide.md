@@ -54,8 +54,12 @@ Editors use **Edit** on a page, or **New page** in a space.
   `[Leave](/s/hr/leave)` to another space. The toolbar's link button finds
   pages for you.
 - **Images:** paste or drop them into the text, or use the image button.
-- **Page types** (set up by owners) start a new page from a template and can
-  require properties.
+- **Page types** start a new page from a template and can require
+  properties. Every space starts with four: **Overview** (what something is,
+  or the start page of a section), **How-to** (the steps of one task),
+  **Policy** (rules people must follow; needs an owner and the date it was
+  last reviewed) and **Reference** (facts to look up). Owners can change
+  them and add more.
 - **Status:** `draft` pages are only visible to the space's editors;
   `deprecated` pages show a notice, with "Replaced by" pointing to the newer
   page.
@@ -129,6 +133,25 @@ review; it never publishes or merges. See [Agents and MCP](agents.md).
 
 ## Owners: setting up a space
 
+Admins create spaces under **Administration → Spaces** and pick a
+**template**: what the space starts with. Every template has the four
+default page types; the others add their own page types, properties and
+top-level pages for the main sections:
+
+| Template    | Adds page types          | Adds properties                           | Starts with pages                                                            |
+| ----------- | ------------------------ | ----------------------------------------- | ---------------------------------------------------------------------------- |
+| Blank       |                          |                                           |                                                                              |
+| Team        | Decision                 |                                           | How we work, Decisions, Joining the team                                     |
+| IT          | Tool, Troubleshooting    | Systems, Audience                         | Software, How-to guides, Onboarding and offboarding, Help, Policies, IT team |
+| People      | Benefit                  | Applies to, In effect since               | Joining and leaving, Time off, Pay and benefits, Working here, Policies      |
+| Finance     |                          | Applies to, In effect since, Form or tool | Expenses and travel, Purchases and invoices, Budgets, Policies               |
+| Engineering | Runbook, Decision        | Systems, Repository                       | Architecture, Development, Runbooks, Decisions                               |
+| Product     | Spec, Research, Decision | Stage                                     | Strategy, Specs, Research, Decisions                                         |
+
+The same key means the same thing in every space: `type: policy` or a
+`systems` property, for example. Everything a template brings belongs to
+the space afterwards; owners change it like anything else.
+
 In the space's **Settings**:
 
 - **Owners and editors**: add people by email (also before their first
@@ -137,8 +160,13 @@ In the space's **Settings**:
   list, number, yes/no, date, one choice, several choices, URL, person),
   optionally required. Pages may only use defined properties; a change that
   would make existing pages invalid is refused with the pages named.
-- **Page types**: a label, a key, a template for new pages and required
-  properties.
+- **Page types**: a label, a key, what pages of the type are for, a
+  template for new pages and required properties: the space's own or the
+  built-in description, tags, owner, last reviewed and search terms.
+- **Add from a template**: adds a template's page types and properties that
+  the space doesn't have yet, e.g. the default page types to a space created
+  before they existed. What the space has stays as it is; pages come only
+  with new spaces.
 
 The space menu also has **Export**: a zip of the space's Markdown files
 (sub-pages in folders) and the images and attachments they use, in

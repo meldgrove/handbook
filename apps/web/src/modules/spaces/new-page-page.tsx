@@ -101,6 +101,7 @@ function NewPageForm(props: {
   const values = "values" in read ? read.values : {};
   const title = typeof values.title === "string" ? values.title : "";
   const type = typeof values.type === "string" ? values.type : null;
+  const typeHelp = props.space.pageTypes.find((pageType) => pageType.key === type)?.help;
   const effectiveSlug = slugEdited ? slug : title.trim() ? slugify(title) : "";
   const parentPath = parent === TOP ? null : parent;
   const path = effectiveSlug ? joinPath(parentPath, effectiveSlug) : (parentPath ?? "");
@@ -303,6 +304,7 @@ function NewPageForm(props: {
                   ))}
                 </SelectContent>
               </Select>
+              {typeHelp ? <FieldDescription>{typeHelp}</FieldDescription> : null}
             </Field>
           ) : null}
         </div>
