@@ -168,6 +168,11 @@ export function createApp() {
   );
 
   const api = new Hono<AppEnv>();
+  // API responses can carry private content and newly issued credentials.
+  api.use("*", async (c, next) => {
+    c.header("cache-control", "no-store");
+    await next();
+  });
   const uploadLimit = bodyLimit({ maxSize: config().MAX_UPLOAD_MB * 1024 * 1024 + 64 * 1024 });
   const jsonLimit = bodyLimit({ maxSize: 2 * 1024 * 1024 });
   api.use(

@@ -55,6 +55,7 @@ describe("Markdown files, llms.txt and uploads", () => {
     );
     const moved = await testApp().request("/s/it/laptop/setup.md", { headers: { "x-test-user": reader.id } });
     expect(moved.status).toBe(301);
+    expect(moved.headers.get("cache-control")).toBe("no-store");
     expect(moved.headers.get("location")).toBe("/s/it/notebook/setup.md");
 
     const index = await request("GET", "/s/it.md", { userId: reader.id });

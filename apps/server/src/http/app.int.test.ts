@@ -88,3 +88,12 @@ it("limits the body of a sign-in request", async () => {
   expect(response.status).toBe(413);
   expect(await response.json()).toMatchObject({ error: { code: "payload_too_large" } });
 });
+
+it("marks private API responses and the Markdown directory as non-cacheable", async () => {
+  const user = await createUser();
+  for (const path of ["/api/v1/spaces", "/api/v1/tokens", "/llms.txt"]) {
+    const response = await request("GET", path, { userId: user.id });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  }
+});

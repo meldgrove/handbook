@@ -145,7 +145,10 @@ export function rawRoutes() {
   app.get("/llms.txt", async (c) => {
     const principal = c.get("principal");
     if (!principal) return unauthorized(c);
-    return c.body(await llmsText(), 200, { "content-type": "text/plain; charset=utf-8" });
+    return c.body(await llmsText(), 200, {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    });
   });
 
   app.get("/s/*", async (c, next) => {
@@ -169,7 +172,11 @@ export function rawRoutes() {
     const context = await spaceContext(getDb(), principal, space);
     const page = await findPageByPathOrRedirect(getDb(), space.id, path);
     if (!page || (page.status === "draft" && !context.abilities.seeDrafts)) return notFoundText(c);
-    if (page.path !== path) return c.redirect(pageMarkdownUrl(slug, page.path), 301);
+    if (page.path !== path) {
+      // The destination is only visible while this principal has access.
+      c.header("cache-control", "no-store");
+      return c.redirect(pageMarkdownUrl(slug, page.path), 301);
+    }
     return markdown(c, page.markdown);
   });
 
