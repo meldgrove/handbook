@@ -3,11 +3,17 @@ import type { QueryClient } from "@tanstack/react-query";
 import { queryClient } from "@/lib/query";
 import { rootRoute } from "@/routes/root";
 import { appRoute } from "@/routes/app";
+import { focusRoute } from "@/routes/focus";
 import { signInRoute } from "@/routes/sign-in";
-import { appRoutes, rootRoutes } from "@/modules";
+import { appRoutes, focusRoutes, rootRoutes } from "@/modules";
 import { LoadingState } from "@/components/states";
 
-const routeTree = rootRoute.addChildren([signInRoute, ...rootRoutes, appRoute.addChildren(appRoutes)]);
+const routeTree = rootRoute.addChildren([
+  signInRoute,
+  ...rootRoutes,
+  appRoute.addChildren(appRoutes),
+  focusRoute.addChildren(focusRoutes),
+]);
 
 /** The app's router; tests pass a memory history and their own query client. */
 export function createAppRouter(options: { history?: RouterHistory; queryClient?: QueryClient } = {}) {

@@ -44,6 +44,13 @@ export const messages = defineMessages({
     leave: "Leave",
     cancel: "Cancel",
     titleFirst: "Add a title first.",
+    back: "Back",
+    changeAddress: "Change",
+    done: "Done",
+    startFrom: "Start from a page type",
+    blank: "Blank page",
+    blankHelp: "Start from an empty page.",
+    notSaved: "Not saved yet",
     suggestNewTitle: "Add “{title}”",
     // Trash
     trashTitle: "Trash of {space}",

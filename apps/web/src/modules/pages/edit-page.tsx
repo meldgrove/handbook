@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, ArrowLeft, GitMerge, Lock, Pencil } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, GitMerge, Lock, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import type { ChangeSet } from "@handbook/shared/api/changes";
 import type { Draft, Page } from "@handbook/shared/api/pages";
@@ -9,18 +9,20 @@ import type { FileInfo, Space } from "@handbook/shared/api/spaces";
 import { hasConflictMarkers } from "@handbook/shared/merge";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { readPageConflict, saveBlocker, type PageConflict } from "@/components/editor/conflict";
-import { LazyEditorWorkspace as EditorWorkspace } from "@/components/editor/lazy-workspace";
 import { lockToken, readLockHolder } from "@/components/editor/lock";
 import { apiErrorOf, rawRequest } from "@/components/editor/raw-api";
 import { useEditLock } from "@/components/editor/use-edit-lock";
 import { discardDraft, useDraftAutosave } from "@/components/editor/use-draft";
 import { Page as PageLayout } from "@/components/layout/page";
+import { EditorBanner, PageEditor } from "@/components/editor/page-editor";
 import { ChangeSetDialog, submitSuggestion } from "@/components/page/change-set-dialog";
 import { changeSetPageQuery, changeSetQuery, pageQuery, spaceQuery } from "@/components/page/queries";
 import { ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import { useFormatter } from "@/lib/format";
@@ -147,6 +149,7 @@ function Editor({ init }: { init: EditorInit }) {
   // "Save as suggestion" after losing the lock turns the live editor into a suggestion.
   const [suggesting, setSuggesting] = useState(init.mode === "changeSet");
   const [confirmTakeover, setConfirmTakeover] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
   const allowLeave = useRef(false);
   // A change set made by this editor's dialog: submitted for review once the change is in it.
   const submitAfterSave = useRef(false);
@@ -156,9 +159,8 @@ function Editor({ init }: { init: EditorInit }) {
   const lockStatus = lock.state.status;
   const dirty = file !== savedFile;
   const spaceSlug = init.space.slug;
-  const schema = { properties: init.space.properties, pageTypes: init.space.pageTypes };
 
-  useDraftAutosave({
+  const { savedAt: draftSavedAt } = useDraftAutosave({
     pageId: init.pageId,
     file,
     baseRevision,
@@ -326,115 +328,76 @@ function Editor({ init }: { init: EditorInit }) {
     }
   };
 
-  const heading = suggesting
-    ? t("suggestTitle", { title: init.title })
-    : t("editTitle", { title: init.title });
   const lockBlocks =
     live && !suggesting && (lockStatus === "locked" || lockStatus === "acquiring" || lockStatus === "failed");
   // An expired lock still saves when nobody else took the page meanwhile (the server checks).
   const canSaveLive = lockStatus === "held" || lockStatus === "expired";
   const saveDisabled = saving || (!suggesting && !canSaveLive) || !dirty;
 
-  return (
-    <PageLayout wide>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <Button variant="link" className="h-auto px-0 text-sm" asChild>
-            <Link to="/s/$space/$" params={{ space: spaceSlug, _splat: init.path }}>
-              <ArrowLeft />
-              {t("backToPage")}
-            </Link>
+  let blocked: ReactNode = null;
+  if (live && !suggesting && lock.state.status === "acquiring") {
+    blocked = <LoadingState label={t("acquiring")} />;
+  } else if (live && !suggesting && lock.state.status === "failed") {
+    blocked = (
+      <BlockedCard
+        icon={<AlertCircle />}
+        title={t("lockFailed", { message: lock.state.message })}
+        actions={
+          <Button className="rounded-full" onClick={lock.retry}>
+            {t("retry")}
           </Button>
-          <h1 className="text-2xl font-semibold tracking-tight break-words">{heading}</h1>
-          {suggesting && createdNumber ? (
-            <p className="text-muted-foreground text-sm">
-              <Link
-                to="/changes/$number"
-                params={{ number: String(createdNumber) }}
-                className="underline underline-offset-4"
-              >
-                {t("changeSetLabel", { number: createdNumber, title: init.changeSetTitle ?? "" })}
+        }
+      />
+    );
+  } else if (live && !suggesting && lock.state.status === "locked") {
+    const holder = lock.state.holder;
+    blocked = (
+      <BlockedCard
+        icon={<Lock />}
+        title={t("lockedTitle")}
+        text={
+          holder.mine
+            ? t("lockedMineText")
+            : t("lockedText", { name: holder.user.name, time: format.relative(holder.since) })
+        }
+        actions={
+          <>
+            <Button
+              className="rounded-full"
+              onClick={() => (holder.mine ? void lock.takeOver() : setConfirmTakeover(true))}
+            >
+              {holder.mine ? t("editHere") : t("takeOver")}
+            </Button>
+            <Button variant="outline" className="rounded-full" asChild>
+              <Link to="/pages/$id/edit" params={{ id: init.pageId }} search={{ changeSet: "new" }}>
+                {t("suggestInstead")}
               </Link>
-            </p>
-          ) : null}
-        </div>
-        {lockBlocks ? null : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={cancel} disabled={saving}>
-              {t("cancel")}
             </Button>
-            <Button onClick={save} disabled={saveDisabled}>
-              {saving ? <Spinner /> : null}
-              {suggesting ? t("saveSuggestion") : t("save")}
+            <Button variant="ghost" className="rounded-full" asChild>
+              <Link to="/s/$space/$" params={{ space: spaceSlug, _splat: init.path }}>
+                {t("backToPage")}
+              </Link>
             </Button>
-          </div>
-        )}
-      </div>
+          </>
+        }
+      />
+    );
+  }
 
-      {live && !suggesting && lockStatus === "acquiring" ? <LoadingState label={t("acquiring")} /> : null}
-      {live && !suggesting && lockStatus === "failed" && lock.state.status === "failed" ? (
-        <Alert variant="destructive">
-          <AlertCircle />
-          <AlertDescription className="flex flex-wrap items-center gap-2">
-            <span>{t("lockFailed", { message: lock.state.message })}</span>
-            <Button size="sm" variant="outline" onClick={lock.retry}>
-              {t("retry")}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {live && !suggesting && lock.state.status === "locked" ? (
-        <Alert>
-          <Lock />
-          <AlertTitle>{t("lockedTitle")}</AlertTitle>
-          <AlertDescription className="flex flex-col gap-3">
-            <span>
-              {lock.state.holder.mine
-                ? t("lockedMineText")
-                : t("lockedText", {
-                    name: lock.state.holder.user.name,
-                    time: format.relative(lock.state.holder.since),
-                  })}
-            </span>
-            <span className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                onClick={() =>
-                  lock.state.status === "locked" && lock.state.holder.mine
-                    ? void lock.takeOver()
-                    : setConfirmTakeover(true)
-                }
-              >
-                {lock.state.holder.mine ? t("editHere") : t("takeOver")}
-              </Button>
-              <Button size="sm" variant="outline" asChild>
-                <Link to="/pages/$id/edit" params={{ id: init.pageId }} search={{ changeSet: "new" }}>
-                  {t("suggestInstead")}
-                </Link>
-              </Button>
-              <Button size="sm" variant="ghost" asChild>
-                <Link to="/s/$space/$" params={{ space: spaceSlug, _splat: init.path }}>
-                  {t("backToPage")}
-                </Link>
-              </Button>
-            </span>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+  const banners = (
+    <>
       {live && !suggesting && lock.state.status === "expired" ? (
-        <Alert>
-          <Lock />
-          <AlertTitle>{t("expiredTitle")}</AlertTitle>
-          <AlertDescription>{t("expiredText")}</AlertDescription>
-        </Alert>
+        <EditorBanner tone="warning" icon={<Lock />} title={t("expiredTitle")}>
+          {t("expiredText")}
+        </EditorBanner>
       ) : null}
       {live && !suggesting && lock.state.status === "lost" ? (
-        <Alert variant="destructive">
-          <Lock />
-          <AlertTitle>{t("lostTitle")}</AlertTitle>
-          <AlertDescription className="flex flex-col gap-3">
-            <span>{lock.state.by ? t("lostText", { name: lock.state.by }) : t("lostTextUnknown")}</span>
-            <span className="flex flex-wrap gap-2">
+        <EditorBanner
+          tone="error"
+          icon={<Lock />}
+          title={t("lostTitle")}
+          actions={
+            <>
               <Button size="sm" variant="outline" onClick={() => void copyText()}>
                 {t("copyText")}
               </Button>
@@ -447,22 +410,18 @@ function Editor({ init }: { init: EditorInit }) {
               >
                 {t("saveAsSuggestion")}
               </Button>
-            </span>
-          </AlertDescription>
-        </Alert>
+            </>
+          }
+        >
+          {lock.state.by ? t("lostText", { name: lock.state.by }) : t("lostTextUnknown")}
+        </EditorBanner>
       ) : null}
-      {live && draftOpen && init.draft && !lockBlocks ? (
-        <Alert>
-          <Pencil />
-          <AlertTitle>{t("draftTitle")}</AlertTitle>
-          <AlertDescription className="flex flex-col gap-3">
-            <span>
-              {t("draftText", {
-                time: format.relative(init.draft.updatedAt),
-                revision: init.draft.baseRevision,
-              })}
-            </span>
-            <span className="flex flex-wrap gap-2">
+      {live && draftOpen && init.draft ? (
+        <EditorBanner
+          icon={<Pencil />}
+          title={t("draftTitle")}
+          actions={
+            <>
               <Button size="sm" onClick={() => void restoreDraft()}>
                 {t("restoreDraft")}
               </Button>
@@ -476,52 +435,149 @@ function Editor({ init }: { init: EditorInit }) {
               >
                 {t("discardDraft")}
               </Button>
-            </span>
-          </AlertDescription>
-        </Alert>
+            </>
+          }
+        >
+          {t("draftText", { time: format.relative(init.draft.updatedAt), revision: init.draft.baseRevision })}
+        </EditorBanner>
       ) : null}
       {conflict ? (
-        <Alert variant={hasConflictMarkers(file) ? "destructive" : "default"}>
-          <GitMerge />
-          <AlertTitle>{t("conflictTitle")}</AlertTitle>
-          <AlertDescription>
-            {hasConflictMarkers(file)
-              ? t("conflictText", { name: conflict.updatedBy ?? t("conflictSomeone") })
-              : t("conflictResolved")}
-          </AlertDescription>
-        </Alert>
+        <EditorBanner
+          tone={hasConflictMarkers(file) ? "warning" : "info"}
+          icon={<GitMerge />}
+          title={t("conflictTitle")}
+        >
+          {hasConflictMarkers(file)
+            ? t("conflictText", { name: conflict.updatedBy ?? t("conflictSomeone") })
+            : t("conflictResolved")}
+        </EditorBanner>
       ) : null}
+    </>
+  );
 
-      {lockBlocks ? null : (
-        <>
-          <EditorWorkspace
-            file={file}
-            onChange={setFile}
-            space={spaceSlug}
-            path={init.path}
-            schema={schema}
-            fields={fields}
-            onUpload={upload}
-            onActivity={lock.markActivity}
-            propertiesOpen={false}
-          />
-          {!suggesting ? (
-            <div className="max-w-xl">
-              <label htmlFor="edit-note" className="text-sm font-medium">
-                {t("note")}
-              </label>
-              <Input
-                id="edit-note"
-                value={note}
-                maxLength={300}
-                placeholder={t("notePlaceholder")}
-                onChange={(event) => setNote(event.target.value)}
-                className="mt-1"
-              />
-            </div>
-          ) : null}
-        </>
+  const status = saving ? (
+    <>
+      <Spinner />
+      {t("saving")}
+    </>
+  ) : dirty && draftSavedAt ? (
+    <>
+      <CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />
+      {t("draftSaved")}
+    </>
+  ) : dirty ? (
+    t("unsaved")
+  ) : null;
+
+  const actions = lockBlocks ? null : (
+    <>
+      <Button
+        variant="ghost"
+        className="hidden rounded-full sm:inline-flex"
+        onClick={cancel}
+        disabled={saving}
+      >
+        {t("cancel")}
+      </Button>
+      {suggesting ? (
+        <Button className="rounded-full px-4" onClick={save} disabled={saveDisabled}>
+          {saving ? <Spinner /> : null}
+          {t("saveSuggestion")}
+        </Button>
+      ) : (
+        <Popover open={noteOpen} onOpenChange={setNoteOpen}>
+          <PopoverTrigger asChild>
+            <Button className="rounded-full px-4" disabled={saveDisabled}>
+              {saving ? <Spinner /> : null}
+              {t("save")}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80">
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setNoteOpen(false);
+                void saveLive();
+              }}
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-note">{t("note")}</Label>
+                <Input
+                  id="edit-note"
+                  autoFocus
+                  value={note}
+                  maxLength={300}
+                  placeholder={t("notePlaceholder")}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">{t("noteHelp")}</p>
+              </div>
+              <Button type="submit" className="w-full">
+                {t("savePage")}
+              </Button>
+            </form>
+          </PopoverContent>
+        </Popover>
       )}
+    </>
+  );
+
+  return (
+    <>
+      <PageEditor
+        file={file}
+        onChange={setFile}
+        space={init.space}
+        path={init.path}
+        fields={fields}
+        onUpload={upload}
+        onActivity={lock.markActivity}
+        onSave={() => {
+          if (saveDisabled) return;
+          if (suggesting) save();
+          else void saveLive();
+        }}
+        back={
+          <Button variant="ghost" size="icon" className="rounded-full" asChild>
+            <Link
+              to="/s/$space/$"
+              params={{ space: spaceSlug, _splat: init.path }}
+              aria-label={t("backToPage")}
+              title={t("backToPage")}
+            >
+              <ArrowLeft />
+            </Link>
+          </Button>
+        }
+        context={
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="text-muted-foreground truncate">{init.space.name}</span>
+            <span className="text-muted-foreground/60">/</span>
+            <span className="truncate font-medium">{init.title}</span>
+            {suggesting ? (
+              createdNumber ? (
+                <Link
+                  to="/changes/$number"
+                  params={{ number: String(createdNumber) }}
+                  className="text-muted-foreground shrink-0 underline underline-offset-4"
+                >
+                  {t("changeSetLabel", { number: createdNumber, title: init.changeSetTitle ?? "" })}
+                </Link>
+              ) : (
+                <Badge variant="secondary" className="shrink-0">
+                  {t("suggestionBadge")}
+                </Badge>
+              )
+            ) : null}
+          </span>
+        }
+        status={status}
+        actions={actions}
+        banners={banners}
+        blocked={blocked}
+        typeChip
+      />
 
       {askChangeSet ? (
         <ChangeSetDialog
@@ -555,6 +611,22 @@ function Editor({ init }: { init: EditorInit }) {
         destructive
         onConfirm={() => blocker.proceed?.()}
       />
-    </PageLayout>
+    </>
+  );
+}
+
+/** Instead of the editor: why the page cannot be edited here now, and what to do. */
+function BlockedCard(props: { icon: ReactNode; title: string; text?: string; actions?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-5 text-center">
+      <div className="bg-muted text-muted-foreground grid size-12 place-items-center rounded-full [&>svg]:size-5">
+        {props.icon}
+      </div>
+      <div className="space-y-2">
+        <h1 className="text-xl font-semibold tracking-tight">{props.title}</h1>
+        {props.text ? <p className="text-muted-foreground">{props.text}</p> : null}
+      </div>
+      {props.actions ? <div className="flex flex-wrap justify-center gap-2">{props.actions}</div> : null}
+    </div>
   );
 }

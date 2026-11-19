@@ -43,6 +43,7 @@ import { queryClient } from "@/lib/query";
 import { defineMessages, useT } from "@/i18n";
 import { NAVIGATION, navMessages } from "@/app/navigation";
 import { Input } from "@/components/ui/input";
+import { initials } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { UpdateButton } from "@/modules/updates/update-button";
 
@@ -68,15 +69,6 @@ export const spacesQuery = {
 };
 
 const DEFAULT_APP_NAME = "Handbook";
-
-export function initials(name: string) {
-  return name
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]!.toUpperCase())
-    .join("");
-}
 
 function UserMenu() {
   const me = useMe();
@@ -255,17 +247,54 @@ function HeaderSearch() {
   );
 }
 
+const SIDEBAR_KEY = "handbook.sidebar";
+type SidebarPreference = { page?: boolean; app?: boolean };
+
+/** A page of a space (/s/<space>/<path>), not the space itself or its own screens (/s/<space>/-/…). */
+export function isPagePath(pathname: string): boolean {
+  return /^\/s\/[^/]+\/(?!-\/)[^/]/.test(pathname);
+}
+
+/**
+ * Whether the sidebar is open: on pages it starts folded, so the text gets
+ * the room; elsewhere it starts open. Each person's choice is remembered
+ * for both, in this browser.
+ */
+function useSidebarOpen(): [boolean, (open: boolean) => void] {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const onPage = isPagePath(pathname);
+  const [preference, setPreference] = useState<SidebarPreference>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(SIDEBAR_KEY) ?? "{}") as SidebarPreference;
+    } catch {
+      return {};
+    }
+  });
+  const open = onPage ? (preference.page ?? false) : (preference.app ?? true);
+  const setOpen = (value: boolean) => {
+    const next = { ...preference, [onPage ? "page" : "app"]: value };
+    setPreference(next);
+    try {
+      window.localStorage.setItem(SIDEBAR_KEY, JSON.stringify(next));
+    } catch {
+      // Private windows may refuse storage; the choice then lasts until reload.
+    }
+  };
+  return [open, setOpen];
+}
+
 /** The signed-in application frame: sidebar, header and the page. */
 export function AppLayout() {
   const m = useT(messages);
   const appName = useAuthConfig()?.appName || DEFAULT_APP_NAME;
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
   useEffect(() => {
     document.title = appName;
   }, [appName]);
 
   return (
     <TooltipProvider delayDuration={300}>
-      <SidebarProvider>
+      <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <a
           href="#main"
           className="bg-background sr-only z-50 rounded-md px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"

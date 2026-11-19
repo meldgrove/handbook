@@ -15,7 +15,9 @@ npm workspaces, Node.js 26, strict TypeScript.
   Drizzle ORM on PostgreSQL, remark (Markdown analysis), the MCP TypeScript
   SDK, pino logs, Sentry, Vitest.
 - `apps/web`: Vite + React 19, TanStack Router and Query, shadcn/ui with
-  Tailwind CSS 4, CodeMirror 6 (the editor), react-markdown. US English.
+  Tailwind CSS 4, Tiptap (the rich-text editor; `components/editor/rich-text/`
+  keeps unchanged Markdown as written), CodeMirror 6 (the Markdown view),
+  react-markdown. US English.
 - `packages/shared` (`@handbook/shared/*`): zod schemas of the API
   (`api/*.ts`), the page file model (`page.ts`), paths and links
   (`paths.ts`), merging and edits (`merge.ts`), roles and abilities
