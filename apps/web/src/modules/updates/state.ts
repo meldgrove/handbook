@@ -21,11 +21,11 @@ export function buttonState(
   if (options.waiting || status?.installing) return "installing";
   if (!response.reachable || !status) return "unreachable";
   if (options.checking || status.checking) return "checking";
-  if (status.mode === "off") return "off";
   if (failedUpdate(response)) return "failed";
   if (status.available) return "available";
   if (status.attention) return "attention";
-  return "current";
+  // Mode off still shows what is new (without installing); "off" only when nothing is.
+  return status.mode === "off" ? "off" : "current";
 }
 
 /** The update whose last installation failed, while it is still offered. */

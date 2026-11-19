@@ -181,8 +181,9 @@ installs nothing: the preview runs until a release is newer.
 **The update button:** admins see an update icon in the header. It checks on
 click, shows an available update with its changes, installs it on request
 (**Install now**), shows the progress, reloads the page when the new version
-runs, and says why an installation failed. Admins choose the channel under
-**Administration → Updates**. The app reaches the updater at `UPDATER_URL`
+runs, and says why an installation failed. With automatic updates off on
+the server, it still shows new releases, but nothing installs from the app.
+Admins choose the channel under **Administration → Updates**. The app reaches the updater at `UPDATER_URL`
 (`http://updater:8080` in `compose.yaml`); never publish the updater's port.
 
 Set up [backups](#backups) first: migrations run without anyone watching.

@@ -337,6 +337,8 @@ function PopoverBody(props: {
   const { data } = props;
   const status = data.updater;
   const installed = installedVersion(data) ?? t("unknownVersion");
+  // Mode off: the popover shows the update, but nothing can install from here.
+  const installable = status?.mode !== "off";
 
   if (props.state === "installing") {
     const version = props.installingVersion;
@@ -373,12 +375,16 @@ function PopoverBody(props: {
           </PopoverDescription>
         </PopoverHeader>
         <p>{t("stillRunning", { version: installed })}</p>
-        <Button
-          className="w-full"
-          onClick={() => props.onInstall(update, update.version === status?.attention?.version)}
-        >
-          {t("tryAgain")}
-        </Button>
+        {installable ? (
+          <Button
+            className="w-full"
+            onClick={() => props.onInstall(update, update.version === status?.attention?.version)}
+          >
+            {t("tryAgain")}
+          </Button>
+        ) : (
+          <OffNote />
+        )}
       </>
     );
   }
@@ -411,10 +417,14 @@ function PopoverBody(props: {
             {t("alsoNeedsSteps", { version: status.attention.version })}
           </p>
         ) : null}
-        <Button className="w-full" onClick={() => props.onInstall(update, false)}>
-          <Download aria-hidden />
-          {t("installNow")}
-        </Button>
+        {installable ? (
+          <Button className="w-full" onClick={() => props.onInstall(update, false)}>
+            <Download aria-hidden />
+            {t("installNow")}
+          </Button>
+        ) : (
+          <OffNote />
+        )}
       </>
     );
   }
@@ -429,31 +439,38 @@ function PopoverBody(props: {
         </PopoverHeader>
         <Notes update={update} />
         <ReleaseNotes update={update} />
-        <Button variant="outline" className="w-full" onClick={() => props.onInstall(update, true)}>
-          {t("installAnyway")}
-        </Button>
+        {installable ? (
+          <Button variant="outline" className="w-full" onClick={() => props.onInstall(update, true)}>
+            {t("installAnyway")}
+          </Button>
+        ) : (
+          <OffNote />
+        )}
       </>
     );
   }
 
   if (props.state === "off") {
-    const update = status?.available ?? status?.attention ?? null;
     return (
-      <>
-        <PopoverHeader>
-          <PopoverTitle>{t("off")}</PopoverTitle>
-          {update ? (
-            <PopoverDescription>
-              {t("offAvailable", { version: update.version })} (<GuideLink />
-              ).
-            </PopoverDescription>
-          ) : null}
-        </PopoverHeader>
-        {update ? <ReleaseNotes update={update} /> : null}
-      </>
+      <PopoverHeader>
+        <PopoverTitle>{t("off")}</PopoverTitle>
+      </PopoverHeader>
     );
   }
   return null;
+}
+
+/** In mode off, in place of the install buttons: nothing can install from here. */
+function OffNote() {
+  const t = useT(messages);
+  const [before, after] = t("offCannotInstall").split("{guide}");
+  return (
+    <p className="text-muted-foreground">
+      {before}
+      <GuideLink />
+      {after}
+    </p>
+  );
 }
 
 export function GuideLink({ children }: { children?: ReactNode }) {

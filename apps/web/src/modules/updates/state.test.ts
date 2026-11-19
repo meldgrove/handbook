@@ -85,7 +85,13 @@ describe("buttonState", () => {
     expect(buttonState(response({ available: update() }), { waiting: true, checking: false })).toBe(
       "installing",
     );
-    expect(buttonState(response({ mode: "off", automatic: false, available: update() }), idle)).toBe("off");
+    // Mode off still shows what is new; "off" only when nothing is.
+    const off = { mode: "off", automatic: false } as const;
+    expect(buttonState(response({ ...off, available: update() }), idle)).toBe("available");
+    expect(buttonState(response({ ...off, attention: update({ version: "0.3.0" }) }), idle)).toBe(
+      "attention",
+    );
+    expect(buttonState(response(off), idle)).toBe("off");
     expect(buttonState(response(null), idle)).toBe("unreachable");
     // While the app restarts, the last answer may be an unreachable updater: still installing.
     expect(buttonState(response(null), { waiting: true, checking: false })).toBe("installing");

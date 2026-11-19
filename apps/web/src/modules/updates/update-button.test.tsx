@@ -173,6 +173,33 @@ describe("UpdateButton", () => {
     expect(within(popover).getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
+  it("shows an update while updates are off, without installing it", async () => {
+    stubApi({
+      "GET /api/v1/admin/updates": {
+        body: answer({ ...available.updater, mode: "off", automatic: false }),
+      },
+    });
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Update available · 0.2.1" }));
+    const popover = await screen.findByRole("dialog");
+    expect(popover).toHaveTextContent("Show who changed a page last");
+    expect(within(popover).getByRole("link", { name: /Release notes/ })).toBeInTheDocument();
+    expect(within(popover).queryByRole("button", { name: /Install now/ })).not.toBeInTheDocument();
+    expect(popover).toHaveTextContent(
+      "Automatic updates are off on this server, so it cannot install from here. See the deployment guide.",
+    );
+    expect(within(popover).getByRole("link", { name: "deployment guide" })).toBeInTheDocument();
+  });
+
+  it("says when updates are off and nothing is new", async () => {
+    stubApi({ "GET /api/v1/admin/updates": { body: answer({ mode: "off", automatic: false }) } });
+    renderButton();
+    expect(
+      await screen.findByRole("button", { name: "Automatic updates are off on this server" }),
+    ).toBeInTheDocument();
+  });
+
   it("says when no update service answers", async () => {
     stubApi({
       "GET /api/v1/admin/updates": {
