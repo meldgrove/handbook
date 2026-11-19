@@ -188,8 +188,9 @@ function AdminUpdateButton() {
   const since = pending?.startedAt ?? (running ? Date.parse(running.startedAt) : NaN);
   useRenderAt(Number.isNaN(since) ? null : since + INSTALL_PATIENCE_MS);
 
-  // An attempt restored while every request fails still shows (Restarting…, Stop waiting).
-  const shown = data ?? (pending ? NO_STATUS : null);
+  // An attempt restored while every request fails still shows (Restarting…, Stop waiting),
+  // and so does a status that failed before any answer (no update service; a click checks).
+  const shown = data ?? (pending || (updates.isError && !signedOutNow) ? NO_STATUS : null);
   if (!shown) return null;
   const state = buttonState(shown, { waiting: Boolean(pending || done), checking, followed });
   const hasPopover = POPOVER_STATES.has(state);

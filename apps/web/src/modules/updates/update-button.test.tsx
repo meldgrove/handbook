@@ -618,6 +618,19 @@ describe("UpdateButton", () => {
     expect(button).toHaveClass("opacity-60");
   });
 
+  it("stays visible when the first status answer is an updater error", async () => {
+    stubApi({
+      "GET /api/v1/admin/updates": {
+        status: 503,
+        body: { app: { version: null }, reachable: true, updater: null, error: "The updater is busy." },
+      },
+    });
+    renderButton();
+    expect(
+      await screen.findByRole("button", { name: "No update service. See the deployment guide." }),
+    ).toBeInTheDocument();
+  });
+
   it("checks on click when up to date", async () => {
     const fetch = stubApi({
       "GET /api/v1/admin/updates": { body: answer({}) },
