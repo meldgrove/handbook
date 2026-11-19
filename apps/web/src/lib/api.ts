@@ -36,6 +36,11 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;
 }
 
+/** A request outside `api` got a 401: the session ended. */
+export function sessionEnded() {
+  onUnauthorized?.();
+}
+
 /** Reads an answer of the API: its JSON (null when unreadable), or an ApiError for an error status. */
 export async function parseResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
@@ -48,7 +53,7 @@ export async function parseResponse<T>(response: Response): Promise<T> {
   }
   if (!response.ok) {
     const body = data as Partial<ErrorBody> | null;
-    if (response.status === 401) onUnauthorized?.();
+    if (response.status === 401) sessionEnded();
     throw new ApiError(
       response.status,
       body?.error?.code ?? "internal_error",

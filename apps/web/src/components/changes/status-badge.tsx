@@ -1,8 +1,8 @@
 import { CircleCheck, CircleDot, CircleSlash, GitMerge } from "lucide-react";
 import type { ChangeSetStatus } from "@handbook/shared/api/changes";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@meldgrove/ui/badge";
 import { defineMessages, useT } from "@/i18n";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 
 const messages = defineMessages({
   en: { open: "Open", in_review: "In review", merged: "Merged", closed: "Closed" },

@@ -4,7 +4,7 @@ import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { toast } from "sonner";
 import { resolveLink } from "@handbook/shared/paths";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@meldgrove/ui/dialog";
 import { errorMessage } from "@/lib/api";
 import { useT } from "@/i18n";
 import { LinkEditor } from "./link-editor";

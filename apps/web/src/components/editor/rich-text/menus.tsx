@@ -17,7 +17,7 @@ import {
   Strikethrough,
   Trash2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 import { useT } from "@/i18n";
 import { LinkEditor } from "./link-editor";
 import { richTextMessages } from "./messages";

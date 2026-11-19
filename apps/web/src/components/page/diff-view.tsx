@@ -1,6 +1,6 @@
 import { diffTextLines } from "@handbook/shared/merge";
 import { DiffLineText } from "@/components/changes/line-diff";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 import { defineMessages, useT } from "@/i18n";
 
 const messages = defineMessages({

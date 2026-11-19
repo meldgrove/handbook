@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ErrorState, LoadingState } from "@/components/states";
+import { ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { useFormatter } from "@/lib/format";
 import { defineMessages, useT } from "@/i18n";
 import { recentQuery } from "./queries";

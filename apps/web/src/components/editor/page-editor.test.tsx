@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Space } from "@handbook/shared/api/spaces";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@meldgrove/ui/tooltip";
 import { PageEditor } from "./page-editor";
 
 // The editors themselves are tested elsewhere (markdown.test.ts, end-to-end); here a text area stands in.

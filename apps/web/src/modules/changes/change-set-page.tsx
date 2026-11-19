@@ -16,13 +16,13 @@ import {
 } from "lucide-react";
 import type { ChangeSet } from "@handbook/shared/api/changes";
 import { ChangeSetStatusBadge } from "@/components/changes/status-badge";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { Page } from "@/components/layout/page";
 import { MarkdownView } from "@/components/markdown";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";
+import { Button } from "@meldgrove/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@meldgrove/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -30,11 +30,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+} from "@meldgrove/ui/dialog";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { Spinner } from "@meldgrove/ui/spinner";
+import { Textarea } from "@meldgrove/ui/textarea";
 import { useT } from "@/i18n";
 import { common } from "@/i18n/common";
 import { ApiError, errorMessage } from "@/lib/api";

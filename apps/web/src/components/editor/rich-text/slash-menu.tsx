@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Extension, type Editor } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
 import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 import { useT } from "@/i18n";
 import {
   BLOCK_COMMANDS,

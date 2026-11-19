@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { createRoute, Outlet } from "@tanstack/react-router";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@meldgrove/ui/tooltip";
 import { useAuthConfig } from "@/lib/auth-config";
 import { requireSignIn } from "./app";
 import { rootRoute } from "./root";

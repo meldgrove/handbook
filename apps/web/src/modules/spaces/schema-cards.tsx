@@ -15,15 +15,15 @@ import {
   addTemplateSchema,
   type SpaceTemplateKey,
 } from "@handbook/shared/space-templates";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@meldgrove/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { Checkbox } from "@meldgrove/ui/checkbox";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@meldgrove/ui/select";
+import { Spinner } from "@meldgrove/ui/spinner";
+import { Switch } from "@meldgrove/ui/switch";
+import { Textarea } from "@meldgrove/ui/textarea";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import { useT } from "@/i18n";
 import { messages } from "./messages";

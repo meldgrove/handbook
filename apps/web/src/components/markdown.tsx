@@ -5,7 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { AlertTriangle, Info, Lightbulb, MessageSquareWarning, OctagonAlert } from "lucide-react";
 import { markdownProblem } from "@handbook/shared/markdown";
 import { resolveLink } from "@handbook/shared/paths";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 import { defineMessages, useT } from "@/i18n";
 import { remarkCallouts, remarkHeadingIds, type CalloutType } from "./page/markdown-plugins";
 

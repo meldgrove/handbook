@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { HIGHLIGHT_END, HIGHLIGHT_START } from "@handbook/shared/api/search";
-import { Button } from "@/components/ui/button";
+import { Button } from "@meldgrove/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -27,9 +27,9 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+} from "@meldgrove/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@meldgrove/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@meldgrove/ui/tooltip";
 import { useDebounced } from "@/hooks/use-debounced";
 import { errorMessage } from "@/lib/api";
 import { useTheme } from "@/lib/theme";

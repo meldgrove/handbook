@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { buttonState, failureOf, parseUpdatesResponse } from "@meldgrove/ui/updates/core";
 import { updaterStatusSchema, type UpdatesResponse } from "@handbook/shared/api/updates";
-import { buttonState, failedInstall } from "./state";
 
 /** Answers captured from Updater 0.2 (against GHCR and GitHub), shared with the server's tests. */
 const samples = import.meta.glob<unknown>("../../../../server/src/test/fixtures/updater-0.2/*.json", {
@@ -15,12 +15,16 @@ function sample(name: string): UpdatesResponse {
   return { app: { version: updater.installed }, reachable: true, updater, error: null };
 }
 
-const stateOf = (name: string) => buttonState(sample(name), { waiting: false, checking: false });
+const stateOf = (name: string) => buttonState(sample(name), { checking: false, pending: null });
 
-describe("the button with the real answers of Updater 0.2", () => {
-  it("parses every sample", () => {
+describe("the button (@meldgrove/ui) with the real answers of Updater 0.2", () => {
+  it("parses every sample, with the app's schema and the button's", () => {
     expect(Object.keys(samples).length).toBeGreaterThanOrEqual(7);
-    for (const raw of Object.values(samples)) expect(updaterStatusSchema.safeParse(raw).success).toBe(true);
+    for (const raw of Object.values(samples)) {
+      const updater = updaterStatusSchema.parse(raw);
+      const response = { app: { version: updater.installed }, reachable: true, updater, error: null };
+      expect(parseUpdatesResponse(response)).not.toBeNull();
+    }
   });
 
   it("shows the update in mode off too (the popover installs nothing there)", () => {
@@ -43,7 +47,7 @@ describe("the button with the real answers of Updater 0.2", () => {
   it("shows a rolled-back installation as failed, also after switching to Preview", () => {
     for (const name of ["status-failed", "status-preview"]) {
       expect(stateOf(name)).toBe("failed");
-      expect(failedInstall(sample(name))).toMatchObject({
+      expect(failureOf(sample(name))).toMatchObject({
         version: "0.1.3",
         message: "container library-web-1 is unhealthy",
         offer: { version: "0.1.3" },

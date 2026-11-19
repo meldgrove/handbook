@@ -1,5 +1,5 @@
 import type { PageStatus } from "@handbook/shared/page";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@meldgrove/ui/badge";
 import { defineMessages, useT } from "@/i18n";
 
 const messages = defineMessages({ en: { draft: "Draft", deprecated: "Deprecated", active: "Active" } });

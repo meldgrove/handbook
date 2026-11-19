@@ -9,13 +9,13 @@ import {
   SPACE_TEMPLATES,
   type SpaceTemplateKey,
 } from "@handbook/shared/space-templates";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { Page, PageHeader } from "@/components/layout/page";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Card } from "@meldgrove/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +23,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@meldgrove/ui/dialog";
 import {
   Field,
   FieldContent,
@@ -33,11 +33,11 @@ import {
   FieldLegend,
   FieldSet,
   FieldTitle,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+} from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { RadioGroup, RadioGroupItem } from "@meldgrove/ui/radio-group";
+import { Spinner } from "@meldgrove/ui/spinner";
+import { Textarea } from "@meldgrove/ui/textarea";
 import { useT } from "@/i18n";
 import { common } from "@/i18n/common";
 import { ApiError, errorMessage } from "@/lib/api";

@@ -2,9 +2,9 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, FileText } from "lucide-react";
 import type { PageSummary } from "@handbook/shared/api/pages";
-import { Button } from "@/components/ui/button";
+import { Button } from "@meldgrove/ui/button";
 import { defineMessages, useT } from "@/i18n";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 import { StatusBadge } from "./status-badge";
 import { buildTree, type TreeNode } from "./tree";
 

@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { BookOpen, Check, CircleSlash, ShieldAlert, X } from "lucide-react";
-import { LoadingState } from "@/components/states";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { Spinner } from "@meldgrove/ui/spinner";
 import { useT } from "@/i18n";
 import { useAuthConfig } from "@/lib/auth-config";
 import { useOauthDecision, useOauthRequest } from "./api";
