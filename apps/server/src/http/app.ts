@@ -138,6 +138,8 @@ export function createApp() {
 
   app.route("/", health);
 
+  // Sign-in and sign-out send only small browser forms or JSON bodies.
+  app.post("/api/auth/*", bodyLimit({ maxSize: 64 * 1024 }));
   app.on(["GET", "POST"], "/api/auth/*", (c) => {
     if (!AUTH_ROUTES.has(`${c.req.method} ${c.req.path}`)) {
       return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
@@ -166,6 +168,11 @@ export function createApp() {
   );
 
   const api = new Hono<AppEnv>();
+  // API responses can carry private content and newly issued credentials.
+  api.use("*", async (c, next) => {
+    c.header("cache-control", "no-store");
+    await next();
+  });
   const uploadLimit = bodyLimit({ maxSize: config().MAX_UPLOAD_MB * 1024 * 1024 + 64 * 1024 });
   const jsonLimit = bodyLimit({ maxSize: 2 * 1024 * 1024 });
   api.use(

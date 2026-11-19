@@ -12,6 +12,7 @@ import {
   AuthorizePageError,
   exchangeCode,
   refreshTokens,
+  isOurResource,
   revokeToken,
   SCOPE,
   startAuthorization,
@@ -73,17 +74,21 @@ function oauthError(c: Context<AppEnv>, error: OAuthError, extraHeaders: Record<
   return c.json({ error: error.error, error_description: error.description }, error.status, headers);
 }
 
-async function formBody(c: Context<AppEnv>): Promise<Record<string, string>> {
-  const type = c.req.header("content-type") ?? "";
+async function formBody(c: Context<AppEnv>) {
+  const json = c.req.header("content-type")?.includes("application/json");
   let raw: Record<string, unknown>;
-  if (type.includes("application/json")) {
+  if (json) {
     raw = ((await c.req.json().catch(() => null)) as Record<string, unknown> | null) ?? {};
   } else {
-    raw = (await c.req.parseBody().catch(() => ({}))) as Record<string, unknown>;
+    raw = (await c.req.parseBody({ all: true }).catch(() => ({}))) as Record<string, unknown>;
   }
-  const body: Record<string, string> = {};
-  for (const [key, value] of Object.entries(raw)) if (typeof value === "string") body[key] = value;
-  return body;
+  const fields: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const field = !json && Array.isArray(value) ? value.at(-1) : value;
+    if (typeof field === "string") fields[key] = field;
+  }
+  // RFC 8707 lets clients repeat resource. Check every value, even if the last one matches.
+  return { fields, resources: [raw.resource ?? []].flat() };
 }
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
@@ -171,7 +176,10 @@ export function oauthRoutes() {
 
   app.get("/oauth/authorize", rateLimited("authorize", true), async (c) => {
     try {
-      return c.redirect(await startAuthorization(getDb(), c.req.query()), 302);
+      return c.redirect(
+        await startAuthorization(getDb(), c.req.query(), c.req.queries("resource") ?? []),
+        302,
+      );
     } catch (error) {
       if (error instanceof AuthorizePageError) return errorPage(c, error.message, error.status);
       throw error;
@@ -180,8 +188,13 @@ export function oauthRoutes() {
 
   app.post("/oauth/token", rateLimited("token"), async (c) => {
     try {
-      const body = await formBody(c);
+      const { fields: body, resources } = await formBody(c);
       const client = await authenticateClient(getDb(), body, c.req.header("authorization"));
+      if (
+        resources.some((resource) => typeof resource !== "string" || (resource && !isOurResource(resource)))
+      ) {
+        throw new OAuthError(400, "invalid_target", "Unknown resource");
+      }
       const grantType = body.grant_type;
       let tokens;
       if (grantType === "authorization_code") tokens = await exchangeCode(getDb(), client, body);
@@ -199,7 +212,7 @@ export function oauthRoutes() {
 
   app.post("/oauth/revoke", rateLimited("revoke"), async (c) => {
     try {
-      const body = await formBody(c);
+      const { fields: body } = await formBody(c);
       const client = await authenticateClient(getDb(), body, c.req.header("authorization"));
       await revokeToken(getDb(), client, body.token);
       return c.body(null, 200, { "cache-control": "no-store" });

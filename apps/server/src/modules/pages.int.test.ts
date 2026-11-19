@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { newPageFile } from "@handbook/shared/page";
 import { getDb } from "../db/client";
-import { changeSetItems, changeSets, editLocks } from "../db/schema";
+import { changeSetItems, changeSets, editLocks, pageRevisions } from "../db/schema";
 import { issueCredential } from "../auth/credentials";
 import { createPage, createSpace, createToken, createUser, request, resetDatabase } from "../test/helpers";
 
@@ -77,6 +77,23 @@ describe("pages API", () => {
     expect(tree.body.items.map((item: { title: string }) => item.title)).toEqual(["Laptop"]);
     const editorTree = await request("GET", `/api/v1/spaces/${space.slug}/tree`, { userId: editor.id });
     expect(editorTree.body.items).toHaveLength(2);
+  });
+
+  it("shows readers only visible ancestors of an active page", async () => {
+    const { editor, reader, space } = await setup();
+    const parent = await createPage(space, {
+      title: "Draft parent",
+      markdown: file("Draft parent", "", "status: draft\n"),
+    });
+    const child = await request("POST", "/api/v1/spaces/it/pages", {
+      userId: editor.id,
+      body: { parentPath: parent.path, markdown: file("Active child") },
+    });
+    expect(child.status).toBe(201);
+    expect(child.body.breadcrumbs).toMatchObject([{ id: parent.id }]);
+    const view = await request("GET", `/api/v1/pages/${child.body.id}`, { userId: reader.id });
+    expect(view.status).toBe(200);
+    expect(view.body.breadcrumbs).toEqual([]);
   });
 
   it("merges or answers 409 page_changed with the current file and conflict blocks", async () => {
@@ -322,6 +339,50 @@ describe("pages API", () => {
     await getDb().update(changeSets).set({ status: "merged" }).where(eq(changeSets.id, changeSet!.id));
     const after = await request("GET", `/api/v1/pages/${page.id}`, { userId: editor.id });
     expect(after.body.changeSets).toEqual([]);
+  });
+
+  it("uses change set visibility for summaries on an active page", async () => {
+    const { editor, reader, space, page } = await setup();
+    const draft = await createPage(space, {
+      title: "Draft plan",
+      markdown: file("Draft plan", "", "status: draft\n"),
+    });
+    const [changeSet] = await getDb()
+      .insert(changeSets)
+      .values({ spaceId: space.id, title: "Update both pages", authorId: editor.id, channel: "web" })
+      .returning();
+    await getDb()
+      .insert(changeSetItems)
+      .values(
+        [page, draft].map((item) => ({
+          changeSetId: changeSet!.id,
+          pageId: item.id,
+          action: "update",
+          baseRevision: item.revision,
+          path: item.path,
+          markdown: item.markdown,
+        })),
+      );
+    const editorView = await request("GET", `/api/v1/pages/${page.id}`, { userId: editor.id });
+    expect(editorView.body.changeSets).toMatchObject([{ number: changeSet!.number }]);
+    const readerView = await request("GET", `/api/v1/pages/${page.id}`, { userId: reader.id });
+    expect(readerView.body.changeSets).toEqual([]);
+
+    // Revisions name their change set only for those who may see it.
+    await getDb()
+      .update(pageRevisions)
+      .set({ changeSetId: changeSet!.id })
+      .where(eq(pageRevisions.pageId, page.id));
+    const changeSetOf = async (userId: string) => {
+      const list = await request("GET", `/api/v1/pages/${page.id}/revisions`, { userId });
+      const one = await request("GET", `/api/v1/pages/${page.id}/revisions/1`, { userId });
+      const recent = await request("GET", `/api/v1/recent`, { userId });
+      const recentItem = recent.body.items.find((item: { page: { id: string } }) => item.page.id === page.id);
+      return [list.body.items[0].changeSet, one.body.changeSet, recentItem.revision.changeSet];
+    };
+    const named = { number: changeSet!.number, title: "Update both pages" };
+    expect(await changeSetOf(editor.id)).toEqual([named, named, named]);
+    expect(await changeSetOf(reader.id)).toEqual([null, null, null]);
   });
 
   it("finds backlinks from live pages", async () => {

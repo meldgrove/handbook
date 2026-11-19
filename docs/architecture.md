@@ -328,8 +328,9 @@ client_secret_basic`, `client_id_metadata_document_supported: true`.
   scheme when it is not `https`). It shows no link from `client_uri`.
 - `POST /oauth/token`: `authorization_code` (one use, PKCE checked,
   `redirect_uri` must match) and `refresh_token` (rotating: the old refresh
-  token stops working). A used code or a replaced refresh token presented
-  again revokes every token of its grant: someone may have stolen it.
+  token stops working). Both grants reject unknown resources when supplied.
+  Presenting a used code with valid PKCE proof, or presenting a replaced
+  refresh token, revokes every token of its grant.
   Responses `Cache-Control: no-store`.
 - `POST /oauth/revoke` (RFC 7009).
 - Rate limits per client address (`X-Forwarded-For` behind `TRUST_PROXY`;

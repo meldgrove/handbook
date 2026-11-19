@@ -25,8 +25,9 @@ import {
   users,
 } from "../db/schema";
 import type { Principal } from "../auth/principal";
+import { changeSetVisible } from "../changes/model";
 import { notFound } from "../http/errors";
-import type { SpaceContext, SpaceRow } from "../spaces/access";
+import type { SpaceContext } from "../spaces/access";
 import { bodyOf, type PageRow } from "./core";
 
 export const iso = (value: Date) => value.toISOString();
@@ -120,14 +121,23 @@ export async function currentLock(
 }
 
 /** The pages of a path's ancestors, top first. */
-async function breadcrumbs(tx: DbOrTx, space: SpaceRow, path: string): Promise<PageRef[]> {
+async function breadcrumbs(tx: DbOrTx, context: SpaceContext, path: string): Promise<PageRef[]> {
+  const { space, abilities } = context;
   const segments = path.split("/");
   const prefixes = segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"));
   if (prefixes.length === 0) return [];
   const rows = await tx
     .select({ id: pages.id, path: pages.path, title: pages.title })
     .from(pages)
-    .where(and(eq(pages.spaceId, space.id), inArray(pages.path, prefixes), isNull(pages.deletedAt)));
+    .where(
+      and(
+        eq(pages.spaceId, space.id),
+        inArray(pages.path, prefixes),
+        isNull(pages.deletedAt),
+        // An active child can still have a draft ancestor.
+        abilities.seeDrafts ? undefined : ne(pages.status, "draft"),
+      ),
+    );
   return rows
     .sort((a, b) => a.path.length - b.path.length)
     .map((row) => ({ id: row.id, space: space.slug, path: row.path, title: row.title }));
@@ -176,7 +186,14 @@ export async function pageView(
     .select({ number: changeSets.number, title: changeSets.title, status: changeSets.status })
     .from(changeSetItems)
     .innerJoin(changeSets, eq(changeSets.id, changeSetItems.changeSetId))
-    .where(and(eq(changeSetItems.pageId, page.id), inArray(changeSets.status, ["open", "in_review"])))
+    .where(
+      and(
+        eq(changeSetItems.pageId, page.id),
+        inArray(changeSets.status, ["open", "in_review"]),
+        // A change set on this page may also touch a draft.
+        changeSetVisible(principal),
+      ),
+    )
     .orderBy(desc(changeSets.number));
   return {
     ...pageSummary(page, space.slug),
@@ -186,7 +203,7 @@ export async function pageView(
     properties: page.properties,
     createdAt: iso(page.createdAt),
     updatedBy: actorOf(updatedBy),
-    breadcrumbs: await breadcrumbs(tx, space, page.path),
+    breadcrumbs: await breadcrumbs(tx, context, page.path),
     children: children.map((child) => pageSummary(child, space.slug)),
     backlinks: backlinkRows.map((row) => ({
       id: row.id,
@@ -243,22 +260,28 @@ export function revisionSummary(row: RevisionRow): RevisionSummary {
   };
 }
 
-function revisionQuery(tx: DbOrTx) {
+/** The change set of a revision, when the principal may see it (it may also touch a draft). */
+function visibleChangeSetOf(principal: Principal): SQL | undefined {
+  return and(eq(changeSets.id, pageRevisions.changeSetId), changeSetVisible(principal));
+}
+
+function revisionQuery(tx: DbOrTx, principal: Principal) {
   return tx
     .select(revisionColumns)
     .from(pageRevisions)
     .leftJoin(users, eq(users.id, pageRevisions.authorId))
-    .leftJoin(changeSets, eq(changeSets.id, pageRevisions.changeSetId));
+    .leftJoin(changeSets, visibleChangeSetOf(principal));
 }
 
 /** A page's revisions, newest first, one page of the list at a time. */
 export async function listRevisions(
   tx: DbOrTx,
+  principal: Principal,
   pageId: string,
   options: { limit: number; offset: number },
 ): Promise<{ items: RevisionSummary[]; total: number }> {
   const [rows, [total]] = await Promise.all([
-    revisionQuery(tx)
+    revisionQuery(tx, principal)
       .where(eq(pageRevisions.pageId, pageId))
       .orderBy(desc(pageRevisions.number))
       .limit(options.limit)
@@ -268,8 +291,13 @@ export async function listRevisions(
   return { items: rows.map(revisionSummary), total: total?.value ?? 0 };
 }
 
-export async function getRevision(tx: DbOrTx, pageId: string, number: number): Promise<Revision> {
-  const [row] = await revisionQuery(tx).where(
+export async function getRevision(
+  tx: DbOrTx,
+  principal: Principal,
+  pageId: string,
+  number: number,
+): Promise<Revision> {
+  const [row] = await revisionQuery(tx, principal).where(
     and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.number, number)),
   );
   if (!row) throw notFound("No such revision");
@@ -302,7 +330,7 @@ export async function recentRevisions(
     .innerJoin(pages, eq(pages.id, pageRevisions.pageId))
     .innerJoin(spaces, eq(spaces.id, pages.spaceId))
     .leftJoin(users, eq(users.id, pageRevisions.authorId))
-    .leftJoin(changeSets, eq(changeSets.id, pageRevisions.changeSetId))
+    .leftJoin(changeSets, visibleChangeSetOf(principal))
     .where(
       and(
         isNull(pages.deletedAt),

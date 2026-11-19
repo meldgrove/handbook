@@ -67,7 +67,11 @@ export function errorRedirect(
  * with any redirect URI, so before the person has decided, errors are shown
  * here and never sent to the app (RFC 9700 4.11.2, no open redirect).
  */
-export async function startAuthorization(db: Db, query: Record<string, string>): Promise<string> {
+export async function startAuthorization(
+  db: Db,
+  query: Record<string, string>,
+  resources: string[],
+): Promise<string> {
   const clientId = query.client_id;
   if (!clientId) throw new AuthorizePageError("The app did not say who it is (client_id is missing).");
   let client: ClientRow | null;
@@ -101,7 +105,7 @@ export async function startAuthorization(db: Db, query: Record<string, string>):
   ) {
     throw new AuthorizePageError("The app did not protect its sign-in with PKCE (code_challenge, S256).");
   }
-  if (query.resource && !isOurResource(query.resource)) {
+  if (resources.some((resource) => resource && !isOurResource(resource))) {
     throw new AuthorizePageError("The app asked for access to another server (resource).");
   }
   const [row] = await db
@@ -273,10 +277,9 @@ export async function exchangeCode(
   client: ClientRow,
   body: Record<string, string>,
 ): Promise<TokenResponse> {
-  const { code, code_verifier: verifier, redirect_uri: redirectUri, resource } = body;
+  const { code, code_verifier: verifier, redirect_uri: redirectUri } = body;
   if (!code || !verifier) throw new OAuthError(400, "invalid_request", "Send code and code_verifier");
   if (!VERIFIER.test(verifier)) throw new OAuthError(400, "invalid_grant", "Invalid code_verifier");
-  if (resource && !isOurResource(resource)) throw new OAuthError(400, "invalid_target", "Unknown resource");
   const invalid = new OAuthError(400, "invalid_grant", "The code is invalid, expired or used");
   const result = await db.transaction(async (tx) => {
     const [request] = await tx
@@ -285,14 +288,15 @@ export async function exchangeCode(
       .where(eq(oauthRequests.codeHash, hashToken(code)))
       .for("update");
     if (!request || request.clientId !== client.id) throw invalid;
-    if (request.codeUsedAt) return { reusedGrantId: request.grantId };
-    if (request.expiresAt < new Date()) throw invalid;
     if (redirectUri && redirectUri !== request.redirectUri) {
       throw new OAuthError(400, "invalid_grant", "redirect_uri does not match the authorization request");
     }
     const challenge = createHash("sha256").update(verifier).digest("base64url");
     if (challenge !== request.codeChallenge)
       throw new OAuthError(400, "invalid_grant", "code_verifier does not match");
+    // Only a request that proves possession of the verifier can trigger replay revocation.
+    if (request.codeUsedAt) return { reusedGrantId: request.grantId };
+    if (request.expiresAt < new Date()) throw invalid;
     await tx.update(oauthRequests).set({ codeUsedAt: new Date() }).where(eq(oauthRequests.id, request.id));
     const grant = await activeGrant(tx, request.grantId, client.id);
     if (!grant) throw invalid;

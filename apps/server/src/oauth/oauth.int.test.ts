@@ -22,7 +22,11 @@ function pkce() {
   return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
 }
 
-async function form(path: string, fields: Record<string, string>, headers: Record<string, string> = {}) {
+async function form(
+  path: string,
+  fields: Record<string, string> | URLSearchParams,
+  headers: Record<string, string> = {},
+) {
   const response = await testApp().request(path, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", ...headers },
@@ -403,6 +407,29 @@ describe("OAuth for connected apps", () => {
     const started = await authorize(valid);
     expect(started.status).toBe(302);
     expect(started.location).toMatch(/^http:\/\/localhost:3000\/oauth\/consent\?request=/);
+  });
+
+  it("checks the requested resource before rotating a refresh token", async () => {
+    const user = await createUser();
+    const clientId = await registerPublic();
+    const tokens = await connectAndExchange(user.id, clientId);
+    const refresh = (...resources: string[]) => {
+      const fields = new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh_token,
+        client_id: clientId,
+      });
+      for (const resource of resources) fields.append("resource", resource);
+      return form("/oauth/token", fields);
+    };
+
+    const app = "http://localhost:3000/mcp";
+    const wrongResource = await refresh("https://other.example.org/mcp", app);
+    expect(wrongResource.status).toBe(400);
+    expect(wrongResource.body).toMatchObject({ error: "invalid_target" });
+    const valid = await refresh(app);
+    expect(valid.status).toBe(200);
+    expect(valid.body.refresh_token).not.toBe(tokens.refresh_token);
   });
 
   it("ends the connection when a replaced refresh token is used again", async () => {

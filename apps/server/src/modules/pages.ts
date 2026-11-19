@@ -187,13 +187,13 @@ router.get("/pages/:id/revisions", async (c) => {
   const principal = requirePrincipal(c);
   const { page } = await pageForHistory(principal, idParam(c));
   const query = queryOf(c, revisionListQuerySchema);
-  return c.json(await listRevisions(getDb(), page.id, query));
+  return c.json(await listRevisions(getDb(), principal, page.id, query));
 });
 
 router.get("/pages/:id/revisions/:number", async (c) => {
   const principal = requirePrincipal(c);
   const { page } = await pageForHistory(principal, idParam(c));
-  return c.json(await getRevision(getDb(), page.id, revisionParam(c)));
+  return c.json(await getRevision(getDb(), principal, page.id, revisionParam(c)));
 });
 
 /** Saves an old revision's file as the newest version (through the page core). */

@@ -5,7 +5,7 @@ import pg from "pg";
 import type { AppEnv } from "./env";
 import { concurrentChangeResponse } from "./app";
 import { getPool } from "../db/client";
-import { createSpace, createUser, request, resetDatabase } from "../test/helpers";
+import { createSpace, createUser, request, resetDatabase, testApp } from "../test/helpers";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
 
@@ -77,4 +77,23 @@ describe("error responses", () => {
     });
     expect((await app.request("/")).status).toBe(500);
   });
+});
+
+it("limits the body of a sign-in request", async () => {
+  const response = await testApp().request("/api/auth/sign-in/social", {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "http://localhost:3000" },
+    body: JSON.stringify({ provider: "oidc" }).padEnd(64 * 1024 + 1),
+  });
+  expect(response.status).toBe(413);
+  expect(await response.json()).toMatchObject({ error: { code: "payload_too_large" } });
+});
+
+it("marks private API responses and the Markdown directory as non-cacheable", async () => {
+  const user = await createUser();
+  for (const path of ["/api/v1/spaces", "/api/v1/tokens", "/llms.txt"]) {
+    const response = await request("GET", path, { userId: user.id });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  }
 });
