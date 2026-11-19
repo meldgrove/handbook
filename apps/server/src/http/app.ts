@@ -138,6 +138,8 @@ export function createApp() {
 
   app.route("/", health);
 
+  // Sign-in and sign-out send only small browser forms or JSON bodies.
+  app.post("/api/auth/*", bodyLimit({ maxSize: 64 * 1024 }));
   app.on(["GET", "POST"], "/api/auth/*", (c) => {
     if (!AUTH_ROUTES.has(`${c.req.method} ${c.req.path}`)) {
       return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
