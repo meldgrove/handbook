@@ -1,23 +1,23 @@
-# Production setup: the release image as two processes, the web app (`web`)
-# and the worker (`worker`: search index upkeep and cleanup), after a one-off
-# migration.
+# Production on a Linux server (Debian, Ubuntu) with Docker Compose: the
+# release image as two processes, the web app (`web`) and the worker (`worker`:
+# search index upkeep and cleanup), after a one-off migration, plus the
+# `updater` for automatic updates. Settings live in .env next to this file
+# (docs/configuration.md). Start it with:
 #
-#   cp .env.example .env    # then set the production values (docs/configuration.md)
-#   docker compose up -d
+#   docker compose up -d --pull always
 #
-# HANDBOOK_VERSION in .env selects the release of ghcr.io/meldgrove/handbook,
-# e.g. 0.1.0. To upgrade, read the release notes, change it, and run
-# `docker compose up -d` again, or let `updater` install new versions
-# (docs/deployment.md, Automatic updates): on a Debian server it writes each
-# version it installs into HANDBOOK_VERSION. On a platform that does not pull
-# images when it deploys, PULL_POLICY=always makes every start pull them again.
+# HANDBOOK_VERSION in .env selects the release of ghcr.io/meldgrove/handbook:
+# a version such as 0.1.0, or a series such as 0.1. With automatic updates
+# (docs/deployment.md), the server writes each version it installs there.
 #
-# Without a PostgreSQL of your own, add compose.postgres.yaml:
-#   docker compose -f compose.yaml -f compose.postgres.yaml up -d
+# Without a PostgreSQL of your own, add compose.postgres.yaml
+# (COMPOSE_FILE=compose.yaml:compose.postgres.yaml in .env).
 #
-# Put a TLS-terminating reverse proxy in front of port 3000 (HANDBOOK_PORT
-# changes the host port) and set APP_URL to its public https URL. Uploaded
-# files live in the `files` volume: back it up with the database.
+# `web` listens on 127.0.0.1:3000 (HANDBOOK_PORT changes the host port), for a
+# reverse proxy on the same server, such as Caddy, that terminates HTTPS; set
+# APP_URL to its public https URL. Uploaded files live in the `files` volume:
+# back it up with the database. On Coolify, use compose.coolify.yaml
+# (docs/coolify.md).
 
 x-image: &image ghcr.io/meldgrove/handbook:${HANDBOOK_VERSION:?Set HANDBOOK_VERSION to a release, e.g. 0.1.0}
 
@@ -38,7 +38,6 @@ x-app-environment: &app-environment
 
 x-app: &app
   image: *image
-  pull_policy: ${PULL_POLICY:-missing}
   env_file:
     - path: .env
       required: false
@@ -60,9 +59,8 @@ services:
     volumes:
       - files:/data/files
     ports:
-      # The host port for a reverse proxy on the host. Platforms with their own
-      # proxy (Coolify) reach `web` over the Docker network; set
-      # HANDBOOK_PORT to any free port when 3000 is taken.
+      # Only on the server itself, for the reverse proxy. HANDBOOK_PORT picks
+      # another host port when 3000 is taken, e.g. by another app.
       - "127.0.0.1:${HANDBOOK_PORT:-3000}:3000"
     healthcheck:
       test:
@@ -97,21 +95,19 @@ services:
       retries: 3
       start_period: 30s
 
-  # Automatic updates and the update button of admins (docs/deployment.md):
-  # installs nothing until UPDATE_DEPLOY_HOOK_URL is set (Coolify: the image
-  # tag set there decides) or the server watches the volume `updater`
-  # (Debian: `updater host-setup`; admins choose Stable or Preview in the
-  # app, and the server writes each version it installs into
-  # HANDBOOK_VERSION). Only the app reaches its API: never publish a port.
+  # Automatic updates and the update button of admins (docs/deployment.md).
+  # It installs nothing until the server runs `updater host-setup`: then
+  # admins choose Stable or Preview in the app, and for each installation the
+  # server writes the version into HANDBOOK_VERSION, pulls it, runs
+  # `docker compose up --wait`, and goes back to the version before when it
+  # does not become healthy. Only the app reaches its API: never publish a
+  # port.
   updater:
     image: ghcr.io/meldgrove/updater:0.2
-    pull_policy: ${PULL_POLICY:-missing}
     restart: unless-stopped
     environment:
       IMAGE: *image
       VERSION_VARIABLE: HANDBOOK_VERSION
-      DEPLOY_HOOK_URL: ${UPDATE_DEPLOY_HOOK_URL:-}
-      DEPLOY_HOOK_TOKEN: ${UPDATE_DEPLOY_HOOK_TOKEN:-}
       # A stable release installs once it has been out this long; every
       # automatic install only inside the window, if one is set (e.g.
       # 02:00-05:00, in the time zone TZ).
