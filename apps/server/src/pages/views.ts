@@ -260,22 +260,28 @@ export function revisionSummary(row: RevisionRow): RevisionSummary {
   };
 }
 
-function revisionQuery(tx: DbOrTx) {
+/** The change set of a revision, when the principal may see it (it may also touch a draft). */
+function visibleChangeSetOf(principal: Principal): SQL | undefined {
+  return and(eq(changeSets.id, pageRevisions.changeSetId), changeSetVisible(principal));
+}
+
+function revisionQuery(tx: DbOrTx, principal: Principal) {
   return tx
     .select(revisionColumns)
     .from(pageRevisions)
     .leftJoin(users, eq(users.id, pageRevisions.authorId))
-    .leftJoin(changeSets, eq(changeSets.id, pageRevisions.changeSetId));
+    .leftJoin(changeSets, visibleChangeSetOf(principal));
 }
 
 /** A page's revisions, newest first, one page of the list at a time. */
 export async function listRevisions(
   tx: DbOrTx,
+  principal: Principal,
   pageId: string,
   options: { limit: number; offset: number },
 ): Promise<{ items: RevisionSummary[]; total: number }> {
   const [rows, [total]] = await Promise.all([
-    revisionQuery(tx)
+    revisionQuery(tx, principal)
       .where(eq(pageRevisions.pageId, pageId))
       .orderBy(desc(pageRevisions.number))
       .limit(options.limit)
@@ -285,8 +291,13 @@ export async function listRevisions(
   return { items: rows.map(revisionSummary), total: total?.value ?? 0 };
 }
 
-export async function getRevision(tx: DbOrTx, pageId: string, number: number): Promise<Revision> {
-  const [row] = await revisionQuery(tx).where(
+export async function getRevision(
+  tx: DbOrTx,
+  principal: Principal,
+  pageId: string,
+  number: number,
+): Promise<Revision> {
+  const [row] = await revisionQuery(tx, principal).where(
     and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.number, number)),
   );
   if (!row) throw notFound("No such revision");
@@ -319,7 +330,7 @@ export async function recentRevisions(
     .innerJoin(pages, eq(pages.id, pageRevisions.pageId))
     .innerJoin(spaces, eq(spaces.id, pages.spaceId))
     .leftJoin(users, eq(users.id, pageRevisions.authorId))
-    .leftJoin(changeSets, eq(changeSets.id, pageRevisions.changeSetId))
+    .leftJoin(changeSets, visibleChangeSetOf(principal))
     .where(
       and(
         isNull(pages.deletedAt),
