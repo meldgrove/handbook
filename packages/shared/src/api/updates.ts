@@ -3,7 +3,8 @@ import { z } from "zod";
 /*
  * In-app updates (admins only): the app passes the Meldgrove Updater's API
  * through `/admin/updates`. The updater's Status and Update are its contract
- * (meldgrove-master docs/updates.md); change both sides together.
+ * (https://github.com/meldgrove/updater#the-apps-update-button); change both
+ * sides together.
  */
 
 /** A version the updater may install: a release, a preview, or an image digest. */

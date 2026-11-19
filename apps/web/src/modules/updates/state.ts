@@ -1,6 +1,6 @@
 import type { InstallStage, Update, UpdatesResponse } from "@handbook/shared/api/updates";
 
-/** What the update button shows (docs/updates.md of meldgrove-master, "Button"). */
+/** What the update button shows. */
 export type ButtonState =
   "checking" | "current" | "available" | "attention" | "installing" | "failed" | "off" | "unreachable";
 
