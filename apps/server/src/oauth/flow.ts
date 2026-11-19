@@ -285,14 +285,15 @@ export async function exchangeCode(
       .where(eq(oauthRequests.codeHash, hashToken(code)))
       .for("update");
     if (!request || request.clientId !== client.id) throw invalid;
-    if (request.codeUsedAt) return { reusedGrantId: request.grantId };
-    if (request.expiresAt < new Date()) throw invalid;
     if (redirectUri && redirectUri !== request.redirectUri) {
       throw new OAuthError(400, "invalid_grant", "redirect_uri does not match the authorization request");
     }
     const challenge = createHash("sha256").update(verifier).digest("base64url");
     if (challenge !== request.codeChallenge)
       throw new OAuthError(400, "invalid_grant", "code_verifier does not match");
+    // Only a request that proves possession of the verifier can trigger replay revocation.
+    if (request.codeUsedAt) return { reusedGrantId: request.grantId };
+    if (request.expiresAt < new Date()) throw invalid;
     await tx.update(oauthRequests).set({ codeUsedAt: new Date() }).where(eq(oauthRequests.id, request.id));
     const grant = await activeGrant(tx, request.grantId, client.id);
     if (!grant) throw invalid;
