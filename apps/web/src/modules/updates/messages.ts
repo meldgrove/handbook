@@ -37,6 +37,8 @@ export const messages = defineMessages({
     tooLong: "This takes longer than expected. Check the server (journalctl -u meldgrove-updater-{project}).",
     stopWaiting: "Stop waiting",
     notStarted: "The installation did not start",
+    notConfirmed: "The installation could not be confirmed",
+    failedLine: "{version} failed: {message}",
     lockedTag:
       "The image tag set where {app} is deployed does not reach {version}. Take the upgrade steps from its release notes, then change the tag there.",
     confirmTitle: "Install {version} now?",

@@ -87,6 +87,34 @@ describe("askUpdater", () => {
     });
   });
 
+  it("passes an error of the updater (5xx) through with the latest status, never as a refusal", async () => {
+    updater.respond((call) =>
+      call.path === "/v1/install"
+        ? { status: 503, body: { error: "The updater is busy. Try again in a minute." } }
+        : { body: updaterStatus() },
+    );
+    expect(await askUpdater({ call: "install", version: "0.2.1" })).toEqual({
+      status: 503,
+      body: {
+        app: { version: "0.2.0" },
+        reachable: true,
+        updater: updaterStatus(),
+        error: "The updater is busy. Try again in a minute.",
+      },
+    });
+    expect(updater.calls.map((call) => call.path)).toEqual(["/v1/install", "/v1/status"]);
+  });
+
+  it("keeps a 202 whose body cannot be read, with the latest status", async () => {
+    updater.respond((call) =>
+      call.path === "/v1/install" ? { status: 202, body: "accepted" } : { body: updaterStatus() },
+    );
+    expect(await askUpdater({ call: "install", version: "0.2.1" })).toEqual({
+      status: 202,
+      body: { app: { version: "0.2.0" }, reachable: true, updater: updaterStatus(), error: null },
+    });
+  });
+
   it("refuses an answer that is not a status", async () => {
     updater.respond(() => ({ body: { mode: "everything" } }));
     expect(await askUpdater({ call: "status" })).toMatchObject({

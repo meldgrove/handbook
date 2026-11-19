@@ -132,6 +132,26 @@ describe("updates API", () => {
     });
   });
 
+  it("passes an error of the updater (5xx) through, never as a 409", async () => {
+    const admin = await createUser({ isAdmin: true });
+    updater.respond((call) =>
+      call.path === "/v1/install"
+        ? { status: 503, body: { error: "The updater is busy. Try again in a minute." } }
+        : { body: updaterStatus() },
+    );
+    const response = await request("POST", "/api/v1/admin/updates/install", {
+      userId: admin.id,
+      body: { version: "0.2.1" },
+    });
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      app: { version: null },
+      reachable: true,
+      updater: updaterStatus(),
+      error: "The updater is busy. Try again in a minute.",
+    });
+  });
+
   it("reports an updater that is not there", async () => {
     const admin = await createUser({ isAdmin: true });
     process.env.UPDATER_URL = "http://127.0.0.1:9";

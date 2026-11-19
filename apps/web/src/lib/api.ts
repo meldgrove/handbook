@@ -36,7 +36,8 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;
 }
 
-async function parse<T>(response: Response): Promise<T> {
+/** Reads an answer of the API: its JSON (null when unreadable), or an ApiError for an error status. */
+export async function parseResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   let data: unknown;
@@ -74,7 +75,7 @@ async function request<T>(
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
   });
-  return parse<T>(response);
+  return parseResponse<T>(response);
 }
 
 /** Uploads one file as multipart form data (field `file`). */
@@ -88,7 +89,7 @@ async function upload<T>(path: string, file: File, signal?: AbortSignal): Promis
     body,
     signal,
   });
-  return parse<T>(response);
+  return parseResponse<T>(response);
 }
 
 /** Typed calls to the REST API. Types come from @handbook/shared/api/*. */
