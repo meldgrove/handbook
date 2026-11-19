@@ -8,6 +8,8 @@ export class ApiError extends Error {
     message: string,
     /** Messages by field path, e.g. `{ "config.url": "Enter a URL" }`. */
     readonly fields?: Record<string, string>,
+    /** The whole response body, for routes that answer errors with more (e.g. a 409 with the current state). */
+    readonly body?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -51,6 +53,7 @@ async function parse<T>(response: Response): Promise<T> {
       body?.error?.code ?? "internal_error",
       body?.error?.message ?? `Request failed (${response.status})`,
       body?.error?.fields,
+      data,
     );
   }
   return data as T;

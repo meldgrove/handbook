@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Download,
   GitPullRequestArrow,
   Home,
   KeyRound,
@@ -24,6 +25,7 @@ export const navMessages = defineMessages({
     people: "People",
     serviceTokens: "Service tokens",
     audit: "Audit log",
+    updates: "Updates",
   },
 });
 
@@ -51,6 +53,7 @@ export const NAVIGATION: NavGroup[] = [
       { key: "people", to: "/admin/people", icon: UsersRound },
       { key: "serviceTokens", to: "/admin/service-tokens", icon: KeyRound },
       { key: "audit", to: "/admin/audit", icon: ScrollText },
+      { key: "updates", to: "/admin/updates", icon: Download },
     ],
   },
 ];
