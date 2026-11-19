@@ -35,6 +35,10 @@ export const messages = defineMessages({
     restarting: "Restarting…",
     reloads: "{app} restarts. This page reloads when it is back.",
     tooLong: "This takes longer than expected. Check the server (journalctl -u meldgrove-updater-{project}).",
+    stopWaiting: "Stop waiting",
+    notStarted: "The installation did not start",
+    lockedTag:
+      "The image tag set where {app} is deployed does not reach {version}. Take the upgrade steps from its release notes, then change the tag there.",
     confirmTitle: "Install {version} now?",
     confirmText: "{app} restarts and is unavailable for a moment. Database changes run automatically.",
     install: "Install",
@@ -65,6 +69,7 @@ export const messages = defineMessages({
     switchBack: "Switching back to Stable keeps this version until a release is newer.",
     saveChannel: "Save channel",
     channelSaved: "Channel saved",
+    channelNotSaved: "The channel was not saved.",
     automaticInstalls: "Automatic installs",
     automaticOn: "On: releases install automatically after {cooldown}{window}.",
     automaticOnNoCooldown: "On: releases install automatically within the hour{window}.",

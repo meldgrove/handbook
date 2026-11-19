@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { updaterStatusSchema, type UpdatesResponse } from "@handbook/shared/api/updates";
-import { buttonState, failedUpdate } from "./state";
+import { buttonState, failedInstall } from "./state";
 
 /** Answers captured from Updater 0.2 (against GHCR and GitHub), shared with the server's tests. */
 const samples = import.meta.glob<unknown>("../../../../server/src/test/fixtures/updater-0.2/*.json", {
@@ -43,9 +43,10 @@ describe("the button with the real answers of Updater 0.2", () => {
   it("shows a rolled-back installation as failed, also after switching to Preview", () => {
     for (const name of ["status-failed", "status-preview"]) {
       expect(stateOf(name)).toBe("failed");
-      expect(failedUpdate(sample(name))).toMatchObject({
+      expect(failedInstall(sample(name))).toMatchObject({
         version: "0.1.3",
-        failed: "container library-web-1 is unhealthy",
+        message: "container library-web-1 is unhealthy",
+        offer: { version: "0.1.3" },
       });
     }
   });

@@ -227,10 +227,15 @@ not files: when a release changes `compose.yaml`, its upgrade steps say so.
 
 **Installations with updater 0.1** followed the tag in `HANDBOOK_VERSION`
 and have no channels or update button. To get them, in `/srv/handbook`:
+take the new `compose.yaml`, set `HANDBOOK_VERSION` in `.env` to the release
+that brings the update button (or a newer one), and start it, so that the app
+runs the new version too, not only the `updater` service. Then run the host
+setup again:
 
 ```sh
 git pull
-docker compose up -d
+# in .env: HANDBOOK_VERSION=<the release that brings the update button, or newer>
+docker compose up -d --pull always
 docker compose run --rm -T --pull always updater host-setup > updater-setup.sh && sudo sh updater-setup.sh
 ```
 

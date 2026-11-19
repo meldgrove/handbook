@@ -145,9 +145,75 @@ describe("UpdateButton", () => {
     expect(await screen.findByRole("button", { name: "Installing 0.2.1…" })).toBeInTheDocument();
     expect(JSON.parse(sessionStorage.getItem("handbook.update-install") ?? "{}")).toMatchObject({
       version: "0.2.1",
-      appVersion: "0.2.0",
-      outage: false,
+      confirmed: true,
+      outageAt: null,
     });
+  });
+
+  it("keeps following an installation whose request got no answer", async () => {
+    stubApi({
+      "GET /api/v1/admin/updates": { body: available },
+      "POST /api/v1/admin/updates/install": {
+        status: 502,
+        body: { error: { code: "x", message: "Bad gateway" } },
+      },
+    });
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Update available · 0.2.1" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Install now" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Install" }));
+    expect(await screen.findByRole("button", { name: "Installing 0.2.1…" })).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem("handbook.update-install") ?? "{}")).toMatchObject({
+      version: "0.2.1",
+      confirmed: false,
+      reason: "Bad gateway",
+    });
+  });
+
+  it("forgets the attempt when the updater refuses", async () => {
+    stubApi({
+      "GET /api/v1/admin/updates": { body: available },
+      "POST /api/v1/admin/updates/install": {
+        status: 409,
+        body: { ...available, error: "0.2.1 is not offered." },
+      },
+    });
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Update available · 0.2.1" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Install now" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Install" }));
+    expect(await screen.findByRole("button", { name: "Update available · 0.2.1" })).toBeInTheDocument();
+    expect(sessionStorage.getItem("handbook.update-install")).toBeNull();
+  });
+
+  it("stops waiting on request after 15 minutes", async () => {
+    const startedAt = Date.now() - 16 * 60_000;
+    sessionStorage.setItem(
+      "handbook.update-install",
+      JSON.stringify({ version: "0.2.1", startedAt, confirmed: true, reason: null, outageAt: null }),
+    );
+    const installing = {
+      version: "0.2.1",
+      startedAt: new Date(startedAt).toISOString(),
+      manual: true,
+      stage: "requested" as const,
+    };
+    stubApi({ "GET /api/v1/admin/updates": { body: answer({ ...available.updater, installing }) } });
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Installing 0.2.1…" }));
+    const popover = await screen.findByRole("dialog");
+    expect(popover).toHaveTextContent("This takes longer than expected.");
+    await user.click(within(popover).getByRole("button", { name: "Stop waiting" }));
+    expect(sessionStorage.getItem("handbook.update-install")).toBeNull();
+    // The updater still reports it, but this tab does not follow it again.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sessionStorage.getItem("handbook.update-install")).toBeNull();
+    expect(
+      within(await screen.findByRole("dialog")).queryByRole("button", { name: "Stop waiting" }),
+    ).toBeNull();
   });
 
   it("shows a failed update with the updater's message", async () => {
@@ -171,6 +237,48 @@ describe("UpdateButton", () => {
     expect(popover).toHaveTextContent("container web is unhealthy. 0.2.0 runs again.");
     expect(popover).toHaveTextContent("0.2.0 is still running.");
     expect(within(popover).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("shows a failed installation the updater names only in last", async () => {
+    stubApi({
+      "GET /api/v1/admin/updates": {
+        body: answer({
+          available: { ...available.updater!.available!, installsAt: null },
+          last: {
+            version: "0.2.1",
+            result: "failed",
+            message: "The server did not take the request.",
+            finishedAt: new Date().toISOString(),
+          },
+        }),
+      },
+    });
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Update to 0.2.1 failed" }));
+    const popover = await screen.findByRole("dialog");
+    expect(popover).toHaveTextContent("The server did not take the request.");
+    expect(within(popover).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("explains instead of installing anyway when the image tag decides", async () => {
+    stubApi({
+      "GET /api/v1/admin/updates": {
+        body: answer({
+          mode: "platform",
+          channelLocked: "The image tag 0.2 set where the app is deployed decides which updates install.",
+          attention: { ...available.updater!.available!, version: "0.3.0", installsAt: null },
+        }),
+      },
+    });
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "0.3.0 needs upgrade steps" }));
+    const popover = await screen.findByRole("dialog");
+    expect(within(popover).queryByRole("button", { name: /Install anyway/ })).not.toBeInTheDocument();
+    expect(popover).toHaveTextContent(
+      "The image tag set where Handbook is deployed does not reach 0.3.0. Take the upgrade steps",
+    );
   });
 
   it("shows an update while updates are off, without installing it", async () => {

@@ -81,10 +81,11 @@ export function UpdatesPage() {
     if (!selected) return;
     try {
       const response = await saveChannel.mutateAsync(selected);
-      if (response.error) {
-        toast.error(response.error);
-      } else {
+      // Saved only when the updater answered with the chosen channel.
+      if (response.reachable && response.updater?.channel === selected) {
         toast.success(t("channelSaved"));
+      } else {
+        toast.error(response.error ?? t("channelNotSaved"));
       }
       setChoice(null);
     } catch (error) {

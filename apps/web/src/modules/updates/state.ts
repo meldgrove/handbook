@@ -1,4 +1,10 @@
-import type { InstallStage, Update, UpdatesResponse } from "@handbook/shared/api/updates";
+import {
+  UPDATE_DIGEST,
+  type InstallStage,
+  type Update,
+  type UpdaterStatus,
+  type UpdatesResponse,
+} from "@handbook/shared/api/updates";
 
 /** What the update button shows. */
 export type ButtonState =
@@ -15,26 +21,53 @@ export const POPOVER_STATES: ReadonlySet<ButtonState> = new Set([
 
 export function buttonState(
   response: UpdatesResponse,
-  options: { waiting: boolean; checking: boolean },
+  options: { waiting: boolean; checking: boolean; followed?: string | null },
 ): ButtonState {
   const status = response.updater;
   if (options.waiting || status?.installing) return "installing";
   if (!response.reachable || !status) return "unreachable";
   if (options.checking || status.checking) return "checking";
-  if (failedUpdate(response)) return "failed";
+  if (failedInstall(response, options.followed)) return "failed";
   if (status.available) return "available";
   if (status.attention) return "attention";
   // Mode off still shows what is new (without installing); "off" only when nothing is.
   return status.mode === "off" ? "off" : "current";
 }
 
-/** The update whose last installation failed, while it is still offered. */
-export function failedUpdate(response: UpdatesResponse): Update | null {
+/** A failed installation the button shows, and the offer that can try it again (null: none). */
+export type FailedInstall = { version: string; message: string | null; offer: Update | null };
+
+/**
+ * The updater's `last` when it failed or rolled back, for a version still
+ * offered or for the installation this tab followed (`followed`). The offer
+ * only decides whether it can be tried again; `available.failed` is not
+ * required, because the updater does not set it for every failure (e.g. a
+ * server that never took the request).
+ */
+export function failedInstall(response: UpdatesResponse, followed?: string | null): FailedInstall | null {
   const status = response.updater;
   const last = status?.last;
   if (!status || !last || (last.result !== "failed" && last.result !== "rolled-back")) return null;
-  if (status.available?.failed) return status.available;
-  if (status.attention?.failed && status.attention.version === last.version) return status.attention;
+  const offer =
+    [status.available, status.attention].find((update) => update?.version === last.version) ?? null;
+  if (!offer && followed !== last.version) return null;
+  return { version: last.version, message: last.message ?? offer?.failed ?? null, offer };
+}
+
+/**
+ * What the popover offers for an update: install it, install it anyway
+ * (upgrade steps; only while admins can reach it: with `channelLocked` set,
+ * the image tag where the app is deployed decides and does not reach a new
+ * series), nothing in mode off, or nothing when it is not offered.
+ */
+export function installAction(
+  status: UpdaterStatus,
+  update: Update,
+): "install" | "anyway" | "locked" | "off" | null {
+  if (status.mode === "off") return "off";
+  if (status.available?.version === update.version) return "install";
+  if (status.attention?.version === update.version)
+    return status.channelLocked === null ? "anyway" : "locked";
   return null;
 }
 
@@ -43,48 +76,118 @@ export function installedVersion(response: UpdatesResponse): string | null {
   return response.updater?.installed ?? response.app.version;
 }
 
-/** An installation an admin started in this tab, kept in sessionStorage across reloads. */
+/** An installation this tab follows, kept in sessionStorage across reloads. */
 export type PendingInstall = {
   version: string;
-  /** Date.now() when it started. */
+  /** Date.now() when the attempt started (before the request), or when the installation started. */
   startedAt: number;
-  /** The app's version before. */
-  appVersion: string | null;
-  /** `updater.last.finishedAt` before: a result with another time is this installation's. */
-  lastFinishedAt: string | null;
-  /** The app did not answer at some point (it restarted). */
-  outage: boolean;
+  /** The updater took it (202) or a status reported it; until then, it may not have started. */
+  confirmed: boolean;
+  /** Why the answer to the install left it open (an unconfirmed attempt only). */
+  reason: string | null;
+  /** Date.now() of the last failed status request after the start (the app restarted); null: none. */
+  outageAt: number | null;
 };
 
-export function pendingInstall(
-  version: string,
-  before: UpdatesResponse | undefined,
+/** An attempt of this tab, remembered before the install request. */
+export function pendingInstall(version: string, now: number): PendingInstall {
+  return { version, startedAt: now, confirmed: false, reason: null, outageAt: null };
+}
+
+/** An installation a status reports (automatic, another admin's): followed from when it started. */
+export function adoptInstall(
+  installing: { version: string; startedAt: string },
   now: number,
 ): PendingInstall {
+  const started = Date.parse(installing.startedAt);
   return {
-    version,
-    startedAt: now,
-    appVersion: before?.app.version ?? null,
-    lastFinishedAt: before?.updater?.last?.finishedAt ?? null,
-    outage: false,
+    version: installing.version,
+    startedAt: Number.isNaN(started) ? now : Math.min(now, started),
+    confirmed: true,
+    reason: null,
+    outageAt: null,
   };
 }
 
-export type InstallOutcome = "done" | "failed" | "waiting";
+/** How the app answered the install request. */
+export type InstallReply =
+  /** 2xx: the updater took it (202), or the app could not tell (`reachable: false`, a timeout in `error`). */
+  | { kind: "answer"; response: UpdatesResponse }
+  /** 4xx (409: the updater refused, with the latest status). */
+  | { kind: "refused"; response: UpdatesResponse | null; error: string }
+  /** A network error or a 5xx: it may have started. */
+  | { kind: "failed"; error: string };
 
 /**
- * Whether an installation ended: the app runs the version, or the updater
- * names its result. A platform's `accepted` counts once the app changed or
- * came back after an outage.
+ * The attempt after the install answer: confirmed, kept open (ambiguous:
+ * the status decides within RECONCILE_MS), forgotten with the refusal, or
+ * replaced by the installation the refusal's status reports.
  */
-export function installOutcome(pending: PendingInstall, response: UpdatesResponse): InstallOutcome {
-  if (response.app.version === pending.version) return "done";
-  const last = response.updater?.last;
-  if (!last || last.version !== pending.version || last.finishedAt === pending.lastFinishedAt)
-    return "waiting";
-  if (last.result === "failed" || last.result === "rolled-back") return "failed";
-  if (last.result === "installed") return "done";
-  return response.app.version !== pending.appVersion || pending.outage ? "done" : "waiting";
+export function afterInstallReply(
+  pending: PendingInstall,
+  reply: InstallReply,
+  now: number,
+): { pending: PendingInstall | null; refused: string | null } {
+  if (reply.kind === "refused") {
+    const running = reply.response?.updater?.installing;
+    if (running) return { pending: adoptInstall(running, now), refused: null };
+    return { pending: null, refused: reply.error };
+  }
+  if (reply.kind === "failed") return { pending: { ...pending, reason: reply.error }, refused: null };
+  const { response } = reply;
+  if (response.reachable && response.updater && !response.error) {
+    return { pending: { ...pending, confirmed: true, reason: null }, refused: null };
+  }
+  return { pending: { ...pending, reason: response.error ?? pending.reason }, refused: null };
+}
+
+/** How long an unconfirmed attempt waits for a status that reports it. */
+export const RECONCILE_MS = 60_000;
+
+export type InstallOutcome =
+  { kind: "waiting"; confirmed: boolean } | { kind: "done" } | { kind: "failed" } | { kind: "not-started" };
+
+/**
+ * Whether the installation ended, from a status answer received at
+ * `receivedAt`. Answers from before the attempt do not count, nor a `last`
+ * that finished before it. In this order: a failed `last` for the version;
+ * `installing` for it keeps waiting (also when the app already runs it: on
+ * a server, the result comes only after every service is healthy, and it
+ * may still roll back); `installed`; a platform's `accepted` once the app
+ * runs the version, or, when the app cannot tell (no app version, a
+ * digest), once it answered after an outage; otherwise the app running the
+ * version. An unconfirmed attempt that no status reports within
+ * RECONCILE_MS did not start.
+ */
+export function installOutcome(
+  pending: PendingInstall,
+  response: UpdatesResponse,
+  receivedAt: number,
+  now: number,
+): InstallOutcome {
+  const waiting = { kind: "waiting", confirmed: pending.confirmed } as const;
+  const status = response.updater;
+  // Not fresh, or the updater did not answer (it restarts with the app): no news.
+  if (receivedAt < pending.startedAt || !status) return waiting;
+  const last =
+    status.last?.version === pending.version && Date.parse(status.last.finishedAt) >= pending.startedAt
+      ? status.last
+      : null;
+  if (last?.result === "failed" || last?.result === "rolled-back") return { kind: "failed" };
+  if (status.installing?.version === pending.version) return { kind: "waiting", confirmed: true };
+  if (last?.result === "installed") return { kind: "done" };
+  const appVersion = response.app.version;
+  if (last?.result === "accepted") {
+    if (appVersion !== null && !UPDATE_DIGEST.test(pending.version)) {
+      return appVersion === pending.version ? { kind: "done" } : { kind: "waiting", confirmed: true };
+    }
+    return pending.outageAt !== null && receivedAt > pending.outageAt
+      ? { kind: "done" }
+      : { kind: "waiting", confirmed: true };
+  }
+  if (appVersion === pending.version) return { kind: "done" };
+  if (!pending.confirmed && now - pending.startedAt >= RECONCILE_MS) return { kind: "not-started" };
+  return waiting;
 }
 
 /** After this long without a result, the button says to look at the server. */
@@ -141,8 +244,15 @@ const STORAGE_KEY = "handbook.update-install";
 
 export function loadPending(): PendingInstall | null {
   try {
-    const value = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "null") as PendingInstall | null;
-    return value && typeof value.version === "string" && typeof value.startedAt === "number" ? value : null;
+    const value = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "null") as Partial<PendingInstall> | null;
+    if (!value || typeof value.version !== "string" || typeof value.startedAt !== "number") return null;
+    return {
+      version: value.version,
+      startedAt: value.startedAt,
+      confirmed: value.confirmed !== false,
+      reason: typeof value.reason === "string" ? value.reason : null,
+      outageAt: typeof value.outageAt === "number" ? value.outageAt : null,
+    };
   } catch {
     return null;
   }

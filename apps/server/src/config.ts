@@ -116,6 +116,7 @@ const schema = z
     /**
      * The Meldgrove Updater's API, for the update button of admins. Unlike
      * other settings, an empty value is not unset: it switches the button off.
+     * compose.yaml never passes it empty (`${UPDATER_URL:-…}`).
      */
     UPDATER_URL: z.preprocess(
       (value) => (typeof value === "string" ? value.trim().replace(/\/+$/, "") : "http://updater:8080"),

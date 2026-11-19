@@ -1,8 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { useIsMutating, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useIsMutating } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, ExternalLink, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
-import type { Update, UpdatesResponse } from "@handbook/shared/api/updates";
+import type { Update, UpdaterStatus, UpdatesResponse } from "@handbook/shared/api/updates";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,14 +21,17 @@ import { errorMessage } from "@/lib/api";
 import { useAuthConfig } from "@/lib/auth-config";
 import { useFormatter } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { CHECK_KEY, updatesKey, useCheckUpdates, useInstallUpdate, useUpdates } from "./api";
+import { CHECK_KEY, signedOut, useCheckUpdates, useInstallUpdate, useUpdates } from "./api";
 import { messages } from "./messages";
 import {
   INSTALL_PATIENCE_MS,
   POPOVER_STATES,
   STAGE_KEYS,
+  adoptInstall,
+  afterInstallReply,
   buttonState,
-  failedUpdate,
+  failedInstall,
+  installAction,
   installOutcome,
   installedVersion,
   installsAt,
@@ -56,13 +59,19 @@ export function UpdateButton() {
   return useIsAdmin() ? <AdminUpdateButton /> : null;
 }
 
+/** Identifies an installation the updater reports, so "Stop waiting" does not follow it again. */
+const installationKey = (installing: { version: string; startedAt: string }) =>
+  `${installing.version}@${installing.startedAt}`;
+
 function AdminUpdateButton() {
   const t = useT(messages);
   const appName = useAuthConfig()?.appName || "Handbook";
-  const queryClient = useQueryClient();
   const [pending, setPendingState] = useState<PendingInstall | null>(loadPending);
+  // The attempt as last set, for answers that arrive while an install request runs.
+  const pendingRef = useRef(pending);
   const setPending = (next: PendingInstall | null) => {
     savePending(next);
+    pendingRef.current = next;
     setPendingState(next);
   };
   const updates = useUpdates({ waitMs: pending ? POLL_WHILE_INSTALLING_MS : false });
@@ -75,44 +84,67 @@ function AdminUpdateButton() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   /** The version that runs now: the page reloads in a moment. */
   const [done, setDone] = useState<string | null>(null);
+  /** The version whose failure this tab saw while following it: shown even when no longer offered. */
+  const [followed, setFollowed] = useState<string | null>(null);
+  /** The installation an admin stopped waiting for (installationKey). */
+  const [ignored, setIgnored] = useState<string | null>(null);
+  const reloadTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(reloadTimer.current), []);
 
   const data = updates.data;
   // A failed request while the app restarts is expected: keep asking.
-  const restarting = Boolean(pending) && updates.isError;
+  const restarting = Boolean(pending) && updates.isError && !signedOut(updates.error);
 
   useEffect(() => {
-    if (pending && !pending.outage && updates.errorUpdatedAt > pending.startedAt) {
-      setPending({ ...pending, outage: true });
+    // Only a new failed request marks the outage; a signed-out answer is no outage.
+    if (pending && restarting && updates.errorUpdatedAt > pending.startedAt) {
+      setPending({ ...pending, outageAt: updates.errorUpdatedAt });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new error marks the outage
   }, [updates.errorUpdatedAt]);
 
+  const follow = (next: PendingInstall) => {
+    setFollowed(null);
+    setPending(next);
+  };
+
   useEffect(() => {
     if (!data || done) return;
-    if (!pending) {
-      // An installation the updater runs (automatic, or another admin's) is waited for too.
-      const running = data.updater?.installing;
-      if (running) setPending(pendingInstall(running.version, data, Date.now()));
+    const now = Date.now();
+    const running = data.updater?.installing;
+    const current = pendingRef.current;
+    if (current) {
+      const outcome = installOutcome(current, data, updates.dataUpdatedAt, now);
+      if (outcome.kind === "done") {
+        setDone(current.version);
+        setPending(null);
+        toast.success(t("updated", { version: current.version }));
+        reloadTimer.current = window.setTimeout(() => window.location.reload(), RELOAD_AFTER_MS);
+      } else if (outcome.kind === "failed") {
+        setPending(null);
+        setFollowed(current.version);
+        setOpen(true);
+      } else if (outcome.kind === "not-started") {
+        setPending(null);
+        toast.error(t("notStarted"), { description: current.reason ?? undefined });
+      } else if (running && running.version !== current.version) {
+        // Another installation runs (another admin, an automatic one): follow that one.
+        follow(adoptInstall(running, now));
+      } else if (outcome.confirmed && !current.confirmed) {
+        setPending({ ...current, confirmed: true, reason: null });
+      }
       return;
     }
-    const outcome = installOutcome(pending, data);
-    if (outcome === "done") {
-      setDone(pending.version);
-      setPending(null);
-      toast.success(t("updated", { version: pending.version }));
-      window.setTimeout(() => window.location.reload(), RELOAD_AFTER_MS);
-    } else if (outcome === "failed") {
-      setPending(null);
-      setOpen(true);
-    }
+    // An installation the updater runs (automatic, or another admin's) is followed too.
+    if (running && installationKey(running) !== ignored) follow(adoptInstall(running, now));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- each answer and each new installation
-  }, [data, updates.dataUpdatedAt, pending?.version, pending?.startedAt, pending?.outage]);
+  }, [data, updates.dataUpdatedAt, pending?.version, pending?.startedAt]);
 
   if (!data) return null;
-  const state = buttonState(data, { waiting: Boolean(pending || done), checking });
+  const state = buttonState(data, { waiting: Boolean(pending || done), checking, followed });
   const hasPopover = POPOVER_STATES.has(state);
   const installingVersion = pending?.version ?? done ?? data.updater?.installing?.version ?? "";
-  const label = buttonLabel(t, state, data, installingVersion, restarting);
+  const label = buttonLabel(t, state, data, installingVersion, restarting, followed);
 
   const runCheck = async (fromButton: boolean) => {
     try {
@@ -135,20 +167,23 @@ function AdminUpdateButton() {
   };
 
   const runInstall = async (version: string) => {
-    const before = queryClient.getQueryData<UpdatesResponse>(updatesKey);
-    let response: UpdatesResponse;
-    try {
-      response = await install.mutateAsync(version);
-    } catch (error) {
-      toast.error(errorMessage(error));
-      throw error;
-    }
-    if (!response.error || response.updater?.installing?.version === version) {
-      setOpen(false);
-      setPending(pendingInstall(version, before, Date.now()));
-    } else {
-      toast.error(response.error);
-    }
+    // Remembered before the request: an answer that never arrives may still have started it.
+    const attempt = pendingInstall(version, Date.now());
+    setOpen(false);
+    follow(attempt);
+    const reply = await install.mutateAsync(version);
+    const current = pendingRef.current;
+    // A status may have decided meanwhile (a result, another installation): that stands.
+    if (current?.version !== attempt.version || current.startedAt !== attempt.startedAt) return;
+    const next = afterInstallReply(current, reply, Date.now());
+    setPending(next.pending);
+    if (next.refused) toast.error(next.refused);
+  };
+
+  const stopWaiting = () => {
+    const running = data.updater?.installing;
+    setIgnored(running ? installationKey(running) : null);
+    setPending(null);
   };
 
   const askInstall = (update: Update, anyway: boolean) => {
@@ -193,10 +228,12 @@ function AdminUpdateButton() {
             state={state}
             data={data}
             pending={pending}
+            followed={followed}
             installingVersion={installingVersion}
             restarting={restarting}
             appName={appName}
             onInstall={askInstall}
+            onStopWaiting={stopWaiting}
           />
           <PopoverFooter data={data} checking={checking} onCheck={() => void runCheck(false)} />
         </PopoverContent>
@@ -232,6 +269,7 @@ function buttonLabel(
   data: UpdatesResponse,
   installingVersion: string,
   restarting: boolean,
+  followed: string | null,
 ): string {
   const status = data.updater;
   const installed = installedVersion(data) ?? t("unknownVersion");
@@ -247,7 +285,7 @@ function buttonLabel(
     case "installing":
       return restarting ? t("restarting") : t("installing", { version: installingVersion });
     case "failed":
-      return t("failedTitle", { version: failedUpdate(data)?.version ?? "" });
+      return t("failedTitle", { version: failedInstall(data, followed)?.version ?? "" });
     case "off":
       return t("off");
     case "unreachable":
@@ -323,22 +361,54 @@ function Notes({ update }: { update: Update }) {
   );
 }
 
+/** The install button of an update, or why there is none (mode off, an image tag that does not reach it). */
+function InstallControl(props: {
+  status: UpdaterStatus;
+  update: Update;
+  label: "installNow" | "installAnyway" | "tryAgain";
+  appName: string;
+  onInstall: (update: Update, anyway: boolean) => void;
+}) {
+  const t = useT(messages);
+  const action = installAction(props.status, props.update);
+  if (action === "off") return <OffNote />;
+  if (action === "locked") {
+    return (
+      <p className="text-muted-foreground">
+        {t("lockedTag", { app: props.appName, version: props.update.version })}
+      </p>
+    );
+  }
+  if (action === null) return null;
+  const anyway = action === "anyway";
+  return (
+    <Button
+      variant={anyway && props.label === "installAnyway" ? "outline" : "default"}
+      className="w-full"
+      onClick={() => props.onInstall(props.update, anyway)}
+    >
+      {props.label === "installNow" ? <Download aria-hidden /> : null}
+      {t(props.label)}
+    </Button>
+  );
+}
+
 function PopoverBody(props: {
   state: ButtonState;
   data: UpdatesResponse;
   pending: PendingInstall | null;
+  followed: string | null;
   installingVersion: string;
   restarting: boolean;
   appName: string;
   onInstall: (update: Update, anyway: boolean) => void;
+  onStopWaiting: () => void;
 }) {
   const t = useT(messages);
   const format = useFormatter();
   const { data } = props;
   const status = data.updater;
   const installed = installedVersion(data) ?? t("unknownVersion");
-  // Mode off: the popover shows the update, but nothing can install from here.
-  const installable = status?.mode !== "off";
 
   if (props.state === "installing") {
     const version = props.installingVersion;
@@ -350,7 +420,9 @@ function PopoverBody(props: {
         : status?.last?.result === "accepted"
           ? t("stageDeploying")
           : t("stageRequested");
-    const tooLong = props.pending ? Date.now() - props.pending.startedAt > INSTALL_PATIENCE_MS : false;
+    const running = status?.installing;
+    const since = props.pending?.startedAt ?? (running ? Date.parse(running.startedAt) : NaN);
+    const tooLong = Date.now() - since > INSTALL_PATIENCE_MS;
     return (
       <>
         <PopoverHeader>
@@ -358,33 +430,43 @@ function PopoverBody(props: {
           <PopoverDescription role="status">{stageText}</PopoverDescription>
         </PopoverHeader>
         <p>{t("reloads", { app: props.appName })}</p>
-        {tooLong ? <p className="text-destructive">{t("tooLong", { project: PROJECT })}</p> : null}
+        {tooLong ? (
+          <>
+            <p className="text-destructive">{t("tooLong", { project: PROJECT })}</p>
+            {props.pending ? (
+              <Button variant="outline" className="w-full" onClick={props.onStopWaiting}>
+                {t("stopWaiting")}
+              </Button>
+            ) : null}
+          </>
+        ) : null}
       </>
     );
   }
 
   if (props.state === "failed") {
-    const update = failedUpdate(data);
-    if (!update) return null;
+    const failure = failedInstall(data, props.followed);
+    if (!failure) return null;
     return (
       <>
         <PopoverHeader>
-          <PopoverTitle>{t("failedTitle", { version: update.version })}</PopoverTitle>
-          <PopoverDescription className="text-destructive break-words">
-            {status?.last?.message ?? update.failed}
-          </PopoverDescription>
+          <PopoverTitle>{t("failedTitle", { version: failure.version })}</PopoverTitle>
+          {failure.message ? (
+            <PopoverDescription className="text-destructive break-words">
+              {failure.message}
+            </PopoverDescription>
+          ) : null}
         </PopoverHeader>
         <p>{t("stillRunning", { version: installed })}</p>
-        {installable ? (
-          <Button
-            className="w-full"
-            onClick={() => props.onInstall(update, update.version === status?.attention?.version)}
-          >
-            {t("tryAgain")}
-          </Button>
-        ) : (
-          <OffNote />
-        )}
+        {failure.offer && status ? (
+          <InstallControl
+            status={status}
+            update={failure.offer}
+            label="tryAgain"
+            appName={props.appName}
+            onInstall={props.onInstall}
+          />
+        ) : null}
       </>
     );
   }
@@ -417,14 +499,13 @@ function PopoverBody(props: {
             {t("alsoNeedsSteps", { version: status.attention.version })}
           </p>
         ) : null}
-        {installable ? (
-          <Button className="w-full" onClick={() => props.onInstall(update, false)}>
-            <Download aria-hidden />
-            {t("installNow")}
-          </Button>
-        ) : (
-          <OffNote />
-        )}
+        <InstallControl
+          status={status}
+          update={update}
+          label="installNow"
+          appName={props.appName}
+          onInstall={props.onInstall}
+        />
       </>
     );
   }
@@ -439,13 +520,13 @@ function PopoverBody(props: {
         </PopoverHeader>
         <Notes update={update} />
         <ReleaseNotes update={update} />
-        {installable ? (
-          <Button variant="outline" className="w-full" onClick={() => props.onInstall(update, true)}>
-            {t("installAnyway")}
-          </Button>
-        ) : (
-          <OffNote />
-        )}
+        <InstallControl
+          status={status}
+          update={update}
+          label="installAnyway"
+          appName={props.appName}
+          onInstall={props.onInstall}
+        />
       </>
     );
   }
