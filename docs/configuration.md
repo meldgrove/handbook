@@ -87,10 +87,10 @@ empty value there falls back to the default.
 
 ## Docker Compose only
 
-| Variable                                                                                       | Meaning                                                                                                                  |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `HANDBOOK_VERSION`                                                                             | The image tag to run, e.g. `0.1.0`, or a series like `0.1`. On Debian, the updater writes each version it installs here. |
-| `HANDBOOK_PORT`                                                                                | Host port of `web` (default 3000).                                                                                       |
-| `PULL_POLICY`                                                                                  | `always` makes every start pull the image (platforms that do not pull on deploy).                                        |
-| `POSTGRES_PASSWORD`                                                                            | With `compose.postgres.yaml`.                                                                                            |
-| `UPDATE_DEPLOY_HOOK_URL`, `UPDATE_DEPLOY_HOOK_TOKEN`, `UPDATE_COOLDOWN`, `UPDATE_WINDOW`, `TZ` | The optional updater ([Deployment](deployment.md#automatic-updates)).                                                    |
+| Variable                                             | Meaning                                                                                                                              |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `HANDBOOK_VERSION`                                   | The image tag to run, e.g. `0.1.0`, or a series like `0.1`. With automatic updates, the server writes each version it installs here. |
+| `HANDBOOK_PORT`                                      | Host port of `web` on `127.0.0.1` (default 3000), for the reverse proxy.                                                             |
+| `POSTGRES_PASSWORD`                                  | With `compose.postgres.yaml`.                                                                                                        |
+| `UPDATE_COOLDOWN`, `UPDATE_WINDOW`, `TZ`             | The optional updater ([Deployment](deployment.md#automatic-updates)).                                                                |
+| `UPDATE_DEPLOY_HOOK_URL`, `UPDATE_DEPLOY_HOOK_TOKEN` | Coolify only: its deploy link and token ([Coolify](coolify.md#automatic-updates)).                                                   |
