@@ -521,16 +521,20 @@ function markersAvoiding(family: "bullet" | "ordered", avoid: Set<string | null>
   return bullet ? { bullet, bulletOther: bullet === "-" ? "*" : "-" } : null;
 }
 
-/** A fenced code block without its closing fence (CommonMark: fences are indented 0–3 spaces). */
-function isUnclosedFence(source: string): boolean {
+/**
+ * The line that closes a fenced code block left without one (CommonMark: fences are indented
+ * 0–3 spaces); null when the text is no such block.
+ */
+function missingClosingFence(source: string): string | null {
   const lines = source.split("\n");
-  const open = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(lines[0] ?? "");
-  if (!open) return false;
-  const fence = open[1]!;
-  if (fence.startsWith("`") && open[2]!.includes("`")) return false;
-  return (
-    lines.length < 2 || !new RegExp(`^ {0,3}[${fence[0]}]{${fence.length},}[ \\t]*$`).test(lines.at(-1)!)
-  );
+  // `s`: the info string may hold any character but a line break, also U+2028 and U+2029.
+  const open = /^( {0,3})(`{3,}|~{3,})(.*)$/s.exec(lines[0] ?? "");
+  if (!open) return null;
+  const fence = open[2]!;
+  if (fence.startsWith("`") && open[3]!.includes("`")) return null;
+  const closed =
+    lines.length > 1 && new RegExp(`^ {0,3}[${fence[0]}]{${fence.length},}[ \\t]*$`).test(lines.at(-1)!);
+  return closed ? null : `${open[1]}${fence}`;
 }
 
 /** Writes the document as Markdown, keeping unchanged blocks and the space between them as they were. */
@@ -570,14 +574,13 @@ export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
   const body = origin?.body ?? "";
   const adjacent = (a: Piece, b: Piece) => a.index !== null && b.index === a.index + 1;
 
-  // A code block left open at the end of the text would swallow what now follows it: close it.
-  // (Only the text's last block can be one: it runs to the end.)
+  // A code block left open at the end of the text would swallow what now follows it: close it,
+  // keeping its text as written. (Only the text's last block can be one: it runs to the end.)
   pieces.forEach((piece, position) => {
     const lastBlock = piece.index !== null && piece.index === sources.length - 1;
-    if (position < pieces.length - 1 && lastBlock && isUnclosedFence(piece.text)) {
-      piece.text = blockMarkdown(piece.node);
-      piece.index = null;
-    }
+    const close = position < pieces.length - 1 && lastBlock ? missingClosingFence(piece.text) : null;
+    // After the code's last line break, if it has one (another would add an empty line to the code).
+    if (close !== null) piece.text = `${piece.text}${piece.text.endsWith("\n") ? "" : "\n"}${close}`;
   });
 
   // Two lists of one kind with the same marker, newly next to each other, would read as one

@@ -315,13 +315,24 @@ describe("parseBody and serializeBody", () => {
     expect(serializeBody(replaceBlock(indented.doc, 2, p(text("Last!"))), indented.origin)).toBe(
       "Para.\n\n    ```\n    literal\n\nLast!\n",
     );
-    // A line of 4 spaces and backticks does not close a fence: still open, so it is closed.
-    const open = parseBody("Intro.\n\n```\ncode\n    ```", schema);
-    const children: PMNode[] = [open.doc.child(0), open.doc.child(1), schema.nodeFromJSON(p(text("After.")))];
-    const written = serializeBody(schema.node("doc", null, children), open.origin);
-    const reread: string[] = [];
-    parseBody(written, schema).doc.forEach((node) => reread.push(node.type.name));
-    expect(reread).toEqual(["paragraph", "codeBlock", "paragraph"]);
+    // A line of 4 spaces and backticks does not close a fence, and any character but a line break
+    // may be in the info string: still open, so a closing fence is added.
+    for (const [body, expected] of [
+      ["Intro.\n\n```\ncode\n    ```", "Intro.\n\n```\ncode\n    ```\n```\n\nAfter.\n"],
+      ["Intro.\n\n```a\u2028b\ncode", "Intro.\n\n```a\u2028b\ncode\n```\n\nAfter.\n"],
+    ]) {
+      const open = parseBody(body!, schema);
+      const children: PMNode[] = [
+        open.doc.child(0),
+        open.doc.child(1),
+        schema.nodeFromJSON(p(text("After."))),
+      ];
+      const written = serializeBody(schema.node("doc", null, children), open.origin);
+      expect(written).toBe(expected);
+      const reread: string[] = [];
+      parseBody(written, schema).doc.forEach((node) => reread.push(node.type.name));
+      expect(reread).toEqual(["paragraph", "codeBlock", "paragraph"]);
+    }
   });
 
   it("keeps the indentation of a block after a changed one", () => {
