@@ -25,6 +25,7 @@ import {
   users,
 } from "../db/schema";
 import type { Principal } from "../auth/principal";
+import { changeSetVisible } from "../changes/model";
 import { notFound } from "../http/errors";
 import type { SpaceContext } from "../spaces/access";
 import { bodyOf, type PageRow } from "./core";
@@ -185,7 +186,14 @@ export async function pageView(
     .select({ number: changeSets.number, title: changeSets.title, status: changeSets.status })
     .from(changeSetItems)
     .innerJoin(changeSets, eq(changeSets.id, changeSetItems.changeSetId))
-    .where(and(eq(changeSetItems.pageId, page.id), inArray(changeSets.status, ["open", "in_review"])))
+    .where(
+      and(
+        eq(changeSetItems.pageId, page.id),
+        inArray(changeSets.status, ["open", "in_review"]),
+        // A change set on this page may also touch a draft.
+        changeSetVisible(principal),
+      ),
+    )
     .orderBy(desc(changeSets.number));
   return {
     ...pageSummary(page, space.slug),

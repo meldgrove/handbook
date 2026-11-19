@@ -341,6 +341,34 @@ describe("pages API", () => {
     expect(after.body.changeSets).toEqual([]);
   });
 
+  it("uses change set visibility for summaries on an active page", async () => {
+    const { editor, reader, space, page } = await setup();
+    const draft = await createPage(space, {
+      title: "Draft plan",
+      markdown: file("Draft plan", "", "status: draft\n"),
+    });
+    const [changeSet] = await getDb()
+      .insert(changeSets)
+      .values({ spaceId: space.id, title: "Update both pages", authorId: editor.id, channel: "web" })
+      .returning();
+    await getDb()
+      .insert(changeSetItems)
+      .values(
+        [page, draft].map((item) => ({
+          changeSetId: changeSet!.id,
+          pageId: item.id,
+          action: "update",
+          baseRevision: item.revision,
+          path: item.path,
+          markdown: item.markdown,
+        })),
+      );
+    const editorView = await request("GET", `/api/v1/pages/${page.id}`, { userId: editor.id });
+    expect(editorView.body.changeSets).toMatchObject([{ number: changeSet!.number }]);
+    const readerView = await request("GET", `/api/v1/pages/${page.id}`, { userId: reader.id });
+    expect(readerView.body.changeSets).toEqual([]);
+  });
+
   it("finds backlinks from live pages", async () => {
     const { reader, space, page } = await setup();
     await createPage(space, { title: "VPN", body: "See [the laptop](laptop)." });

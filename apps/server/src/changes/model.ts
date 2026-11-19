@@ -100,10 +100,12 @@ async function changesDraft(db: DbOrTx, changeSetId: string): Promise<boolean> {
  * SQL condition for change set lists: the change set changes no draft page,
  * or the principal edits its space (and so sees drafts).
  */
-export function changeSetVisible(principal: UserPrincipal): SQL {
-  if (principal.isAdmin) return sql`true`;
-  return sql`(not exists (select 1 from change_set_items i join pages p on p.id = i.page_id
-      where i.change_set_id = "change_sets"."id" and p.status = 'draft')
+export function changeSetVisible(principal: Principal): SQL {
+  if (principal.kind === "user" && principal.isAdmin) return sql`true`;
+  const noDrafts = sql`not exists (select 1 from change_set_items i join pages p on p.id = i.page_id
+      where i.change_set_id = "change_sets"."id" and p.status = 'draft')`;
+  if (principal.kind === "service") return noDrafts;
+  return sql`(${noDrafts}
     or exists (select 1 from space_members m where m.space_id = "change_sets"."space_id" and m.user_id = ${principal.id}))`;
 }
 
