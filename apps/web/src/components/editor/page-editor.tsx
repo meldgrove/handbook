@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, FileCode, SlidersHorizontal, Type } from "lucide-react";
 import type { Space } from "@handbook/shared/api/spaces";
+import { markdownProblem } from "@handbook/shared/markdown";
 import { hasConflictMarkers } from "@handbook/shared/merge";
+import { splitFrontmatter } from "@handbook/shared/page";
 import { LoadingState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,6 +37,9 @@ const messages = defineMessages({
     pageType: "Page type",
     noType: "No page type",
     yamlError: "The frontmatter cannot be read: {message}. Fix it in the Markdown view.",
+    noFrontmatter:
+      "The file must start with its properties between two “---” lines. Fix it in the Markdown view.",
+    tooComplex: "Rich text cannot show this text: {message}. Edit it in the Markdown view.",
     conflictsOnly: "Resolve the conflicts in Markdown first.",
     propertyErrors: "Some properties need a look.",
     openSettings: "Open the page settings",
@@ -174,11 +179,14 @@ export function PageEditor(props: PageEditorProps) {
   const [mode, setModeState] = useState<EditorMode>(storedMode);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const read = valuesOf(props.file);
+  const hasFrontmatter = splitFrontmatter(props.file) !== null;
   const values = "values" in read ? read.values : null;
   const body = bodyOf(props.file);
   const conflicts = hasConflictMarkers(props.file);
-  // Conflict blocks and frontmatter that cannot be read only make sense as text.
-  const forced = conflicts || values === null;
+  // Only text can show conflict blocks, a file without readable frontmatter, and Markdown
+  // the parser would take too long on (the page view checks the same before showing it).
+  const problem = markdownProblem(body);
+  const forced = conflicts || values === null || !hasFrontmatter || problem !== null;
   const effective: EditorMode = forced ? "markdown" : mode;
   const schema = { properties: props.space.properties, pageTypes: props.space.pageTypes };
   const errors = propertyErrors(props.fields);
@@ -311,6 +319,16 @@ export function PageEditor(props: PageEditorProps) {
       {props.blocked ? null : (
         <>
           {props.banners}
+          {!hasFrontmatter ? (
+            <EditorBanner tone="error" icon={<AlertCircle />}>
+              {t("noFrontmatter")}
+            </EditorBanner>
+          ) : null}
+          {problem !== null && hasFrontmatter ? (
+            <EditorBanner tone="warning" icon={<AlertCircle />}>
+              {t("tooComplex", { message: problem })}
+            </EditorBanner>
+          ) : null}
           {values === null && "error" in read ? (
             <EditorBanner tone="error" icon={<AlertCircle />}>
               {t("yamlError", { message: read.error })}
@@ -393,6 +411,7 @@ export function PageEditor(props: PageEditorProps) {
               </>
             ) : (
               <Suspense fallback={<LoadingState />}>
+                {props.belowTitle ? <div className="mb-6">{props.belowTitle}</div> : null}
                 <MarkdownEditor
                   value={props.file}
                   onChange={props.onChange}

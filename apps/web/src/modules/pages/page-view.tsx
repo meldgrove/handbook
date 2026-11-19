@@ -336,7 +336,9 @@ function TableOfContents({ article, body }: { article: React.RefObject<HTMLEleme
 
   useEffect(() => {
     // Only the page text's own sections, not the parts the page view adds at its end.
-    const nodes = [...(article.current?.querySelectorAll<HTMLElement>(".article :is(h2, h3)[id]") ?? [])];
+    const nodes = [
+      ...(article.current?.querySelectorAll<HTMLElement>(".article :is(h2, h3)[id]") ?? []),
+    ].filter((node) => !node.closest("[data-footnotes]"));
     setHeadings(
       nodes.map((node) => ({
         id: node.id,

@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { errorMessage } from "@/lib/api";
 import { useT } from "@/i18n";
 import { LinkEditor } from "./link-editor";
-import { inlineFromMarkdown, parseBody, serializeBody, type BodyOrigin } from "./markdown";
+import { markdownProblem } from "@handbook/shared/markdown";
+import { attachNodes, inlineFromMarkdown, parseBody, serializeBody, type BodyOrigin } from "./markdown";
 import { FormatMenu, InsertButton, TableMenu } from "./menus";
 import { richTextMessages } from "./messages";
 import { EditorCallout, EditorRawMarkdown } from "./node-views";
@@ -87,7 +88,8 @@ export function RichTextEditor(props: RichTextEditorProps) {
         addKeyboardShortcuts() {
           return {
             "Mod-k": () => {
-              if (this.editor.state.selection.empty && !this.editor.isActive("link")) setPageLink(true);
+              // Nothing selected (also inside a link): the link dialog; selected text: the toolbar's link field.
+              if (this.editor.state.selection.empty) setPageLink(true);
               else setLinking(true);
               return true;
             },
@@ -148,7 +150,13 @@ export function RichTextEditor(props: RichTextEditorProps) {
         const text = event.clipboardData?.getData("text/plain") ?? "";
         const html = event.clipboardData?.getData("text/html") ?? "";
         const current = editorRef.current;
-        if (!html && current && looksLikeMarkdown(text) && !current.isActive("codeBlock")) {
+        if (
+          !html &&
+          current &&
+          looksLikeMarkdown(text) &&
+          !markdownProblem(text) &&
+          !current.isActive("codeBlock")
+        ) {
           event.preventDefault();
           const { doc } = parseBody(text, view.state.schema);
           current
@@ -169,8 +177,11 @@ export function RichTextEditor(props: RichTextEditorProps) {
         return true;
       },
     },
+    onCreate: ({ editor: current }) => attachNodes(origin.current, current.state.doc),
     onUpdate: ({ editor: current }) => {
       const body = serializeBody(current.state.doc, origin.current);
+      // Only real changes reach the file (an update can come without one).
+      if (body === emitted.current) return;
       emitted.current = body;
       latest.current.onChange(body);
       latest.current.onActivity?.();
@@ -182,7 +193,8 @@ export function RichTextEditor(props: RichTextEditorProps) {
   }, [editor]);
 
   useEffect(() => {
-    editor?.setEditable(!props.readOnly);
+    // No update event: making the editor editable changes nothing in the text.
+    editor?.setEditable(!props.readOnly, false);
   }, [editor, props.readOnly]);
 
   // A new text from outside (a restored draft, a merge, the Markdown view): read it again.
@@ -192,6 +204,7 @@ export function RichTextEditor(props: RichTextEditorProps) {
     origin.current = parsed.origin;
     emitted.current = props.value;
     editor.commands.setContent(parsed.doc.toJSON() as JSONContent, { emitUpdate: false });
+    attachNodes(parsed.origin, editor.state.doc);
   }, [editor, props.value]);
 
   return (

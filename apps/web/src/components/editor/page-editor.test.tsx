@@ -68,6 +68,13 @@ describe("PageEditor", () => {
     expect(onChange).toHaveBeenLastCalledWith("---\ntitle: VPN\n---\n\nNew text.\n");
   });
 
+  it("shows the Markdown file when the properties lose their closing line", async () => {
+    renderEditor("---\ntitle: VPN\n\nText.\n");
+    expect(screen.getByRole("button", { name: "Rich text" })).toBeDisabled();
+    expect(screen.getByText(/must start with its properties/)).toBeInTheDocument();
+    expect(await screen.findByLabelText("Whole page file: frontmatter and Markdown")).toBeInTheDocument();
+  });
+
   it("shows the Markdown file while the text has conflict blocks", async () => {
     renderEditor("---\ntitle: VPN\n---\n\n<<<<<<< yours\nA\n=======\nB\n>>>>>>> current\n");
     expect(screen.getByRole("button", { name: "Rich text" })).toBeDisabled();

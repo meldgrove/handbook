@@ -205,7 +205,20 @@ function toNode(node: RootContent, source: string, schema: Schema): PMNode {
 
 /** One top-level block of the original body: where it was, its text, and its canonical Markdown. */
 export type SourceBlock = { start: number; end: number; source: string; canonical: string };
-export type BodyOrigin = { body: string; blocks: SourceBlock[] };
+/**
+ * `nodes`: the document's top-level nodes as first read, by block. A node
+ * edits never touched is the same object, so it maps to its own source even
+ * when another block looks the same.
+ */
+export type BodyOrigin = { body: string; blocks: SourceBlock[]; nodes?: readonly PMNode[] };
+
+/** Ties the origin to the top-level nodes of a document read from it (e.g. by the editor). */
+export function attachNodes(origin: BodyOrigin, doc: PMNode) {
+  if (doc.childCount !== origin.blocks.length) return;
+  const nodes: PMNode[] = [];
+  doc.forEach((node) => nodes.push(node));
+  origin.nodes = nodes;
+}
 
 /** The document of a page body, and what is needed to write unchanged blocks back as they were. */
 export function parseBody(body: string, schema: Schema): { doc: PMNode; origin: BodyOrigin } {
@@ -213,8 +226,11 @@ export function parseBody(body: string, schema: Schema): { doc: PMNode; origin: 
   const nodes: PMNode[] = [];
   const sources: SourceBlock[] = [];
   for (const child of tree.children) {
-    const start = child.position?.start.offset ?? 0;
+    let start = child.position?.start.offset ?? 0;
     const end = child.position?.end.offset ?? start;
+    // The block's indentation is part of it (an indented fence's lines are relative to it).
+    const lineStart = body.lastIndexOf("\n", start - 1) + 1;
+    if (/^[ \t]*$/.test(body.slice(lineStart, start))) start = lineStart;
     const source = body.slice(start, end);
     nodes.push(toNode(child, source, schema));
     sources.push({ start, end, source, canonical: "" });
@@ -223,7 +239,9 @@ export function parseBody(body: string, schema: Schema): { doc: PMNode; origin: 
   sources.forEach((source, index) => {
     source.canonical = blockMarkdown(doc.child(index));
   });
-  return { doc, origin: { body, blocks: sources } };
+  const origin: BodyOrigin = { body, blocks: sources };
+  attachNodes(origin, doc);
+  return { doc, origin };
 }
 
 /** The inline content of a Markdown snippet (e.g. an uploaded file's link), to insert at the cursor. */
@@ -493,9 +511,17 @@ function listMarker(text: string): string | null {
 
 type Piece = { text: string; index: number | null; node: PMNode };
 
+/** List markers to write a list with, other than the ones its neighbors use. */
+function markersAvoiding(family: "bullet" | "ordered", avoid: Set<string | null>): MarkerOptions {
+  if (family === "ordered") return { bulletOrdered: avoid.has(".") ? ")" : "." };
+  const bullet = (["-", "*", "+"] as const).find((marker) => !avoid.has(marker)) ?? "-";
+  return { bullet, bulletOther: bullet === "-" ? "*" : "-" };
+}
+
 /** Writes the document as Markdown, keeping unchanged blocks and the space between them as they were. */
 export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
   const sources = origin?.blocks ?? [];
+  const known = new Map(origin?.nodes?.map((node, index) => [node, index]));
   const used = new Set<number>();
   let last = -1;
   const pieces: Piece[] = [];
@@ -503,8 +529,11 @@ export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
     if (isEmptyParagraph(node)) return;
     const canonical = blockMarkdown(node);
     let index: number | null = null;
+    const same = known.get(node);
     const next = last + 1;
-    if (next < sources.length && !used.has(next) && sources[next]!.canonical === canonical) {
+    if (same !== undefined && !used.has(same)) {
+      index = same;
+    } else if (next < sources.length && !used.has(next) && sources[next]!.canonical === canonical) {
       index = next;
     } else {
       const found = sources.findIndex((source, i) => !used.has(i) && source.canonical === canonical);
@@ -518,27 +547,32 @@ export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
   });
   if (pieces.length === 0) return "";
   const body = origin?.body ?? "";
+  const adjacent = (a: Piece, b: Piece) => a.index !== null && b.index === a.index + 1;
+
+  // Two lists of one kind with the same marker, newly next to each other, would read as one
+  // list: give one of them other markers, the changed one when only one changed.
+  for (let i = 1; i < pieces.length; i++) {
+    const previous = pieces[i - 1]!;
+    const piece = pieces[i]!;
+    const family = listFamily(piece.node);
+    if (adjacent(previous, piece) || !family || family !== listFamily(previous.node)) continue;
+    if (listMarker(previous.text) !== listMarker(piece.text)) continue;
+    const target = previous.index === null && piece.index !== null ? i - 1 : i;
+    const neighbor = pieces[target === i ? i + 1 : i - 2];
+    const avoid = new Set([listMarker(previous.text), listMarker(piece.text)]);
+    if (neighbor && listFamily(neighbor.node) === family) avoid.add(listMarker(neighbor.text));
+    pieces[target]!.text = blockMarkdown(pieces[target]!.node, markersAvoiding(family, avoid));
+    pieces[target]!.index = null;
+  }
 
   let result = "";
   pieces.forEach((piece, position) => {
     const previous = pieces[position - 1];
     if (!previous) {
       if (piece.index === 0) result += body.slice(0, sources[0]!.start);
-    } else if (previous.index !== null && piece.index === previous.index + 1) {
-      result += body.slice(sources[previous.index]!.end, sources[piece.index]!.start);
+    } else if (adjacent(previous, piece)) {
+      result += body.slice(sources[previous.index!]!.end, sources[piece.index!]!.start);
     } else {
-      // Two lists of one kind with the same marker would read as one list: use the other marker.
-      const family = listFamily(piece.node);
-      const marker = listMarker(previous.text);
-      if (family && family === listFamily(previous.node) && marker === listMarker(piece.text)) {
-        piece.text = blockMarkdown(
-          piece.node,
-          family === "bullet"
-            ? { bullet: marker === "-" ? "*" : "-", bulletOther: marker === "-" ? "-" : "*" }
-            : { bulletOrdered: marker === "." ? ")" : "." },
-        );
-        piece.index = null;
-      }
       result += "\n\n";
     }
     result += piece.text;

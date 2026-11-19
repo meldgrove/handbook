@@ -282,6 +282,28 @@ describe("parseBody and serializeBody", () => {
     expect(serializeBody(schema.node("doc", null, children), origin)).toBe("- One\n\n* Two\n");
   });
 
+  it("keeps each unchanged block's own source when two blocks look the same", () => {
+    const { doc: parsed, origin } = parseBody("*same*\n\n_same_\n", schema);
+    const children: PMNode[] = [parsed.child(1)];
+    expect(serializeBody(schema.node("doc", null, children), origin)).toBe("_same_\n");
+  });
+
+  it("keeps the indentation of a block after a changed one", () => {
+    const body = "Intro.\n\n  ```\n  code\n    more\n  ```\n";
+    const { doc: parsed, origin } = parseBody(body, schema);
+    const edited = replaceBlock(parsed, 0, p(text("New intro.")));
+    expect(serializeBody(edited, origin)).toBe("New intro.\n\n  ```\n  code\n    more\n  ```\n");
+  });
+
+  it("gives a changed list other markers than the unchanged list beside it", () => {
+    const { doc: parsed, origin } = parseBody("* One\n\n- Two\n", schema);
+    const edited = replaceBlock(parsed, 0, {
+      type: "bulletList",
+      content: [{ type: "listItem", content: [p(text("One!"))] }],
+    });
+    expect(serializeBody(edited, origin)).toBe("* One!\n\n- Two\n");
+  });
+
   it("gives the inline content of an uploaded file's Markdown", () => {
     expect(inlineFromMarkdown("![Plan](/files/7/plan.png)", schema)).toEqual([
       {

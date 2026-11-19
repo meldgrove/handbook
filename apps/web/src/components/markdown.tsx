@@ -162,7 +162,6 @@ const headingClass = "scroll-mt-20 font-semibold tracking-tight";
 /** The article style: plain elements, styled by the `.article` rules in styles.css. */
 function articleComponents(from: { space: string; path: string }): Components {
   return {
-    ul: ({ node: _node, ...props }) => <ul {...props} />,
     input: ({ node: _node, ...props }) => <input {...props} aria-label="Task" />,
     div: ({ node: _node, ...props }) => {
       const callout = (props as Record<string, unknown>)["data-callout"];
