@@ -23,8 +23,11 @@ export function AdminUpdates({ appName, children }: { appName: string; children:
       guideUrl={DEPLOYMENT_GUIDE}
       // US English dates, as everywhere in the app.
       dateLocale="en-US"
-      // 401, 403, 404 or a sign-in page: the app's sign-in handler, as for a 401 of any API request.
-      onSignedOut={sessionEnded}
+      // An ended session (401, sign-in page): the app's sign-in handler, as for a 401 of any
+      // API request. A lost admin role (403, 404) only stops the requests.
+      onSignedOut={(reason) => {
+        if (reason === "signed-out") sessionEnded();
+      }}
     >
       {children}
     </UpdatesProvider>
