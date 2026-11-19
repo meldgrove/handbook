@@ -7,13 +7,13 @@ import {
   type PropertyDefinition,
   type SpaceSchema,
 } from "@handbook/shared/page";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@meldgrove/ui/button";
+import { Checkbox } from "@meldgrove/ui/checkbox";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@meldgrove/ui/select";
+import { Switch } from "@meldgrove/ui/switch";
+import { Textarea } from "@meldgrove/ui/textarea";
 import { defineMessages, useT } from "@/i18n";
 import { asList, asText, splitComma, splitLines, type Values } from "./file";
 

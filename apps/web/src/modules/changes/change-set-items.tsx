@@ -5,16 +5,16 @@ import { ArrowRight, ChevronDown, ChevronRight, Pencil, RefreshCw, TriangleAlert
 import type { ChangeSet, ChangeSetItem, ChangeSetPage } from "@handbook/shared/api/changes";
 import { readFrontmatterValues, splitFrontmatter } from "@handbook/shared/page";
 import { LineDiff } from "@/components/changes/line-diff";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { MarkdownView } from "@/components/markdown";
-import { ErrorState, LoadingState } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@meldgrove/ui/collapsible";
+import { Tabs, TabsList, TabsTrigger } from "@meldgrove/ui/tabs";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 import { changeSetApi, useChangeSetAction, useChangeSetPage } from "./api";
 import { messages } from "./messages";
 

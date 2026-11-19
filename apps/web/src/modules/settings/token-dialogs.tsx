@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { TriangleAlert } from "lucide-react";
-import { CopyButton } from "@/components/copy-button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { CopyButton } from "@meldgrove/ui/copy-button";
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Button } from "@meldgrove/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,11 +10,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
+} from "@meldgrove/ui/dialog";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@meldgrove/ui/select";
+import { Spinner } from "@meldgrove/ui/spinner";
 import { defineMessages, useT } from "@/i18n";
 import { common } from "@/i18n/common";
 import { ApiError, errorMessage } from "@/lib/api";

@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import type { ChangeSet } from "@handbook/shared/api/changes";
-import { Button } from "@/components/ui/button";
+import { Button } from "@meldgrove/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,11 +8,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+} from "@meldgrove/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { Spinner } from "@meldgrove/ui/spinner";
+import { Textarea } from "@meldgrove/ui/textarea";
 import { api } from "@/lib/api";
 import { defineMessages, useT } from "@/i18n";
 import { common } from "@/i18n/common";

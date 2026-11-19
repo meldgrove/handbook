@@ -14,16 +14,16 @@ import { Page as PageLayout, PageHeader } from "@/components/layout/page";
 import { PageTree } from "@/components/page/tree-view";
 import { spaceQuery, treeQuery } from "@/components/page/queries";
 import { RecentChanges } from "@/components/page/recent-changes";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Button } from "@meldgrove/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@meldgrove/ui/dropdown-menu";
 import { ApiError, apiUrl } from "@/lib/api";
 import { useT } from "@/i18n";
 import { messages } from "./messages";

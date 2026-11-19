@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { diffTextLines, type DiffLine } from "@handbook/shared/merge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@meldgrove/ui/button";
 import { defineMessages, useT } from "@/i18n";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 
 const messages = defineMessages({
   en: {

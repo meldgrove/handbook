@@ -6,11 +6,11 @@ import { HIGHLIGHT_END, HIGHLIGHT_START, type SearchResult } from "@handbook/sha
 import { spacesQuery } from "@/components/layout/app-layout";
 import { Page as PageLayout, PageHeader } from "@/components/layout/page";
 import { searchQuery } from "@/components/page/queries";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Input } from "@meldgrove/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@meldgrove/ui/select";
 import { useT } from "@/i18n";
 import { messages } from "./messages";
 

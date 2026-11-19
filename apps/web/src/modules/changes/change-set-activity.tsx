@@ -14,10 +14,10 @@ import {
 } from "lucide-react";
 import type { ChangeSet, ChangeSetEvent } from "@handbook/shared/api/changes";
 import { MarkdownView } from "@/components/markdown";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@meldgrove/ui/button";
+import { Label } from "@meldgrove/ui/label";
+import { Spinner } from "@meldgrove/ui/spinner";
+import { Textarea } from "@meldgrove/ui/textarea";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useFormatter } from "@/lib/format";

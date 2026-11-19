@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { LoadingState } from "@/components/states";
+import { LoadingState } from "@meldgrove/ui/states";
 import type { EditorWorkspaceProps } from "./editor-workspace";
 
 const Workspace = lazy(() =>

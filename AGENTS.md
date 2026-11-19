@@ -14,8 +14,9 @@ npm workspaces, Node.js 26, strict TypeScript.
   `/.well-known` and `/oauth`), Better Auth (OIDC sign-in under `/api/auth`),
   Drizzle ORM on PostgreSQL, remark (Markdown analysis), the MCP TypeScript
   SDK, pino logs, Sentry, Vitest.
-- `apps/web`: Vite + React 19, TanStack Router and Query, shadcn/ui with
-  Tailwind CSS 4, CodeMirror 6 (the editor), react-markdown. US English.
+- `apps/web`: Vite + React 19, TanStack Router and Query, Tailwind CSS 4
+  with `@meldgrove/ui` (the shared Meldgrove theme, shadcn/ui components and
+  update button), CodeMirror 6 (the editor), react-markdown. US English.
 - `packages/shared` (`@handbook/shared/*`): zod schemas of the API
   (`api/*.ts`), the page file model (`page.ts`), paths and links
   (`paths.ts`), merging and edits (`merge.ts`), roles and abilities
@@ -65,6 +66,9 @@ packages/shared/src/  contracts, page model, paths, merge, roles
   `packages/shared/src/page.ts`; links resolve only with `resolveLink`.
 - **Credentials** are stored as SHA-256 hashes; secrets are shown once and
   never logged. Never log authorization codes, PKCE verifiers or tokens.
+- **UI components** come from `@meldgrove/ui` (`@meldgrove/ui/<name>`, `cn`
+  from `@meldgrove/ui/utils`); the app keeps no copies. A missing component or
+  a fix goes into that package.
 - **Errors:** throw `AppError` helpers (`http/errors.ts`) with short, plain
   messages.
 - **Logging:** `logger` with ids and codes; never page texts, titles, email

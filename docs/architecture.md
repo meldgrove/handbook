@@ -392,6 +392,10 @@ helps.
 | `/admin/spaces`, `/admin/people`, `/admin/service-tokens`, `/admin/audit`                                                             | admin, audit |
 | `/admin/updates`: installed version, update channel; the update button in the header (admins)                                         | updates      |
 
+The theme, the shadcn/ui components and the update button come from the
+shared package `@meldgrove/ui`. `modules/updates/updates.tsx` gives admins
+its `UpdatesProvider`, which the header button and `/admin/updates` share.
+
 `components/markdown.tsx` (`MarkdownView`) renders bodies everywhere:
 react-markdown with remark-gfm, no HTML, callouts, heading anchors from
 `github-slugger` numbered over all headings like the server's sections

@@ -4,13 +4,13 @@ import { toast } from "sonner";
 import { Archive, ArchiveRestore, Library, Plus, Settings } from "lucide-react";
 import type { SpaceSummary } from "@handbook/shared/api/spaces";
 import { MAX_SPACE_SLUG_LENGTH, slugify } from "@handbook/shared/paths";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { Page, PageHeader } from "@/components/layout/page";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Card } from "@meldgrove/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -18,11 +18,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+} from "@meldgrove/ui/dialog";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { Spinner } from "@meldgrove/ui/spinner";
+import { Textarea } from "@meldgrove/ui/textarea";
 import { useT } from "@/i18n";
 import { common } from "@/i18n/common";
 import { ApiError, errorMessage } from "@/lib/api";

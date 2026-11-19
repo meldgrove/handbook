@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Page } from "@handbook/shared/api/pages";
 import { isWithin, lastSegment, parentPath } from "@handbook/shared/paths";
-import { Button } from "@/components/ui/button";
+import { Button } from "@meldgrove/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,11 +11,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
+} from "@meldgrove/ui/dialog";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@meldgrove/ui/select";
+import { Spinner } from "@meldgrove/ui/spinner";
 import { treeQuery } from "@/components/page/queries";
 import { buildTree, flattenTree } from "@/components/page/tree";
 import { ApiError, api, errorMessage } from "@/lib/api";

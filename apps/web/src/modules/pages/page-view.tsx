@@ -21,22 +21,22 @@ import type { Page } from "@handbook/shared/api/pages";
 import type { Space } from "@handbook/shared/api/spaces";
 import { BUILT_IN_KEYS, BUILT_IN_PROPERTIES, splitFrontmatter, type PageStatus } from "@handbook/shared/page";
 import { pageMarkdownUrl, parentPath, resolveLink } from "@handbook/shared/paths";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { Page as PageLayout } from "@/components/layout/page";
 import { MarkdownView } from "@/components/markdown";
 import { pageByPathQuery, spaceQuery } from "@/components/page/queries";
 import { StatusBadge } from "@/components/page/status-badge";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@meldgrove/ui/dropdown-menu";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import { useFormatter } from "@/lib/format";
 import { useT } from "@/i18n";
