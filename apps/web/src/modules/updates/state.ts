@@ -321,6 +321,10 @@ export function isIgnored(
 /** After this long without a result, the button says to look at the server. */
 export const INSTALL_PATIENCE_MS = 15 * 60_000;
 
+/** Whether an installation that started at `since` (NaN: unknown) takes longer than expected. */
+export const waitedTooLong = (since: number, now: number) =>
+  !Number.isNaN(since) && now - since >= INSTALL_PATIENCE_MS;
+
 export const STAGE_KEYS: Record<
   InstallStage,
   "stageRequested" | "stagePulling" | "stageStarting" | "stageRollingBack" | "stageDeploying"

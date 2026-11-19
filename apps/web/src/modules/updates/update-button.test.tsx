@@ -61,8 +61,8 @@ const available = answer({
   },
 });
 
-/** A JSON answer, an HTML page (a proxy's sign-in page), or no answer at all (`fail`). */
-type Reply = { status?: number; body?: unknown; html?: string; fail?: boolean };
+/** A JSON answer, an HTML page (a proxy's sign-in page), no answer at all (`fail`), or none until aborted (`stall`). */
+type Reply = { status?: number; body?: unknown; html?: string; fail?: boolean; stall?: boolean };
 
 /** Replies by "METHOD /path"; a list answers one call each and repeats its last entry; a function decides per call. */
 function stubApi(routes: Record<string, Reply | Reply[] | (() => Reply)>) {
@@ -79,6 +79,11 @@ function stubApi(routes: Record<string, Reply | Reply[] | (() => Reply)>) {
           : entry;
     if (!reply) return new Response(JSON.stringify({ error: { code: "x", message: key } }), { status: 500 });
     if (reply.fail) throw new TypeError("Failed to fetch");
+    if (reply.stall) {
+      return new Promise<Response>((_, reject) =>
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason as Error)),
+      );
+    }
     if (reply.html !== undefined) {
       return new Response(reply.html, {
         status: reply.status ?? 200,
@@ -98,14 +103,19 @@ function renderButton(person: Me = me) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["me"], person);
   client.setQueryData(["auth-config"], { appName: "Handbook", providerName: "Keycloak" });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
         <UpdateButton />
       </TooltipProvider>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
+
+/** The status requests among the stub's calls. */
+const statusCalls = (fetch: ReturnType<typeof stubApi>) =>
+  fetch.mock.calls.filter(([url]) => url === "/api/v1/admin/updates");
 
 /** The updater's times are whole seconds. */
 const updaterTime = (time: number) => new Date(time).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -126,6 +136,7 @@ describe("UpdateButton", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("is not there for people who are not admins", async () => {
@@ -372,8 +383,7 @@ describe("UpdateButton", () => {
     expect(await screen.findByRole("button", { name: "Installing 0.2.1…" })).toBeInTheDocument();
     signedOut = true;
     await act(() => vi.advanceTimersByTimeAsync(2_500));
-    const statusCalls = () => fetch.mock.calls.filter(([url]) => url === "/api/v1/admin/updates").length;
-    const calls = statusCalls();
+    const calls = statusCalls(fetch).length;
     // No interval, no focus, no reconnect.
     await act(() => vi.advanceTimersByTimeAsync(5 * 60_000 + 1_000));
     await act(async () => {
@@ -383,7 +393,7 @@ describe("UpdateButton", () => {
       window.dispatchEvent(new Event("online"));
     });
     await act(() => vi.advanceTimersByTimeAsync(1_000));
-    expect(statusCalls()).toBe(calls);
+    expect(statusCalls(fetch).length).toBe(calls);
     expect(JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? "{}")).toMatchObject({ version: "0.2.1" });
   });
 
@@ -407,6 +417,100 @@ describe("UpdateButton", () => {
     const popover = await screen.findByRole("dialog");
     expect(popover).toHaveTextContent("0.2.1 failed: container web is unhealthy. 0.2.0 runs again.");
     expect(within(popover).getByRole("button", { name: "Install now" })).toBeInTheDocument();
+  });
+
+  it("shows a restored attempt while every status request fails, with Stop waiting after 15 minutes", async () => {
+    sessionStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({
+        version: "0.2.1",
+        startedAt: Date.now() - 16 * 60_000,
+        confirmed: true,
+        reason: null,
+        outageAt: null,
+      }),
+    );
+    stubApi({ "GET /api/v1/admin/updates": { fail: true } });
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Restarting…" }));
+    const popover = await screen.findByRole("dialog");
+    expect(popover).toHaveTextContent("Installing 0.2.1…");
+    expect(popover).toHaveTextContent("This takes longer than expected.");
+    await user.click(within(popover).getByRole("button", { name: "Stop waiting" }));
+    expect(sessionStorage.getItem(PENDING_KEY)).toBeNull();
+  });
+
+  it("counts a status 5xx as an outage, so an acceptance without app version completes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const startedAt = Date.now();
+    sessionStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ version: "0.2.1", startedAt, confirmed: true, reason: null, outageAt: null }),
+    );
+    const accepted = answer({
+      mode: "platform",
+      last: { version: "0.2.1", result: "accepted", message: null, finishedAt: updaterTime(startedAt) },
+    });
+    stubApi({
+      "GET /api/v1/admin/updates": [
+        {
+          status: 503,
+          body: { app: { version: null }, reachable: true, updater: null, error: "The updater is busy." },
+        },
+        { body: { ...accepted, app: { version: null } } },
+      ],
+    });
+    renderButton();
+    expect(await screen.findByRole("button", { name: "Restarting…" })).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? "{}")).toMatchObject({
+      outageAt: expect.any(Number),
+      lastError: "The updater is busy.",
+    });
+    await act(() => vi.advanceTimersByTimeAsync(2_500));
+    expect(toast.success).toHaveBeenCalledWith("Updated to 0.2.1");
+  });
+
+  it("gives every status request a timeout, also without an installation", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Timeouts on the fake clock.
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    const fetch = stubApi({ "GET /api/v1/admin/updates": { stall: true } });
+    renderButton();
+    await waitFor(() => expect(statusCalls(fetch)).toHaveLength(1));
+    const signal = statusCalls(fetch)[0]![1]!.signal!;
+    await act(() => vi.advanceTimersByTimeAsync(9_000));
+    expect(signal.aborted).toBe(false);
+    await act(() => vi.advanceTimersByTimeAsync(1_500));
+    expect(signal.aborted).toBe(true);
+  });
+
+  it("does not let the install wait share a status request that started before", async () => {
+    let stall = false;
+    const fetch = stubApi({
+      "GET /api/v1/admin/updates": () => (stall ? { stall: true } : { body: available }),
+      "POST /api/v1/admin/updates/install": {
+        status: 502,
+        body: { error: { code: "x", message: "Bad gateway" } },
+      },
+    });
+    const { client } = renderButton();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Update available · 0.2.1" }));
+    // A status request hangs when the admin installs.
+    stall = true;
+    void client.refetchQueries({ queryKey: ["admin", "updates"] });
+    await waitFor(() => expect(statusCalls(fetch)).toHaveLength(2));
+    stall = false;
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Install now" }));
+    await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Install" }));
+    // It is cancelled, and a new one asks at once.
+    await waitFor(() => expect(statusCalls(fetch)).toHaveLength(3));
+    expect(statusCalls(fetch)[1]![1]!.signal!.aborted).toBe(true);
   });
 
   it("shows a failed update with the updater's message", async () => {

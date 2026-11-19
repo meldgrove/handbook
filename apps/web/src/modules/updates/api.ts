@@ -7,16 +7,20 @@ export const updatesKey = ["admin", "updates"] as const;
 /** The check's mutation key: every update control shows a running check. */
 export const CHECK_KEY = ["admin", "updates", "check"] as const;
 
-/** How long one status request may take while an installation is followed. */
-const WAIT_TIMEOUT_MS = 10_000;
+/** How long one status request may take. */
+const STATUS_TIMEOUT_MS = 10_000;
 
 const isUpdatesResponse = (body: unknown): body is UpdatesResponse =>
   typeof body === "object" && body !== null && "reachable" in body;
 
-/** The latest status a refusal (409) or an error of the updater (5xx) carries; null for any other error. */
-function errorBody(error: unknown): UpdatesResponse | null {
-  const body = error instanceof ApiError && (error.status === 409 || error.status >= 500) ? error.body : null;
-  return isUpdatesResponse(body) ? body : null;
+/**
+ * The latest status a refusal (409) or, unless `serverErrors` is false, an
+ * error of the updater (5xx) carries; null for any other error.
+ */
+function errorBody(error: unknown, serverErrors = true): UpdatesResponse | null {
+  const answered =
+    error instanceof ApiError && (error.status === 409 || (serverErrors && error.status >= 500));
+  return answered && isUpdatesResponse(error.body) ? error.body : null;
 }
 
 /** A redirect or an HTML page instead of the API's JSON: a sign-in page of a proxy in front of the app. */
@@ -52,13 +56,16 @@ async function call(
 }
 
 /** The status an updates route answers, also in a refusal (409) or an updater error (5xx); anything else throws. */
-async function answerOf(request: Promise<{ response: UpdatesResponse | null }>): Promise<UpdatesResponse> {
+async function answerOf(
+  request: Promise<{ response: UpdatesResponse | null }>,
+  serverErrors = true,
+): Promise<UpdatesResponse> {
   try {
     const { response } = await request;
     if (!response) throw new Error(UNREADABLE_ANSWER);
     return response;
   } catch (error) {
-    const body = errorBody(error);
+    const body = errorBody(error, serverErrors);
     if (body) return body;
     throw error;
   }
@@ -68,25 +75,43 @@ async function answerOf(request: Promise<{ response: UpdatesResponse | null }>):
 export const signedOut = (error: unknown) =>
   error instanceof ApiError && (error.status === 401 || error.status === 403);
 
-/** The status; with `timeoutMs`, a request that takes longer fails. */
-export async function fetchUpdates(signal?: AbortSignal, timeoutMs?: number): Promise<UpdatesResponse> {
-  const timeout = timeoutMs === undefined ? undefined : AbortSignal.timeout(Math.max(0, timeoutMs));
-  const signals = [signal, timeout].filter((item) => item !== undefined);
+/**
+ * The status; a request that takes longer than `timeoutMs` fails. A 5xx
+ * stays an error (an outage while an installation is followed), with the
+ * updater's message.
+ */
+export async function fetchUpdates(
+  signal?: AbortSignal,
+  timeoutMs = STATUS_TIMEOUT_MS,
+): Promise<UpdatesResponse> {
+  const timeout = AbortSignal.timeout(Math.max(0, timeoutMs));
   try {
-    return await answerOf(call("GET", "/admin/updates", { signal: AbortSignal.any(signals) }));
+    return await answerOf(
+      call("GET", "/admin/updates", { signal: signal ? AbortSignal.any([signal, timeout]) : timeout }),
+      false,
+    );
   } catch (error) {
-    if (timeout?.aborted && !signal?.aborted)
+    if (timeout.aborted && !signal?.aborted) {
       throw new Error("The app did not answer in time.", { cause: error });
+    }
+    if (
+      error instanceof ApiError &&
+      error.status >= 500 &&
+      isUpdatesResponse(error.body) &&
+      error.body.error
+    ) {
+      error.message = error.body.error;
+    }
     throw error;
   }
 }
 
 /**
  * Admins: the updater's status. Asked on page load, every 5 minutes, and on
- * focus at most once a minute; `waitMs` polls faster during an installation,
- * each request with a timeout (at most until `until`, the deadline of an
- * unconfirmed attempt). Never checks by itself. After a 401/403 or a sign-in
- * page, nothing asks again by itself (interval, focus, reconnect).
+ * focus at most once a minute; `waitMs` polls faster during an installation.
+ * Each request has a timeout (during an unconfirmed attempt at most until
+ * `until`, its deadline). Never checks by itself. After a 401/403 or a
+ * sign-in page, nothing asks again by itself (interval, focus, reconnect).
  */
 export function useUpdates(
   options: { enabled?: boolean; waitMs?: number | false; until?: number | null } = {},
@@ -95,10 +120,7 @@ export function useUpdates(
   return useQuery({
     queryKey: updatesKey,
     queryFn: ({ signal }) =>
-      fetchUpdates(
-        signal,
-        options.waitMs ? Math.min(WAIT_TIMEOUT_MS, (options.until ?? Infinity) - Date.now()) : undefined,
-      ),
+      fetchUpdates(signal, Math.min(STATUS_TIMEOUT_MS, (options.until ?? Infinity) - Date.now())),
     enabled: options.enabled ?? true,
     staleTime: 60_000,
     refetchOnWindowFocus: asking,

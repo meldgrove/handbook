@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useIsMutating } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, ExternalLink, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
 import type { Update, UpdaterStatus, UpdatesResponse } from "@handbook/shared/api/updates";
@@ -21,7 +21,7 @@ import { errorMessage } from "@/lib/api";
 import { useAuthConfig } from "@/lib/auth-config";
 import { useFormatter } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { CHECK_KEY, signedOut, useCheckUpdates, useInstallUpdate, useUpdates } from "./api";
+import { CHECK_KEY, signedOut, updatesKey, useCheckUpdates, useInstallUpdate, useUpdates } from "./api";
 import { messages } from "./messages";
 import {
   INSTALL_PATIENCE_MS,
@@ -46,6 +46,7 @@ import {
   savePending,
   shownNotes,
   unconfirmedEnd,
+  waitedTooLong,
   type ButtonState,
   type IgnoredInstall,
   type LastResult,
@@ -56,6 +57,8 @@ import {
 export const DEPLOYMENT_GUIDE =
   "https://github.com/meldgrove/handbook/blob/stable/docs/deployment.md#automatic-updates";
 const POLL_WHILE_INSTALLING_MS = 2_000;
+/** Shown for an attempt restored before any status arrived (the app restarts): only the attempt is known. */
+const NO_STATUS: UpdatesResponse = { app: { version: null }, reachable: false, updater: null, error: null };
 const RELOAD_AFTER_MS = 1_500;
 /** The systemd unit of a server set up as in docs/deployment.md (/srv/handbook). */
 const PROJECT = "handbook";
@@ -89,6 +92,7 @@ function AdminUpdateButton() {
     setPendingState(next);
   };
   const deadline = pending && !pending.confirmed ? pending.startedAt + RECONCILE_MS : null;
+  const queryClient = useQueryClient();
   const updates = useUpdates({ waitMs: pending ? POLL_WHILE_INSTALLING_MS : false, until: deadline });
   const check = useCheckUpdates();
   const checking = useIsMutating({ mutationKey: CHECK_KEY }) > 0;
@@ -184,12 +188,14 @@ function AdminUpdateButton() {
   const since = pending?.startedAt ?? (running ? Date.parse(running.startedAt) : NaN);
   useRenderAt(Number.isNaN(since) ? null : since + INSTALL_PATIENCE_MS);
 
-  if (!data) return null;
-  const state = buttonState(data, { waiting: Boolean(pending || done), checking, followed });
+  // An attempt restored while every request fails still shows (Restarting…, Stop waiting).
+  const shown = data ?? (pending ? NO_STATUS : null);
+  if (!shown) return null;
+  const state = buttonState(shown, { waiting: Boolean(pending || done), checking, followed });
   const hasPopover = POPOVER_STATES.has(state);
-  const installingVersion = pending?.version ?? done ?? data.updater?.installing?.version ?? "";
-  const label = buttonLabel(t, state, data, installingVersion, restarting, followed);
-  const tooLong = !Number.isNaN(since) && Date.now() - since > INSTALL_PATIENCE_MS;
+  const installingVersion = pending?.version ?? done ?? shown.updater?.installing?.version ?? "";
+  const label = buttonLabel(t, state, shown, installingVersion, restarting, followed);
+  const tooLong = waitedTooLong(since, Date.now());
 
   const runCheck = async (fromButton: boolean) => {
     try {
@@ -227,6 +233,8 @@ function AdminUpdateButton() {
     const attempt = pendingInstall(version, Date.now(), newestLast.current);
     setOpen(false);
     follow(attempt);
+    // The fast polls must not wait for a status request that started before (they would share it).
+    if (queryClient.isFetching({ queryKey: updatesKey }) > 0) void updates.refetch();
     const reply = await install.mutateAsync(version);
     const current = pendingRef.current;
     // A status may have decided meanwhile (a result, another installation): that stands.
@@ -284,7 +292,7 @@ function AdminUpdateButton() {
         <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] space-y-3 text-sm">
           <PopoverBody
             state={state}
-            data={data}
+            data={shown}
             pending={pending}
             waiting={Boolean(pending || done)}
             tooLong={tooLong}
@@ -295,7 +303,7 @@ function AdminUpdateButton() {
             onInstall={askInstall}
             onStopWaiting={stopWaiting}
           />
-          <PopoverFooter data={data} checking={checking} onCheck={() => void runCheck(false)} />
+          <PopoverFooter data={shown} checking={checking} onCheck={() => void runCheck(false)} />
         </PopoverContent>
       </Popover>
       <ConfirmDialog

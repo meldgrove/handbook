@@ -8,6 +8,7 @@ import {
   failedInstall,
   freshLast,
   ignoreInstall,
+  INSTALL_PATIENCE_MS,
   installAction,
   installOutcome,
   installsAt,
@@ -18,6 +19,7 @@ import {
   safeUrl,
   shownNotes,
   unconfirmedEnd,
+  waitedTooLong,
   type PendingInstall,
 } from "./state";
 
@@ -368,6 +370,12 @@ describe("following an attempt", () => {
     expect(isIgnored(unseen, { ...running, startedAt: "2026-11-19T09:00:00Z" })).toBe(true);
     expect(isIgnored(unseen, { ...running, startedAt: "2026-11-19T08:59:59Z" })).toBe(false);
     expect(isIgnored(null, running)).toBe(false);
+  });
+
+  it("takes too long from exactly 15 minutes on, when the timer renders", () => {
+    expect(waitedTooLong(NOW, NOW + INSTALL_PATIENCE_MS - 1)).toBe(false);
+    expect(waitedTooLong(NOW, NOW + INSTALL_PATIENCE_MS)).toBe(true);
+    expect(waitedTooLong(NaN, NOW)).toBe(false);
   });
 
   it("shows a newer offer over an old failure, with the failure as a line", () => {
