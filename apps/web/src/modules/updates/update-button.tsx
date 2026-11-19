@@ -58,6 +58,8 @@ export const DEPLOYMENT_GUIDE =
   "https://github.com/meldgrove/handbook/blob/stable/docs/deployment.md#automatic-updates";
 const POLL_WHILE_INSTALLING_MS = 2_000;
 /** Shown for an attempt restored before any status arrived (the app restarts): only the attempt is known. */
+/** How long a page that starts after an unconfirmed attempt's deadline still asks. */
+const RESUME_MS = 10_000;
 const NO_STATUS: UpdatesResponse = { app: { version: null }, reachable: false, updater: null, error: null };
 const RELOAD_AFTER_MS = 1_500;
 /** The systemd unit of a server set up as in docs/deployment.md (/srv/handbook). */
@@ -91,7 +93,11 @@ function AdminUpdateButton() {
     pendingRef.current = next;
     setPendingState(next);
   };
-  const deadline = pending && !pending.confirmed ? pending.startedAt + RECONCILE_MS : null;
+  // An unconfirmed attempt ends a minute after it started; a page that starts
+  // later (a reload, back from sign-in) still asks the updater once first.
+  const [shownAt] = useState(Date.now);
+  const deadline =
+    pending && !pending.confirmed ? Math.max(pending.startedAt + RECONCILE_MS, shownAt + RESUME_MS) : null;
   const queryClient = useQueryClient();
   const updates = useUpdates({ waitMs: pending ? POLL_WHILE_INSTALLING_MS : false, until: deadline });
   const check = useCheckUpdates();

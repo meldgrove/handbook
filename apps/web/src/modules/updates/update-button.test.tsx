@@ -289,6 +289,35 @@ describe("UpdateButton", () => {
     });
   });
 
+  it("asks once before ending an unconfirmed attempt restored after its deadline", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const startedAt = Date.now() - 120_000;
+    sessionStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ version: "0.2.1", startedAt, confirmed: false, reason: null, outageAt: null }),
+    );
+    stubApi({
+      "GET /api/v1/admin/updates": {
+        body: {
+          ...answer({
+            installed: "0.2.1",
+            last: {
+              version: "0.2.1",
+              result: "installed",
+              message: null,
+              finishedAt: updaterTime(startedAt + 30_000),
+            },
+          }),
+          app: { version: "0.2.1" },
+        },
+      },
+    });
+    renderButton();
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    expect(toast.success).toHaveBeenCalledWith("Updated to 0.2.1");
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it("says that an unconfirmed attempt did not start when the updater answered without it", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     sessionStorage.setItem(
