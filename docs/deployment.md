@@ -1,20 +1,21 @@
 # Deployment
 
-For the person who runs Meldgrove Handbook on a server: requirements, the
-setup on [Coolify](#coolify) or on a [Debian server](#debian), upgrades,
-automatic updates, backups, Sentry and troubleshooting. Every environment
-variable is described in [Configuration](configuration.md).
+For the person who runs Meldgrove Handbook on a Linux server, such as a VPS
+with Debian or Ubuntu: requirements, [setup](#setup), upgrades, automatic
+updates, backups, Sentry and troubleshooting. Every environment variable is
+described in [Configuration](configuration.md). To run it on Coolify instead,
+see [Coolify](coolify.md).
 
 ## Requirements
 
-- **Coolify, or a server with Debian 12 or later** (or a similar system with
-  systemd and apt, such as Ubuntu 24.04), with Docker Engine and its Compose
-  plugin.
+- **A server with Debian 12 or later** (or a similar system with systemd and
+  apt, such as Ubuntu 24.04), with Docker Engine and its Compose plugin, and a
+  domain name that points at it.
 - **PostgreSQL 16 or later**, with the `pg_trgm` extension available (it is
   part of the standard PostgreSQL packages and images; the first migration
-  creates it).
-- **A reverse proxy that terminates HTTPS**: Coolify's own, or Caddy on
-  Debian.
+  creates it): a database of your own, or the one `compose.postgres.yaml`
+  adds.
+- **Caddy** (or another reverse proxy on the server) that terminates HTTPS.
 - **An OpenID Connect provider** for sign-in (Keycloak, Microsoft Entra ID,
   Google, Authentik, …), see [Identity and access](identity-and-access.md).
 - **Disk space for uploaded files** (a volume).
@@ -34,10 +35,12 @@ the releases within a series install without anyone acting. Every change on
 | `Dockerfile`            | The image. Its command (`all`, `web`, `worker`, `migrate`) picks the role.         |
 | `compose.yaml`          | A one-off `migrate`, the web app (`web`), the `worker` and the optional `updater`. |
 | `compose.postgres.yaml` | Adds a PostgreSQL 18 container, for servers without a database of their own.       |
+| `compose.coolify.yaml`  | The same as `compose.yaml`, for [Coolify](coolify.md).                             |
 
 The image runs as an unprivileged user (uid 1000). `web` listens on port
 3000, published on `127.0.0.1:3000` for a reverse proxy on the same machine;
-`HANDBOOK_PORT` changes the host port. Uploaded files are stored in the
+`HANDBOOK_PORT` changes the host port. With several apps on one server, give
+each its own port and its own site in the Caddyfile. Uploaded files are stored in the
 volume `files` (`/data/files` in the container), shared by `web` and
 `worker`. The branch `stable` is at the newest release; `main` has changes
 that are not released yet.
@@ -56,30 +59,7 @@ Platforms that run a single image (no Compose) can use the command `all`
 with `RUN_MIGRATIONS=true`: the web app and the worker then share one
 process. Mount a volume at `/data/files`.
 
-## Coolify
-
-1. **Database:** create a PostgreSQL resource (16 or later) and copy its
-   internal URL.
-2. **Application:** create a Docker Compose resource from the public
-   repository `https://github.com/meldgrove/handbook`, branch `stable`,
-   Docker Compose location `/compose.yaml`. Under Advanced, set Auto deploy
-   to "Manual deployments only", so that only releases deploy, and turn on
-   "Connect To Predefined Network", so that the app reaches the database.
-3. **Domain:** assign the domain, such as `https://handbook.example.org`,
-   to `web`, port 3000.
-4. **Register the app at your provider** with the redirect URL
-   `<APP_URL>/api/auth/callback/oidc` ([Identity and access](identity-and-access.md)).
-5. **Environment variables** of the resource: `HANDBOOK_VERSION` (a series
-   such as `0.1`, see [Automatic updates](#automatic-updates)), `APP_URL`
-   (the domain), `DATABASE_URL` (the database's internal URL), a new
-   `AUTH_SECRET` (`openssl rand -base64 32`), the `OIDC_*` values, your
-   address in `ADMIN_EMAILS`, and `SEARCH_LANGUAGES` for the languages your
-   pages are written in.
-6. **Deploy**, open `APP_URL`, sign in, and create the first space under
-   **Administration → Spaces**.
-7. **Automatic updates:** set them up [on Coolify](#on-coolify).
-
-## Debian
+## Setup
 
 On a server with Debian 12 or later, or a similar system such as Ubuntu,
 run the commands as root (`sudo -i`).
@@ -111,7 +91,9 @@ run the commands as root (`sudo -i`).
    `DATABASE_URL=postgres://handbook:<POSTGRES_PASSWORD>@postgres:5432/handbook`.
 5. **Start:** `docker compose up -d --pull always`.
 6. **HTTPS:** point the domain's DNS at the server, install Caddy
-   (`apt install caddy`), and replace `/etc/caddy/Caddyfile` with:
+   (`apt install caddy`), and put this site into `/etc/caddy/Caddyfile`, in
+   place of the package's example site `:80` and next to the sites of other
+   apps:
 
    ```text
    handbook.example.org {
@@ -125,7 +107,7 @@ run the commands as root (`sudo -i`).
 
 7. Open `APP_URL`, sign in, and create the first space under
    **Administration → Spaces**.
-8. **Automatic updates:** set them up [on Debian](#on-debian).
+8. **Automatic updates:** [set them up](#setup-on-the-server).
 
 ## Health checks
 
@@ -134,7 +116,7 @@ run the commands as root (`sudo -i`).
 - The worker touches `/tmp/worker-heartbeat` every few seconds;
   `compose.yaml` checks its age. It stops while a job runs far longer than
   it should (the hourly cleanup 30 minutes, rebuilding the search index 4
-  hours), so the check fails and the platform can restart the worker.
+  hours), so the check fails.
 - Database connections give up after 10 seconds of waiting for a
   connection, end statements after `DATABASE_STATEMENT_TIMEOUT_SECONDS`
   and transactions left idle for a minute, and probe idle connections for
@@ -149,14 +131,11 @@ hears when the app is down.
 
 1. Read the release notes. Releases with **Upgrade steps needed** start a
    new series and list what to do.
-2. Take the steps, then move to the new series:
-   - **Coolify:** change `HANDBOOK_VERSION` in the resource's environment
-     variables and redeploy. Coolify reads `compose.yaml` from `stable`,
-     which is at the newest release.
-   - **Debian:** in `/srv/handbook`, run `git pull` (the newest release's
-     `compose.yaml`), change `HANDBOOK_VERSION` in `.env`, and run
-     `docker compose up -d --pull always`. With automatic updates, the
-     update button installs it instead (**Install anyway…**).
+2. Take the steps, then move to the new series: in `/srv/handbook`, run
+   `git pull` (the newest release's `compose.yaml`), change
+   `HANDBOOK_VERSION` in `.env`, and run `docker compose up -d --pull always`.
+   With automatic updates, run only the `git pull` and let the update
+   button install it (**Install anyway…**).
 
 The `migrate` service applies database migrations before `web` and `worker`
 start.
@@ -188,25 +167,9 @@ Admins choose the channel under **Administration → Updates**. The app reaches 
 
 Set up [backups](#backups) first: migrations run without anyone watching.
 
-### On Coolify
+### Setup on the server
 
-On Coolify, the image tag in `HANDBOOK_VERSION` decides what installs: a
-series such as `0.1` gets its releases, `latest` every release (also those
-with upgrade steps), `preview` every preview (the unstable channel). Admins
-cannot switch the channel in the app.
-
-1. Under Settings > Advanced, turn on API Access if it is off.
-2. Under Keys & Tokens > API Tokens, create a token with only the `deploy`
-   permission; clear `read`. Coolify shows it only once.
-3. In the Handbook resource, select Webhooks and copy Deploy Webhook.
-4. In the resource's environment variables, set `UPDATE_DEPLOY_HOOK_URL` to
-   the webhook and `UPDATE_DEPLOY_HOOK_TOKEN` to the token, then redeploy.
-
-The `updater` log then names the tag it watches.
-
-### On Debian
-
-As root in `/srv/handbook`, with `UPDATE_DEPLOY_HOOK_URL` empty:
+As root in `/srv/handbook`:
 
 ```sh
 docker compose up -d --pull always
