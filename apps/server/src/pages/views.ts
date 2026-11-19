@@ -26,7 +26,7 @@ import {
 } from "../db/schema";
 import type { Principal } from "../auth/principal";
 import { notFound } from "../http/errors";
-import type { SpaceContext, SpaceRow } from "../spaces/access";
+import type { SpaceContext } from "../spaces/access";
 import { bodyOf, type PageRow } from "./core";
 
 export const iso = (value: Date) => value.toISOString();
@@ -120,14 +120,23 @@ export async function currentLock(
 }
 
 /** The pages of a path's ancestors, top first. */
-async function breadcrumbs(tx: DbOrTx, space: SpaceRow, path: string): Promise<PageRef[]> {
+async function breadcrumbs(tx: DbOrTx, context: SpaceContext, path: string): Promise<PageRef[]> {
+  const { space, abilities } = context;
   const segments = path.split("/");
   const prefixes = segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"));
   if (prefixes.length === 0) return [];
   const rows = await tx
     .select({ id: pages.id, path: pages.path, title: pages.title })
     .from(pages)
-    .where(and(eq(pages.spaceId, space.id), inArray(pages.path, prefixes), isNull(pages.deletedAt)));
+    .where(
+      and(
+        eq(pages.spaceId, space.id),
+        inArray(pages.path, prefixes),
+        isNull(pages.deletedAt),
+        // An active child can still have a draft ancestor.
+        abilities.seeDrafts ? undefined : ne(pages.status, "draft"),
+      ),
+    );
   return rows
     .sort((a, b) => a.path.length - b.path.length)
     .map((row) => ({ id: row.id, space: space.slug, path: row.path, title: row.title }));
@@ -186,7 +195,7 @@ export async function pageView(
     properties: page.properties,
     createdAt: iso(page.createdAt),
     updatedBy: actorOf(updatedBy),
-    breadcrumbs: await breadcrumbs(tx, space, page.path),
+    breadcrumbs: await breadcrumbs(tx, context, page.path),
     children: children.map((child) => pageSummary(child, space.slug)),
     backlinks: backlinkRows.map((row) => ({
       id: row.id,

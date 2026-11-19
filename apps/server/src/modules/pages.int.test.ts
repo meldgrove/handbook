@@ -79,6 +79,23 @@ describe("pages API", () => {
     expect(editorTree.body.items).toHaveLength(2);
   });
 
+  it("shows readers only visible ancestors of an active page", async () => {
+    const { editor, reader, space } = await setup();
+    const parent = await createPage(space, {
+      title: "Draft parent",
+      markdown: file("Draft parent", "", "status: draft\n"),
+    });
+    const child = await request("POST", "/api/v1/spaces/it/pages", {
+      userId: editor.id,
+      body: { parentPath: parent.path, markdown: file("Active child") },
+    });
+    expect(child.status).toBe(201);
+    expect(child.body.breadcrumbs).toMatchObject([{ id: parent.id }]);
+    const view = await request("GET", `/api/v1/pages/${child.body.id}`, { userId: reader.id });
+    expect(view.status).toBe(200);
+    expect(view.body.breadcrumbs).toEqual([]);
+  });
+
   it("merges or answers 409 page_changed with the current file and conflict blocks", async () => {
     const { editor, owner, page } = await setup();
     const base = page.markdown;
