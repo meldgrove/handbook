@@ -297,11 +297,18 @@ export function PropertiesForm(props: {
   schema: SpaceSchema;
   errors?: Record<string, string>;
   disabled?: boolean;
+  /** Properties edited elsewhere (e.g. the title on the page itself). */
+  omit?: string[];
+  /** One column, for narrow places like the settings sheet. */
+  single?: boolean;
 }) {
   const t = useT(propertyMessages);
   const statusLabels = { draft: t("draft"), active: t("active"), deprecated: t("deprecated") };
   const set = (key: string, value: unknown) => props.onChange({ ...props.values, [key]: value });
-  const builtIns = builtInSpecs(props.schema, statusLabels);
+  const builtIns = builtInSpecs(props.schema, statusLabels)
+    .filter((spec) => !props.omit?.includes(spec.key))
+    .map((spec) => (props.single ? { ...spec, wide: false } : spec));
+  const grid = props.single ? "grid gap-5" : "grid gap-4 md:grid-cols-2";
   const custom: FieldSpec[] = props.schema.properties.map((property) => ({
     key: property.key,
     label: property.label,
@@ -316,7 +323,7 @@ export function PropertiesForm(props: {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={grid}>
         {builtIns.map((spec) => (
           <PropertyField
             key={spec.key}
@@ -331,7 +338,7 @@ export function PropertiesForm(props: {
       {custom.length > 0 ? (
         <section className="space-y-3">
           <h3 className="text-sm font-semibold">{t("spaceProperties")}</h3>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className={grid}>
             {custom.map((spec) => (
               <PropertyField
                 key={spec.key}

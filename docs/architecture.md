@@ -405,3 +405,26 @@ react-markdown with remark-gfm, no HTML, callouts, heading anchors from
 `github-slugger` numbered over all headings like the server's sections
 (including a leading title heading it hides), and page links resolved with
 `resolveLink`.
+Pages use its `article` variant: the `.article` styles in `styles.css`
+(serif text in a reading column, sans headings), which the rich-text editor
+shares, so a page looks the same while it is written. The fonts (Inter,
+Source Serif 4) are bundled with the app.
+
+The page editor (`/pages/$id/edit`, `/s/$space/-/new`) runs in a focused
+layout without the sidebar (`routes/focus.tsx`). `components/editor/page-editor.tsx`
+is its frame: a top bar, the title and description on the page, the
+properties in a settings sheet (`PropertiesForm`), and the body in rich
+text (`components/editor/rich-text/`, Tiptap on ProseMirror) or the whole
+file as Markdown (CodeMirror). Conflict blocks and frontmatter that cannot
+be read switch it to Markdown.
+
+`rich-text/markdown.ts` converts between Markdown and the rich-text document
+through mdast (micromark with GitHub's extensions, as the renderer). It
+keeps each top-level block's source. When it writes the document back, a
+block whose content did not change is written exactly as it was, with the
+original text between unchanged neighbors; only changed blocks get the
+editor's Markdown style (`-` lists, `**bold**`, `_italic_`, fenced code).
+Markdown the document cannot hold (HTML, footnotes, reference links and
+their definitions) stays a `rawMarkdown` block with its source. So saves
+from rich text change only what the person changed, and diffs, merges and
+agents see nothing else.

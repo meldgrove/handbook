@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FolderClosed, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ChangeSet } from "@handbook/shared/api/changes";
 import type { Page } from "@handbook/shared/api/pages";
@@ -9,24 +9,22 @@ import type { FileInfo, Space } from "@handbook/shared/api/spaces";
 import { newPageFile } from "@handbook/shared/page";
 import { joinPath, slugify } from "@handbook/shared/paths";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
-import { LazyEditorWorkspace as EditorWorkspace } from "@/components/editor/lazy-workspace";
 import { bodyOf, valuesOf, withBody, withValues } from "@/components/editor/file";
-import { Page as PageLayout, PageHeader } from "@/components/layout/page";
+import { Page as PageLayout } from "@/components/layout/page";
+import { PageEditor } from "@/components/editor/page-editor";
 import { ChangeSetDialog, submitSuggestion } from "@/components/page/change-set-dialog";
 import { changeSetQuery, spaceQuery, treeQuery } from "@/components/page/queries";
 import { buildTree, flattenTree } from "@/components/page/tree";
 import { ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Button } from "@meldgrove/ui/button";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
-import { Input } from "@meldgrove/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@meldgrove/ui/select";
 import { Spinner } from "@meldgrove/ui/spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
+import { cn } from "@meldgrove/ui/utils";
 import { useT } from "@/i18n";
 import { messages } from "./messages";
 
 const TOP = "__top";
-const NO_TYPE = "__none";
 
 /** A new page, created live (editors) or suggested in a change set. */
 export function NewPagePage(props: { space: string; parent?: string; changeSet?: number | "new" }) {
@@ -74,9 +72,7 @@ function NewPageForm(props: {
   const t = useT(messages);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const parentId = useId();
   const slugId = useId();
-  const typeId = useId();
   const schema = { properties: props.space.properties, pageTypes: props.space.pageTypes };
   const initial = newPageFile({ title: "" }, schema);
   const [file, setFile] = useState(initial);
@@ -85,6 +81,7 @@ function NewPageForm(props: {
   );
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
+  const [editingSlug, setEditingSlug] = useState(false);
   const [fields, setFields] = useState<Record<string, string> | undefined>();
   const [saving, setSaving] = useState(false);
   const [askChangeSet, setAskChangeSet] = useState(false);
@@ -101,7 +98,6 @@ function NewPageForm(props: {
   const values = "values" in read ? read.values : {};
   const title = typeof values.title === "string" ? values.title : "";
   const type = typeof values.type === "string" ? values.type : null;
-  const typeHelp = props.space.pageTypes.find((pageType) => pageType.key === type)?.help;
   const effectiveSlug = slugEdited ? slug : title.trim() ? slugify(title) : "";
   const parentPath = parent === TOP ? null : parent;
   const path = effectiveSlug ? joinPath(parentPath, effectiveSlug) : (parentPath ?? "");
@@ -212,112 +208,205 @@ function NewPageForm(props: {
   };
 
   const locationError = fields?.path ?? fields?.parentPath;
-  return (
-    <PageLayout wide>
-      <div className="space-y-2">
-        <Button variant="link" className="h-auto px-0 text-sm" asChild>
-          <Link to="/s/$space" params={{ space: props.space.slug }}>
-            <ArrowLeft />
-            {props.space.name}
-          </Link>
-        </Button>
-        <PageHeader
-          title={
-            suggesting
-              ? t("suggestPageTitle", { space: props.space.name })
-              : t("newPageTitle", { space: props.space.name })
-          }
-          description={
-            createdNumber && props.changeSetTitle ? `#${createdNumber} ${props.changeSetTitle}` : undefined
-          }
-          actions={
-            <>
-              <Button
-                variant="outline"
-                disabled={saving}
-                onClick={() => void navigate({ to: "/s/$space", params: { space: props.space.slug } })}
-              >
-                {t("cancel")}
-              </Button>
-              <Button onClick={save} disabled={saving}>
-                {saving ? <Spinner /> : null}
-                {suggesting ? t("saveSuggestion") : t("create")}
-              </Button>
-            </>
-          }
-        />
-      </div>
+  const parentTitle =
+    parent === TOP ? null : (props.pages.find((item) => item.page.path === parent)?.page.title ?? parent);
+  const currentTemplate = props.space.pageTypes.find((pageType) => pageType.key === type)?.template ?? "";
+  const body = bodyOf(file).trim();
+  // Page types to start from, while nothing is written yet.
+  const pristine = body === "" || body === currentTemplate.trim();
+  const showTypes = props.space.pageTypes.length > 0 && pristine;
+  const backTo =
+    props.parent && parent !== TOP ? (
+      <Link
+        to="/s/$space/$"
+        params={{ space: props.space.slug, _splat: parent }}
+        aria-label={t("back")}
+        title={t("back")}
+      >
+        <ArrowLeft />
+      </Link>
+    ) : (
+      <Link to="/s/$space" params={{ space: props.space.slug }} aria-label={t("back")} title={t("back")}>
+        <ArrowLeft />
+      </Link>
+    );
 
-      <section aria-labelledby="new-page-location" className="rounded-md border p-4">
-        <h2 id="new-page-location" className="mb-3 font-semibold">
-          {t("location")}
-        </h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          <Field data-invalid={Boolean(locationError)}>
-            <FieldLabel htmlFor={parentId}>{t("parent")}</FieldLabel>
-            <Select value={parent} onValueChange={setParent}>
-              <SelectTrigger id={parentId} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TOP}>{t("topLevel")}</SelectItem>
-                {props.pages.map((item) => (
-                  <SelectItem key={item.page.id} value={item.page.path}>
-                    <span style={{ paddingLeft: `${item.depth * 0.75}rem` }}>{item.page.title}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {locationError ? <FieldError>{locationError}</FieldError> : null}
-          </Field>
-          <Field data-invalid={Boolean(fields?.slug)}>
-            <FieldLabel htmlFor={slugId}>{t("slug")}</FieldLabel>
-            <Input
+  const place = (
+    <div className="mb-6">
+      <Select value={parent} onValueChange={setParent}>
+        <SelectTrigger
+          size="sm"
+          aria-label={t("parent")}
+          aria-invalid={locationError ? true : undefined}
+          className="text-foreground/80 h-8 max-w-full rounded-full px-3 text-[0.8125rem] shadow-none"
+        >
+          <FolderClosed className="size-3.5" />
+          <SelectValue>
+            <span className="truncate">
+              {props.space.name}
+              {parentTitle ? <span className="text-muted-foreground"> / {parentTitle}</span> : null}
+            </span>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={TOP}>{t("topLevel")}</SelectItem>
+          {props.pages.map((item) => (
+            <SelectItem key={item.page.id} value={item.page.path}>
+              <span style={{ paddingLeft: `${item.depth * 0.75}rem` }}>{item.page.title}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {locationError ? <p className="text-destructive mt-1.5 text-sm">{locationError}</p> : null}
+    </div>
+  );
+
+  const address = (
+    <div className="mt-2.5">
+      <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem]">
+        <Link2 className="size-3.5 shrink-0" aria-hidden />
+        {editingSlug ? (
+          <>
+            <span className="truncate">
+              /s/{props.space.slug}/{parentPath ? `${parentPath}/` : ""}
+            </span>
+            <input
               id={slugId}
+              aria-label={t("slug")}
+              aria-invalid={fields?.slug ? true : undefined}
               value={effectiveSlug}
               onChange={(event) => {
                 setSlugEdited(true);
                 setSlug(event.target.value);
               }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  setEditingSlug(false);
+                }
+              }}
+              className="border-input bg-background text-foreground focus-visible:ring-ring/50 h-7 min-w-40 rounded-md border px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
             />
-            <FieldDescription>
-              {path ? t("address", { url: `/s/${props.space.slug}/${path}` }) : t("slugHelp")}
-            </FieldDescription>
-            {fields?.slug ? <FieldError>{fields.slug}</FieldError> : null}
-          </Field>
-          {props.space.pageTypes.length > 0 ? (
-            <Field>
-              <FieldLabel htmlFor={typeId}>{t("pageType")}</FieldLabel>
-              <Select
-                value={type ?? NO_TYPE}
-                onValueChange={(value) => chooseType(value === NO_TYPE ? null : value)}
-              >
-                <SelectTrigger id={typeId} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_TYPE}>{t("noType")}</SelectItem>
-                  {props.space.pageTypes.map((pageType) => (
-                    <SelectItem key={pageType.key} value={pageType.key}>
-                      {pageType.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {typeHelp ? <FieldDescription>{typeHelp}</FieldDescription> : null}
-            </Field>
-          ) : null}
-        </div>
-      </section>
+            <button
+              type="button"
+              onClick={() => setEditingSlug(false)}
+              className="text-foreground underline underline-offset-4"
+            >
+              {t("done")}
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="min-w-0 truncate">
+              /s/{props.space.slug}/{path ? <span className="text-foreground">{path}</span> : "…"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setEditingSlug(true)}
+              className="text-foreground underline underline-offset-4"
+            >
+              {t("changeAddress")}
+            </button>
+          </>
+        )}
+      </div>
+      {fields?.slug ? <p className="text-destructive mt-1 text-sm">{fields.slug}</p> : null}
+    </div>
+  );
 
-      <EditorWorkspace
+  const types = showTypes ? (
+    <fieldset className="mt-9">
+      <legend className="text-muted-foreground mb-3 text-xs font-semibold tracking-[0.07em] uppercase">
+        {t("startFrom")}
+      </legend>
+      <div role="radiogroup" aria-label={t("pageType")} className="grid gap-3 sm:grid-cols-3">
+        {[
+          ...props.space.pageTypes.map((pageType) => ({
+            key: pageType.key as string | null,
+            label: pageType.label,
+            help: pageType.help,
+          })),
+          { key: null, label: t("blank"), help: t("blankHelp") },
+        ].map((option) => {
+          const checked = type === option.key;
+          return (
+            <button
+              key={option.key ?? "__blank"}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              onClick={() => chooseType(option.key)}
+              className={cn(
+                "hover:bg-muted/40 flex flex-col gap-1 rounded-xl border p-3.5 text-left transition-colors",
+                checked && "border-foreground ring-foreground ring-1",
+              )}
+            >
+              <span className="text-sm font-semibold">{option.label}</span>
+              {option.help ? (
+                <span className="text-muted-foreground line-clamp-2 text-[0.8125rem] leading-snug">
+                  {option.help}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  ) : null;
+
+  return (
+    <>
+      <PageEditor
         file={file}
         onChange={setFile}
-        space={props.space.slug}
+        space={props.space}
         path={path || "new-page"}
-        schema={schema}
         fields={fields}
         onUpload={upload}
+        onSave={() => {
+          if (!saving) save();
+        }}
+        back={
+          <Button variant="ghost" size="icon" className="rounded-full" asChild>
+            {backTo}
+          </Button>
+        }
+        context={
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-medium">
+              {suggesting
+                ? t("suggestPageTitle", { space: props.space.name })
+                : t("newPageTitle", { space: props.space.name })}
+            </span>
+            {createdNumber && props.changeSetTitle ? (
+              <span className="text-muted-foreground truncate">
+                · #{createdNumber} {props.changeSetTitle}
+              </span>
+            ) : null}
+          </span>
+        }
+        status={dirty ? t("notSaved") : null}
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              className="hidden rounded-full sm:inline-flex"
+              disabled={saving}
+              onClick={() => void navigate({ to: "/s/$space", params: { space: props.space.slug } })}
+            >
+              {t("cancel")}
+            </Button>
+            <Button className="rounded-full px-4" onClick={save} disabled={saving}>
+              {saving ? <Spinner /> : null}
+              {suggesting ? t("saveSuggestion") : t("create")}
+            </Button>
+          </>
+        }
+        aboveTitle={place}
+        belowTitle={address}
+        belowDescription={types}
+        typeChip={!showTypes}
+        onTypeChange={chooseType}
       />
 
       {askChangeSet ? (
@@ -341,6 +430,6 @@ function NewPageForm(props: {
         destructive
         onConfirm={() => blocker.proceed?.()}
       />
-    </PageLayout>
+    </>
   );
 }

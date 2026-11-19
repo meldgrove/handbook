@@ -16,7 +16,9 @@ npm workspaces, Node.js 26, strict TypeScript.
   SDK, pino logs, Sentry, Vitest.
 - `apps/web`: Vite + React 19, TanStack Router and Query, Tailwind CSS 4
   with `@meldgrove/ui` (the shared Meldgrove theme, shadcn/ui components and
-  update button), CodeMirror 6 (the editor), react-markdown. US English.
+  update button), Tiptap (the rich-text editor; `components/editor/rich-text/`
+  keeps unchanged Markdown as written), CodeMirror 6 (the Markdown view),
+  react-markdown. US English.
 - `packages/shared` (`@handbook/shared/*`): zod schemas of the API
   (`api/*.ts`), the page file model (`page.ts`), paths and links
   (`paths.ts`), merging and edits (`merge.ts`), roles and abilities

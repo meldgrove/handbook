@@ -73,9 +73,13 @@ test("an admin writes a page in Markdown with properties", async ({ browser }) =
   await home(ada);
   await ada.goto("/s/it/-/new");
   await ada.getByLabel("Title").fill("Request a laptop");
-  await ada.getByRole("combobox").nth(1).click();
-  await ada.getByRole("option", { name: "How-to" }).click();
+  // Page types are cards to start from; choosing one fills in its template.
+  await ada.getByRole("radio", { name: /How-to/ }).click();
+  await ada.getByRole("button", { name: "Page settings" }).click();
   await ada.getByLabel("Tags").fill("hardware, onboarding");
+  await ada.keyboard.press("Escape");
+  // The whole file as Markdown.
+  await ada.getByRole("button", { name: "Markdown" }).click();
   await ada.locator(".cm-content").first().click();
   await ada.keyboard.press("Control+End");
   await ada.keyboard.type("\n> [!TIP]\nAsk two weeks before the start date.");
@@ -98,10 +102,8 @@ test("a reader suggests a change and an editor merges it", async ({ browser }) =
   await expect(rita.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
   await rita.getByRole("link", { name: "Suggest an edit" }).click();
   await rita.waitForURL(/\/edit\?changeSet=new/);
-  await rita
-    .locator(".cm-line", { hasText: /^1\.\s*$/ })
-    .first()
-    .click();
+  // The template's empty first step, in rich text.
+  await rita.locator(".ProseMirror ol > li").first().click();
   await rita.keyboard.press("End");
   await rita.keyboard.type("Open a request in the helpdesk with your start date.");
   await rita.getByRole("button", { name: "Save suggestion" }).click();
@@ -134,7 +136,7 @@ test("only one person edits a page at a time", async ({ browser }) => {
   await home(eddie);
   await eddie.goto("/s/it/request-a-laptop");
   await eddie.getByRole("link", { name: "Edit", exact: true }).click();
-  await expect(eddie.locator(".cm-content").first()).toBeVisible();
+  await expect(eddie.locator(".ProseMirror")).toBeVisible();
 
   const ada = await signIn(browser, "ada");
   await home(ada);
@@ -143,6 +145,33 @@ test("only one person edits a page at a time", async ({ browser }) => {
   await expect(ada.getByText(/Eddie Editor started editing this page/)).toBeVisible();
   await expect(ada.getByRole("button", { name: "Take over" })).toBeVisible();
   await eddie.getByRole("button", { name: "Cancel" }).click();
+});
+
+test("an editor writes in rich text and the rest of the Markdown stays as written", async ({ browser }) => {
+  const eddie = await signIn(browser, "eddie");
+  await home(eddie);
+  const before = await (await eddie.request.get("/s/it/request-a-laptop.md")).text();
+  await eddie.goto("/s/it/request-a-laptop");
+  await eddie.getByRole("link", { name: "Edit", exact: true }).click();
+  const editor = eddie.locator(".ProseMirror");
+  await editor.locator("h2", { hasText: "Result" }).click();
+  await eddie.keyboard.press("End");
+  await eddie.keyboard.press("Enter");
+  // The / menu inserts blocks.
+  await eddie.keyboard.type("/callout");
+  await expect(eddie.getByRole("option", { name: /Callout/ })).toBeVisible();
+  await eddie.keyboard.press("Enter");
+  await eddie.keyboard.type("You get the laptop on your first day.");
+  await eddie.getByRole("button", { name: "Save", exact: true }).click();
+  await eddie.getByLabel("Note about this change (optional)").fill("Say when the laptop arrives");
+  await eddie.getByRole("button", { name: "Save page" }).click();
+  await eddie.waitForURL(/\/s\/it\/request-a-laptop$/);
+  await expect(eddie.getByText("You get the laptop on your first day.")).toBeVisible();
+
+  const after = await (await eddie.request.get("/s/it/request-a-laptop.md")).text();
+  expect(after).toBe(
+    before.replace("## Result\n\n", "## Result\n\n> [!NOTE]\n> You get the laptop on your first day.\n\n"),
+  );
 });
 
 test("an agent connects with OAuth and proposes a change set", async ({ browser }) => {
