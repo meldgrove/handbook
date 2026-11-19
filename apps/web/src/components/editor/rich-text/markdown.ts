@@ -401,10 +401,12 @@ function blockToMdast(node: PMNode): RootContent {
       const spread = node.attrs.spread === true;
       const items: ListItem[] = [];
       node.forEach((item) => items.push(listItemToMdast(item, task, spread)));
+      // Ordered lists may start at 0.
+      const start = Number(node.attrs.start);
       return {
         type: "list",
         ordered,
-        start: ordered ? Number(node.attrs.start) || 1 : null,
+        start: ordered ? (Number.isInteger(start) && start >= 0 ? start : 1) : null,
         spread,
         children: items,
       };

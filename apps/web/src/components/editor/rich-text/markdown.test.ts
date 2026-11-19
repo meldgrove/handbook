@@ -79,6 +79,15 @@ describe("parseBody and serializeBody", () => {
     );
   });
 
+  it("keeps the start number of a changed ordered list, also 0", () => {
+    const body = "Steps:\n\n0. zero\n1. one\n";
+    const { doc: parsed, origin } = parseBody(body, schema);
+    const list = parsed.child(1).toJSON() as JSONContent;
+    const item: JSONContent = { type: "listItem", content: [p(text("two"))] };
+    const edited = replaceBlock(parsed, 1, { ...list, content: [...(list.content ?? []), item] });
+    expect(serializeBody(edited, origin)).toBe("Steps:\n\n0. zero\n1. one\n2. two\n");
+  });
+
   it("keeps blocks that only moved, and drops deleted ones", () => {
     const body = "First.\n\nSecond.\n\nThird.\n";
     const { doc: parsed, origin } = parseBody(body, schema);
