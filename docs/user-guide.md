@@ -19,18 +19,46 @@ moves.
   text, also in other word forms (e.g. "laptops" finds "laptop") and with
   small typos in titles. Results jump to the matching section.
 - **Tags** group pages across spaces.
-- A page shows its properties on the side, the pages that link to it
-  ("Linked from"), and its sub-pages.
-- The page menu has **History** (every version, who changed it and how) and
-  **View Markdown file**.
+- A page reads like an article: its type, title and description, who owns
+  it and when it was last reviewed, then the text. On wide screens its
+  sections are listed beside the text. After the text come its tags, its
+  other properties, the pages below it, and the pages that link to it
+  ("Linked from").
+- The bar above the text has **Edit** or **Suggest an edit**, **History**
+  (every version, who changed it and how), **Copy link**, **View Markdown
+  file** and a menu with more.
+- On pages the sidebar folds to icons, so the text has room; the button in
+  the top bar (or Ctrl+B) opens it. The app remembers your choice, for pages
+  and for the rest of the app.
 
 ## Writing
 
-Editors use **Edit** on a page, or **New page** in a space.
+Editors use **Edit** on a page, or **New page** in a space. The editor fills
+the window and looks like the page: you edit the title, the description and
+the text where they appear.
 
-- The editor has three views: **Write** (the text, with a preview beside it
-  on wide screens), **Preview**, and **Whole file** (frontmatter and text
-  together). **Properties** above the text edits the frontmatter as a form.
+- **Rich text** is the default. Select text for a toolbar (bold, italic,
+  strikethrough, code, link, headings, quote). Type `/` at the start of a
+  line, or click **+** beside an empty line, to insert headings, lists, task
+  lists, quotes, callouts, tables, code blocks, dividers, images and files,
+  or links to pages. Markdown shortcuts work too: `## ` starts a heading,
+  `- ` a list, `**bold**` makes bold text, and `> ` then `[!TIP] ` a
+  callout. Ctrl+K adds a link: paste an address or type to find a page.
+- **Markdown** in the top bar shows the whole file, frontmatter and text, as
+  Markdown. Switch back and forth at any time; the editor remembers your
+  choice. Parts that rich text cannot show (HTML, footnotes, reference
+  links) appear in rich text as a **Markdown** box you edit as text.
+- **Page settings** (the sliders button) holds the other properties: page
+  type, status, tags, owner, last reviewed, search terms and the space's own
+  properties.
+- **Save** asks for an optional note about the change, shown in the
+  history; Ctrl+S saves at once. Everything you did not change stays
+  exactly as it was written, in rich text too: editing one paragraph never
+  rewrites the rest of the file, so history, diffs and agents see only your
+  change.
+- **New pages:** choose where the page goes (above the title), give it a
+  title (its address follows the title; **Change** edits it), and pick a page
+  type to start from.
 - Markdown with GitHub's additions: headings, lists, task lists, tables,
   links, code, and callouts:
 
@@ -51,9 +79,10 @@ Editors use **Edit** on a page, or **New page** in a space.
 
 - **Links to other pages** are ordinary Markdown links: `[VPN](vpn)` links
   to a page next to this one, `[AI policy](../policies/ai)` one level up,
-  `[Leave](/s/hr/leave)` to another space. The toolbar's link button finds
-  pages for you.
-- **Images:** paste or drop them into the text, or use the image button.
+  `[Leave](/s/hr/leave)` to another space. In rich text, the link button
+  (Ctrl+K) and **Link to a page** in the `/` menu find pages for you.
+- **Images and files:** paste or drop them into the text, or choose **Image
+  or file** in the `/` menu.
 - **Page types** start a new page from a template and can require
   properties. Every space starts with four: **Overview** (what something is,
   or the start page of a section), **How-to** (the steps of one task),
@@ -80,7 +109,7 @@ it when you come back (also after the page was deleted and restored). If
 the page changed while you edited it (for example after a takeover or a
 merged change set), saving combines both changes, also two changes to
 different words of one paragraph; if both changed the same words, the
-editor shows both versions of those lines marked:
+editor switches to Markdown and shows both versions of those lines marked:
 
 ```
 <<<<<<< yours

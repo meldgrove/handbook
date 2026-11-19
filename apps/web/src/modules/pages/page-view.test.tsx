@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -131,6 +131,58 @@ describe("PageView", () => {
     expect(screen.getByRole("link", { name: "First day" })).toHaveAttribute("href", "/s/hr/start");
     // The title heading in the body is not shown twice.
     expect(screen.getAllByRole("heading", { name: "VPN" })).toHaveLength(1);
+  });
+
+  it("reads like an article: byline, contents of the text, tags and pages below", async () => {
+    render404(
+      page({
+        status: "active",
+        lock: null,
+        changeSets: [],
+        tags: ["network", "remote"],
+        markdown:
+          "---\ntitle: VPN\nowner: kim@example.org\nreviewed: 2026-10-01\n---\n\n## Connect\n\nText.\n\n## Disconnect\n\nText.\n",
+        properties: { title: "VPN", owner: "kim@example.org", reviewed: "2026-10-01" },
+        children: [
+          {
+            id: "3b7f9d2e-3c4a-4e5f-8a6b-7c8d9e0f1a2b",
+            space: "it",
+            path: "network/vpn/mac",
+            parentId: null,
+            position: 0,
+            title: "VPN on a Mac",
+            description: "The client for macOS.",
+            status: "active",
+            type: null,
+            tags: [],
+            revision: 1,
+            updatedAt: "2026-11-17T09:00:00.000Z",
+          },
+        ],
+        backlinks: [],
+      }),
+    );
+    // The owner in the byline (and again among the facts at the end).
+    expect(await screen.findByText("Owned by")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "kim@example.org" })[0]).toHaveAttribute(
+      "href",
+      "mailto:kim@example.org",
+    );
+    expect(screen.getByText(/1 min read · Reviewed Oct 1, 2026/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "remote" })).toHaveAttribute("href", "/tags/remote");
+    expect(screen.getByRole("link", { name: /VPN on a Mac/ })).toHaveAttribute(
+      "href",
+      "/s/it/network/vpn/mac",
+    );
+    // The contents list the text's sections only, not the page's own parts at its end.
+    const contents = screen.getByRole("navigation", { name: "On this page" });
+    expect(
+      within(contents)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Connect", "Disconnect"]);
+    // No backlinks: no empty section.
+    expect(screen.queryByRole("heading", { name: "Linked from" })).toBeNull();
   });
 
   it("offers readers only a suggestion", async () => {

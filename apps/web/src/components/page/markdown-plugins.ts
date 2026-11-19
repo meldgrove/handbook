@@ -51,7 +51,7 @@ export function remarkHeadingIds(options: { title?: string } = {}) {
 const MARKER = /^\[!(note|tip|important|warning|caution)\][ \t]*(?:\n|$)/i;
 
 /** The callout type of a blockquote that starts with `[!NOTE]` etc., and removes the marker. */
-function takeCallout(node: Blockquote): CalloutType | null {
+export function takeCallout(node: Blockquote): CalloutType | null {
   const paragraph = node.children[0];
   if (paragraph?.type !== "paragraph") return null;
   const text = paragraph.children[0];

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DRAFT_SAVE_SECONDS } from "@handbook/shared/limits";
 import { rawRequest } from "./raw-api";
 
@@ -18,6 +18,7 @@ export function useDraftAutosave(input: {
   const latest = useRef(input);
   latest.current = input;
   const stored = useRef<string | null>(null);
+  const [saved, setSaved] = useState<{ file: string; at: string } | null>(null);
 
   useEffect(() => {
     if (!input.enabled) return;
@@ -28,6 +29,7 @@ export function useDraftAutosave(input: {
       void rawRequest("PUT", `/pages/${pageId}/draft`, { body: { markdown: file, baseRevision } }).then(
         (response) => {
           if (!response.ok) stored.current = null;
+          else setSaved({ file, at: new Date().toISOString() });
         },
         () => {
           stored.current = null;
@@ -36,6 +38,10 @@ export function useDraftAutosave(input: {
     }, DRAFT_SAVE_SECONDS * 1000);
     return () => window.clearInterval(timer);
   }, [input.enabled, input.pageId]);
+  /** When the draft was last stored, while the text still differs from the page. */
+  return {
+    savedAt: saved && saved.file === input.file && input.file !== input.savedFile ? saved.at : null,
+  };
 }
 
 /** Removes the person's draft of a page (after saving or discarding). */

@@ -1,6 +1,7 @@
 import { createRoute, type AnyRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { appRoute } from "@/routes/app";
+import { focusRoute } from "@/routes/focus";
 import { NewPagePage } from "./new-page-page";
 import { SettingsPage } from "./settings-page";
 import { SpacePage } from "./space-page";
@@ -20,7 +21,7 @@ const spaceRoute = createRoute({
 });
 
 const newPageRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => focusRoute,
   path: "/s/$space/-/new",
   validateSearch: z.object({
     parent: z.string().max(400).optional().catch(undefined),
@@ -61,4 +62,5 @@ const trashRoute = createRoute({
   },
 });
 
-export const routes: AnyRoute[] = [spaceRoute, newPageRoute, settingsRoute, trashRoute];
+export const routes: AnyRoute[] = [spaceRoute, settingsRoute, trashRoute];
+export const focusRoutes: AnyRoute[] = [newPageRoute];

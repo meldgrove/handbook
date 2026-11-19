@@ -24,6 +24,8 @@ export type MarkdownViewProps = {
   /** Leave out a first-level heading at the top that repeats this title. */
   title?: string;
   className?: string;
+  /** "article": the page reading style (serif text in a reading column), as on pages and in the editor. */
+  variant?: "default" | "article";
 };
 
 const messages = defineMessages({
@@ -66,7 +68,7 @@ const CALLOUT_STYLE: Record<CalloutType, { icon: typeof Info; className: string 
   },
 };
 
-function Callout({ type, children }: { type: CalloutType; children: ReactNode }) {
+function Callout({ type, children, article }: { type: CalloutType; children: ReactNode; article?: boolean }) {
   const t = useT(messages);
   const style = CALLOUT_STYLE[type];
   const Icon = style.icon;
@@ -74,13 +76,18 @@ function Callout({ type, children }: { type: CalloutType; children: ReactNode })
     <div
       data-callout={type}
       role="note"
-      className={cn("my-4 rounded-md border-l-4 px-4 py-3", style.className)}
+      className={article ? undefined : cn("my-4 rounded-md border-l-4 px-4 py-3", style.className)}
     >
-      <p data-callout-title className="mb-1 flex items-center gap-2 text-sm font-semibold">
-        <Icon className="size-4" aria-hidden />
+      <p
+        data-callout-title
+        className={article ? undefined : "mb-1 flex items-center gap-2 text-sm font-semibold"}
+      >
+        <Icon className={article ? "size-[1.1em]" : "size-4"} aria-hidden />
         {t(type)}
       </p>
-      <div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">{children}</div>
+      <div data-callout-body className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+        {children}
+      </div>
     </div>
   );
 }
@@ -89,13 +96,17 @@ function MarkdownLink({
   href,
   children,
   from,
+  article,
 }: {
   href: string | undefined;
   children: ReactNode;
   from: { space: string; path: string };
+  article?: boolean;
 }) {
   const t = useT(messages);
-  const className = "text-primary font-medium underline underline-offset-4 hover:no-underline";
+  const className = article
+    ? undefined
+    : "text-primary font-medium underline underline-offset-4 hover:no-underline";
   if (!href) return <span>{children}</span>;
   const target = resolveLink(href, from);
   switch (target.kind) {
@@ -147,6 +158,36 @@ function MarkdownLink({
 }
 
 const headingClass = "scroll-mt-20 font-semibold tracking-tight";
+
+/** The article style: plain elements, styled by the `.article` rules in styles.css. */
+function articleComponents(from: { space: string; path: string }): Components {
+  return {
+    ul: ({ node: _node, ...props }) => <ul {...props} />,
+    input: ({ node: _node, ...props }) => <input {...props} aria-label="Task" />,
+    div: ({ node: _node, ...props }) => {
+      const callout = (props as Record<string, unknown>)["data-callout"];
+      if (typeof callout === "string" && callout in CALLOUT_STYLE) {
+        return (
+          <Callout type={callout as CalloutType} article>
+            {props.children}
+          </Callout>
+        );
+      }
+      return <div {...props} />;
+    },
+    a: ({ node: _node, href, children }) => (
+      <MarkdownLink href={href} from={from} article>
+        {children}
+      </MarkdownLink>
+    ),
+    img: ({ node: _node, alt, ...props }) => <img {...props} alt={alt ?? ""} loading="lazy" />,
+    table: ({ node: _node, ...props }) => (
+      <div className="article-table">
+        <table {...props} />
+      </div>
+    ),
+  };
+}
 
 function components(from: { space: string; path: string }): Components {
   return {
@@ -220,6 +261,7 @@ function components(from: { space: string; path: string }): Components {
 
 export function MarkdownView(props: MarkdownViewProps) {
   const from = { space: props.space, path: props.path };
+  const article = props.variant === "article";
   // Markdown the parser cannot handle in time (pages refuse it; comments may have it) stays plain text.
   if (markdownProblem(props.markdown)) {
     return (
@@ -234,11 +276,16 @@ export function MarkdownView(props: MarkdownViewProps) {
     );
   }
   return (
-    <div className={cn("text-foreground min-w-0 text-[0.95rem] break-words", props.className)}>
+    <div
+      className={cn(
+        article ? "article min-w-0" : "text-foreground min-w-0 text-[0.95rem] break-words",
+        props.className,
+      )}
+    >
       <ReactMarkdown
         skipHtml
         remarkPlugins={[remarkGfm, remarkCallouts, [remarkHeadingIds, { title: props.title }]]}
-        components={components(from)}
+        components={article ? articleComponents(from) : components(from)}
       >
         {props.markdown}
       </ReactMarkdown>

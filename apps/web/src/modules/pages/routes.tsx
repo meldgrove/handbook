@@ -1,6 +1,7 @@
 import { createRoute, notFound, type AnyRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { appRoute } from "@/routes/app";
+import { focusRoute } from "@/routes/focus";
 import { EditPage, type ChangeSetParam } from "./edit-page";
 import { HistoryPage } from "./history-page";
 import { PageView } from "./page-view";
@@ -37,7 +38,7 @@ const pageRoute = createRoute({
 });
 
 const editRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => focusRoute,
   path: "/pages/$id/edit",
   beforeLoad: checkId,
   validateSearch: changeSetSearch,
@@ -81,4 +82,5 @@ const revisionRoute = createRoute({
   },
 });
 
-export const routes: AnyRoute[] = [pageRoute, editRoute, historyRoute, revisionRoute];
+export const routes: AnyRoute[] = [pageRoute, historyRoute, revisionRoute];
+export const focusRoutes: AnyRoute[] = [editRoute];
