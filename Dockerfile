@@ -4,7 +4,7 @@
 #   worker   search index upkeep, removes expired locks, tokens and unused uploads
 #   migrate  apply database migrations, then exit
 
-FROM node:26.13.0-bookworm-slim AS base
+FROM node:26.13.1-bookworm-slim AS base
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/
@@ -37,7 +37,7 @@ FROM base AS prod-deps
 # optional peers (vitest, drizzle-kit, esbuild): the server needs none of them.
 RUN npm ci --omit=dev --omit=optional --workspace @handbook/server --include-workspace-root=false --no-audit --no-fund
 
-FROM node:26.13.0-bookworm-slim AS runtime
+FROM node:26.13.1-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
