@@ -3,6 +3,7 @@ import { idSchema } from "./common";
 import { pageTypeDefinitionSchema, propertyDefinitionSchema } from "../page";
 import { MAX_SPACE_SLUG_LENGTH, SPACE_SLUG_PATTERN } from "../paths";
 import { spaceRoleSchema } from "../roles";
+import { spaceTemplateKeySchema } from "../space-templates";
 
 export const spaceSlugSchema = z
   .string()
@@ -53,6 +54,8 @@ export const spaceCreateSchema = z.object({
   slug: spaceSlugSchema,
   name: z.string().trim().min(1, "Add a name").max(80),
   description: z.string().trim().max(500).default(""),
+  /** What the space starts with: page types, properties and starter pages (`space-templates.ts`). */
+  template: spaceTemplateKeySchema.default("blank"),
 });
 export type SpaceCreate = z.infer<typeof spaceCreateSchema>;
 

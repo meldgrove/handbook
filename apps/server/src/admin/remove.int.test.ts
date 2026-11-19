@@ -152,7 +152,7 @@ describe("removing a person", () => {
       ]),
     ).toEqual([
       ["ada@example.org", "person.removed", "Removed a person"],
-      [REMOVED_PERSON_NAME, "space.created", "Created the space HR (hr)"],
+      [REMOVED_PERSON_NAME, "space.created", "Created the space HR (hr) from the Blank template"],
       ["ada@example.org", "person.updated", "Made a removed person an admin"],
     ]);
 

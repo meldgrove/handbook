@@ -320,7 +320,8 @@ export function registerTools(server: McpServer, api: ApiClient) {
       title: "Get a space's properties and page types",
       description:
         "What page files of a space may contain: the built-in frontmatter properties, the space's custom properties (key, type, options, required), " +
-        "and its page types (key, template, required properties). Read this before creating pages or changing frontmatter: " +
+        "and its page types (key, help: what the type is for, template: the body a new page starts with, required properties: custom or built-in keys). " +
+        "Read this before creating pages or changing frontmatter: " +
         "unknown keys and invalid values are refused.",
       inputSchema: { space: z.string().trim().min(1).max(40).describe("The space's slug") },
       annotations: READ,

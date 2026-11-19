@@ -42,7 +42,15 @@ describe("spaces API", () => {
       pageCount: 0,
       openChangeSets: 0,
       abilities: { manage: true },
+      properties: [],
     });
+    // Without a template: the default page types, no pages.
+    expect(created.body.pageTypes.map((pageType: { key: string }) => pageType.key)).toEqual([
+      "overview",
+      "how-to",
+      "policy",
+      "reference",
+    ]);
     expect(
       (await request("POST", "/api/v1/spaces", { userId: admin.id, body: { slug: "it", name: "Again" } }))
         .status,
@@ -69,6 +77,64 @@ describe("spaces API", () => {
     expect((await request("GET", "/api/v1/spaces/it", { userId: reader.id })).body.pageCount).toBe(2);
     const actions = await getDb().select({ action: auditLog.action }).from(auditLog);
     expect(actions.map((row) => row.action)).toEqual(["space.created", "space.archived", "space.unarchived"]);
+  });
+
+  it("creates a space from a template with its page types, properties and starter pages", async () => {
+    const admin = await createUser({ isAdmin: true });
+    expect(
+      (
+        await request("POST", "/api/v1/spaces", {
+          userId: admin.id,
+          body: { slug: "it", name: "IT", template: "intranet" },
+        })
+      ).status,
+    ).toBe(422);
+    const created = await request("POST", "/api/v1/spaces", {
+      userId: admin.id,
+      body: { slug: "it", name: "IT", template: "it" },
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.pageTypes.map((pageType: { key: string }) => pageType.key)).toEqual([
+      "overview",
+      "how-to",
+      "policy",
+      "reference",
+      "tool",
+      "troubleshooting",
+    ]);
+    expect(created.body.properties.map((property: { key: string }) => property.key)).toEqual([
+      "systems",
+      "audience",
+    ]);
+    expect(created.body.pageCount).toBe(6);
+
+    const tree = await request("GET", "/api/v1/spaces/it/tree", { userId: admin.id });
+    expect(tree.body.items.map((page: { path: string }) => page.path)).toEqual([
+      "software",
+      "how-to-guides",
+      "onboarding-and-offboarding",
+      "help",
+      "policies",
+      "it-team",
+    ]);
+    const file = await request("GET", "/s/it/software.md", { userId: admin.id });
+    expect(file.body).toContain(
+      "title: Software\ndescription: The apps and systems we use.\ntype: overview\n",
+    );
+
+    // A policy needs an owner and a review date.
+    const policy = await request("POST", "/api/v1/spaces/it/pages", {
+      userId: admin.id,
+      body: {
+        parentPath: "policies",
+        markdown: "---\ntitle: Passwords\ntype: policy\n---\n\nUse a password manager.\n",
+      },
+    });
+    expect(policy.status).toBe(422);
+    expect(policy.body.error.fields).toMatchObject({
+      "properties.owner": "Pages of type “Policy” need “Owner”",
+      "properties.reviewed": "Pages of type “Policy” need “Last reviewed”",
+    });
   });
 
   it("lets owners choose editors and only admins choose owners", async () => {

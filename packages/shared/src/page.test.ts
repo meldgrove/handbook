@@ -4,6 +4,7 @@ import {
   normalizeBody,
   parsePageFile,
   readFrontmatterValues,
+  spaceSchemaProblems,
   validateFrontmatter,
   withFrontmatter,
   type SpaceSchema,
@@ -46,6 +47,34 @@ describe("page files", () => {
   it("checks required properties of page types", () => {
     const result = validateFrontmatter({ title: "A", type: "workflow" }, schema);
     expect(!result.ok && result.errors["properties.team"]).toContain("Workflow");
+  });
+
+  it("lets page types require built-in properties", () => {
+    const withPolicy: SpaceSchema = {
+      properties: [],
+      pageTypes: [
+        { key: "policy", label: "Policy", template: "", requiredProperties: ["owner", "reviewed"] },
+      ],
+    };
+    expect(spaceSchemaProblems(withPolicy)).toEqual({});
+    const missing = validateFrontmatter({ title: "A", type: "policy", owner: "not an address" }, withPolicy);
+    expect(!missing.ok && missing.errors).toEqual({
+      "properties.owner": "Use an email address",
+      "properties.reviewed": "Pages of type “Policy” need “Last reviewed”",
+    });
+    expect(
+      validateFrontmatter(
+        { title: "A", type: "policy", owner: "ada@example.org", reviewed: "2026-11-19" },
+        withPolicy,
+      ).ok,
+    ).toBe(true);
+    // Only built-in properties that can be missing.
+    expect(
+      spaceSchemaProblems({
+        ...withPolicy,
+        pageTypes: [{ ...withPolicy.pageTypes[0]!, requiredProperties: ["title"] }],
+      }),
+    ).toEqual({ "pageTypes.0.requiredProperties": "Unknown property “title”" });
   });
 
   it("refuses files without frontmatter and YAML that is not a mapping", () => {

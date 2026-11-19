@@ -5,6 +5,8 @@ import { splitComma } from "@/components/editor/file";
 /** A property as the settings form edits it (options as comma-separated text). */
 export type PropertyRow = {
   id: string;
+  /** Saved before: its key stays when the label changes (pages may use it). */
+  saved: boolean;
   key: string;
   label: string;
   type: PropertyType;
@@ -15,8 +17,11 @@ export type PropertyRow = {
 
 export type PageTypeRow = {
   id: string;
+  /** Saved before: its key stays when the label changes (pages may use it). */
+  saved: boolean;
   key: string;
   label: string;
+  help: string;
   template: string;
   requiredProperties: string[];
 };
@@ -29,6 +34,7 @@ export const hasOptions = (type: PropertyType) => type === "select" || type === 
 export function propertyRows(definitions: PropertyDefinition[]): PropertyRow[] {
   return definitions.map((definition) => ({
     id: nextId(),
+    saved: true,
     key: definition.key,
     label: definition.label,
     type: definition.type,
@@ -39,7 +45,16 @@ export function propertyRows(definitions: PropertyDefinition[]): PropertyRow[] {
 }
 
 export function emptyPropertyRow(): PropertyRow {
-  return { id: nextId(), key: "", label: "", type: "text", optionsText: "", required: false, help: "" };
+  return {
+    id: nextId(),
+    saved: false,
+    key: "",
+    label: "",
+    type: "text",
+    optionsText: "",
+    required: false,
+    help: "",
+  };
 }
 
 export function propertyDefinitions(rows: PropertyRow[]): PropertyDefinition[] {
@@ -56,19 +71,24 @@ export function propertyDefinitions(rows: PropertyRow[]): PropertyDefinition[] {
 export function pageTypeRows(definitions: PageTypeDefinition[]): PageTypeRow[] {
   return definitions.map((definition) => ({
     id: nextId(),
-    ...definition,
+    saved: true,
+    key: definition.key,
+    label: definition.label,
+    help: definition.help ?? "",
+    template: definition.template,
     requiredProperties: [...definition.requiredProperties],
   }));
 }
 
 export function emptyPageTypeRow(): PageTypeRow {
-  return { id: nextId(), key: "", label: "", template: "", requiredProperties: [] };
+  return { id: nextId(), saved: false, key: "", label: "", help: "", template: "", requiredProperties: [] };
 }
 
 export function pageTypeDefinitions(rows: PageTypeRow[]): PageTypeDefinition[] {
   return rows.map((row) => ({
     key: row.key.trim(),
     label: row.label.trim(),
+    help: row.help.trim(),
     template: row.template,
     requiredProperties: row.requiredProperties,
   }));
