@@ -11,7 +11,7 @@ app.
 | Everyone signed in             | Read and export every space (drafts only in spaces they edit); search, suggest changes as change sets, comment and connect agents. |
 | Space editor                   | Also: create, edit, move and delete pages live; review, merge, close and revert change sets; restore pages and versions.           |
 | Space owner                    | Also: the space's name and description, its editors, properties and page types.                                                    |
-| Admin                          | Everything in every space; create and archive spaces; choose owners; people; service tokens; the audit log.                        |
+| Admin                          | Everything in every space; create and archive spaces; choose owners; people; service tokens; the audit log; updates.               |
 | Agent (token or connected app) | Acts as its person, but only reads and proposes: it writes only into change sets and never merges or administers.                  |
 | Service token                  | Reads only (search, pages, Markdown files): for integrations such as a support bot.                                                |
 
