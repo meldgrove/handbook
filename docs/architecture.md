@@ -15,6 +15,10 @@ agents.
   `type`, `status`, `tags`, `owner`, `reviewed`, `replaced_by`,
   `search_terms`) plus custom properties each space defines, with types.
   **Page types** add a template and required properties.
+- **Space template**: what a new space starts with
+  (`packages/shared/src/space-templates.ts`): the default page types, the
+  template's own page types and properties, and top-level starter pages.
+  It is copied into the space; nothing links back to it.
 - **Revision**: every change of a page (save, move, delete, restore) is a
   numbered revision with the full file, author, channel and change set.
 - **Change set**: the app's branch and pull request. Changes to pages of one

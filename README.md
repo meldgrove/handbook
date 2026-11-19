@@ -10,7 +10,9 @@ with every agent change reviewed by a person before it goes live.
 - **Properties, page types and tags.** Built-in properties (title,
   description, status, tags, owner, review date, search terms) plus custom
   properties per space with types, page types with templates and required
-  properties. Every save is checked against them.
+  properties. Every save is checked against them. New spaces start from a
+  template (Blank, Team, IT, People, Finance, Engineering, Product) with
+  ready page types, properties and section pages.
 - **Everyone reads, selected people edit.** Everyone who signs in reads every
   space. Owners and editors are set per space in the app.
 - **Change sets: review like pull requests.** Changes collected in a change

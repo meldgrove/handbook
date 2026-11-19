@@ -4,6 +4,11 @@ import { toast } from "sonner";
 import { Archive, ArchiveRestore, Library, Plus, Settings } from "lucide-react";
 import type { SpaceSummary } from "@handbook/shared/api/spaces";
 import { MAX_SPACE_SLUG_LENGTH, slugify } from "@handbook/shared/paths";
+import {
+  SPACE_TEMPLATE_KEYS,
+  SPACE_TEMPLATES,
+  type SpaceTemplateKey,
+} from "@handbook/shared/space-templates";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { Page, PageHeader } from "@/components/layout/page";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
@@ -19,8 +24,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@meldgrove/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+  FieldTitle,
+} from "@meldgrove/ui/field";
 import { Input } from "@meldgrove/ui/input";
+import { RadioGroup, RadioGroupItem } from "@meldgrove/ui/radio-group";
 import { Spinner } from "@meldgrove/ui/spinner";
 import { Textarea } from "@meldgrove/ui/textarea";
 import { useT } from "@/i18n";
@@ -44,13 +59,14 @@ function CreateSpaceDialog(props: { onClose: () => void }) {
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
   const [description, setDescription] = useState("");
+  const [template, setTemplate] = useState<SpaceTemplateKey>("blank");
   const fields = create.error instanceof ApiError ? (create.error.fields ?? {}) : {};
   const generalError =
     create.error && !(create.error instanceof ApiError && create.error.fields) ? create.error : null;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     create.mutate(
-      { name: name.trim(), slug: slug.trim(), description: description.trim() },
+      { name: name.trim(), slug: slug.trim(), description: description.trim(), template },
       {
         onSuccess: (space) => {
           toast.success(t("created"));
@@ -62,7 +78,7 @@ function CreateSpaceDialog(props: { onClose: () => void }) {
   };
   return (
     <Dialog open onOpenChange={(open) => !open && !create.isPending && props.onClose()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
             <DialogTitle>{t("createSpaceTitle")}</DialogTitle>
@@ -112,6 +128,7 @@ function CreateSpaceDialog(props: { onClose: () => void }) {
             <FieldDescription>{t("spaceDescriptionHint")}</FieldDescription>
             {fields.description ? <FieldError>{fields.description}</FieldError> : null}
           </Field>
+          <TemplatePicker value={template} onChange={setTemplate} error={fields.template} />
           {generalError ? (
             <Alert variant="destructive">
               <AlertDescription>{errorMessage(generalError)}</AlertDescription>
@@ -129,6 +146,46 @@ function CreateSpaceDialog(props: { onClose: () => void }) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The template a new space starts with, and what it brings. */
+function TemplatePicker(props: {
+  value: SpaceTemplateKey;
+  onChange: (value: SpaceTemplateKey) => void;
+  error: string | undefined;
+}) {
+  const t = useT(messages);
+  const chosen = SPACE_TEMPLATES[props.value];
+  return (
+    <FieldSet>
+      <FieldLegend variant="label">{t("template")}</FieldLegend>
+      <FieldDescription>{t("templateHint")}</FieldDescription>
+      <RadioGroup
+        value={props.value}
+        onValueChange={(value) => props.onChange(value as SpaceTemplateKey)}
+        className="grid-cols-1 gap-2 sm:grid-cols-2"
+      >
+        {SPACE_TEMPLATE_KEYS.map((key) => (
+          <FieldLabel key={key} htmlFor={`template-${key}`} className="[&>*]:data-[slot=field]:p-3">
+            <Field orientation="horizontal">
+              <RadioGroupItem value={key} id={`template-${key}`} />
+              <FieldContent>
+                <FieldTitle>{SPACE_TEMPLATES[key].label}</FieldTitle>
+                <FieldDescription className="text-xs">{SPACE_TEMPLATES[key].description}</FieldDescription>
+              </FieldContent>
+            </Field>
+          </FieldLabel>
+        ))}
+      </RadioGroup>
+      <FieldDescription>
+        {t("templateTypes", { types: chosen.pageTypes.map((pageType) => pageType.label).join(", ") })}{" "}
+        {chosen.pages.length > 0
+          ? t("templatePages", { pages: chosen.pages.map((page) => page.title).join(", ") })
+          : t("templateNoPages")}
+      </FieldDescription>
+      {props.error ? <FieldError>{props.error}</FieldError> : null}
+    </FieldSet>
   );
 }
 

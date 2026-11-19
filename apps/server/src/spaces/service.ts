@@ -8,6 +8,7 @@ import type {
   SpaceUpdate,
 } from "@handbook/shared/api/spaces";
 import { parsePageFile, spaceSchemaProblems, type SpaceSchema } from "@handbook/shared/page";
+import { SPACE_TEMPLATES, starterPageFiles, templateSchema } from "@handbook/shared/space-templates";
 import { spaceRoleSchema } from "@handbook/shared/roles";
 import type { Db, DbOrTx } from "../db/client";
 import { changeSets, pages, spaceMembers, spaces, users } from "../db/schema";
@@ -15,6 +16,7 @@ import type { Principal, UserPrincipal } from "../auth/principal";
 import { audit } from "../core/audit";
 import { conflict, forbidden, notFound, validationError } from "../http/errors";
 import { markFilesUsed } from "../files/storage";
+import { authorOf, createLivePage } from "../pages/core";
 import { abilitiesOf, requireAbility, type SpaceContext, type SpaceRow } from "./access";
 
 const iso = (value: Date) => value.toISOString();
@@ -93,21 +95,32 @@ export async function spaceView(db: DbOrTx, principal: Principal, context: Space
   };
 }
 
+/** Creates a space with its template's properties, page types and starter pages. */
 export async function createSpace(db: Db, actor: UserPrincipal, input: SpaceCreate): Promise<SpaceRow> {
   const [existing] = await db.select({ id: spaces.id }).from(spaces).where(eq(spaces.slug, input.slug));
   if (existing) throw conflict(`A space with the URL name “${input.slug}” exists already`, "slug_taken");
+  const schema = templateSchema(input.template);
   return db.transaction(async (tx) => {
     const [space] = await tx
       .insert(spaces)
-      .values({ slug: input.slug, name: input.name, description: input.description })
+      .values({ slug: input.slug, name: input.name, description: input.description, ...schema })
       .returning();
     await markFilesUsed(tx, [input.description]);
     await audit(tx, actor, {
       action: "space.created",
       entityType: "space",
       entityId: space!.id,
-      summary: `Created the space ${input.name} (${input.slug})`,
+      summary: `Created the space ${input.name} (${input.slug}) from the ${SPACE_TEMPLATES[input.template].label} template`,
     });
+    for (const starter of starterPageFiles(input.template)) {
+      await createLivePage(tx, {
+        space: space!,
+        parentPath: null,
+        slug: starter.slug,
+        markdown: starter.markdown,
+        author: authorOf(actor, "web"),
+      });
+    }
     return space!;
   });
 }

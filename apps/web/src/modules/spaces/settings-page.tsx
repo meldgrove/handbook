@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Lock } from "lucide-react";
@@ -13,7 +13,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useT } from "@/i18n";
 import { MembersCard } from "./members-card";
 import { messages } from "./messages";
-import { GeneralCard, PageTypesCard, PropertiesCard } from "./schema-cards";
+import { GeneralCard, PageTypesCard, PropertiesCard, TemplateCard } from "./schema-cards";
 
 /** Settings of a space (owners): name, editors, properties, page types; admins archive. */
 export function SettingsPage({ space: slug }: { space: string }) {
@@ -21,6 +21,15 @@ export function SettingsPage({ space: slug }: { space: string }) {
   const queryClient = useQueryClient();
   const space = useQuery(spaceQuery(slug));
   const [archiving, setArchiving] = useState(false);
+  const [unsaved, setUnsaved] = useState({ properties: false, pageTypes: false });
+  const onUnsavedProperties = useCallback(
+    (value: boolean) => setUnsaved((current) => ({ ...current, properties: value })),
+    [],
+  );
+  const onUnsavedPageTypes = useCallback(
+    (value: boolean) => setUnsaved((current) => ({ ...current, pageTypes: value })),
+    [],
+  );
 
   if (space.error) {
     return (
@@ -76,8 +85,17 @@ export function SettingsPage({ space: slug }: { space: string }) {
           when something else of the space changes: `updatedAt` also moves with every page edit. */}
       <GeneralCard key={`general:${JSON.stringify([data.name, data.description])}`} space={data} />
       <MembersCard space={data} />
-      <PropertiesCard key={`properties:${JSON.stringify(data.properties)}`} space={data} />
-      <PageTypesCard key={`types:${JSON.stringify(data.pageTypes)}`} space={data} />
+      <PropertiesCard
+        key={`properties:${JSON.stringify(data.properties)}`}
+        space={data}
+        onUnsaved={onUnsavedProperties}
+      />
+      <PageTypesCard
+        key={`types:${JSON.stringify(data.pageTypes)}`}
+        space={data}
+        onUnsaved={onUnsavedPageTypes}
+      />
+      <TemplateCard space={data} unsaved={unsaved} />
       {data.abilities.manageOwners ? (
         <Card>
           <CardHeader>
