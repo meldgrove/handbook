@@ -511,46 +511,76 @@ function listMarker(text: string): string | null {
 
 type Piece = { text: string; index: number | null; node: PMNode };
 
-/** List markers to write a list with, other than the ones its neighbors use. */
-function markersAvoiding(family: "bullet" | "ordered", avoid: Set<string | null>): MarkerOptions {
-  if (family === "ordered") return { bulletOrdered: avoid.has(".") ? ")" : "." };
-  const bullet = (["-", "*", "+"] as const).find((marker) => !avoid.has(marker)) ?? "-";
-  return { bullet, bulletOther: bullet === "-" ? "*" : "-" };
+/** List markers to write a list with, other than the ones its neighbors use; null when none is left. */
+function markersAvoiding(family: "bullet" | "ordered", avoid: Set<string | null>): MarkerOptions | null {
+  if (family === "ordered") {
+    const delimiter = ([".", ")"] as const).find((marker) => !avoid.has(marker));
+    return delimiter ? { bulletOrdered: delimiter } : null;
+  }
+  const bullet = (["-", "*", "+"] as const).find((marker) => !avoid.has(marker));
+  return bullet ? { bullet, bulletOther: bullet === "-" ? "*" : "-" } : null;
+}
+
+/** A fenced code block without its closing fence: it runs to the end of the text. */
+function isUnclosedFence(source: string): boolean {
+  const lines = source.split("\n");
+  const open = /^[ \t]*(`{3,}|~{3,})/.exec(lines[0] ?? "");
+  if (!open) return false;
+  const fence = open[1]!;
+  return (
+    lines.length < 2 || !new RegExp(`^[ \\t]*[${fence[0]}]{${fence.length},}[ \\t]*$`).test(lines.at(-1)!)
+  );
 }
 
 /** Writes the document as Markdown, keeping unchanged blocks and the space between them as they were. */
 export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
   const sources = origin?.blocks ?? [];
   const known = new Map(origin?.nodes?.map((node, index) => [node, index]));
-  const used = new Set<number>();
-  let last = -1;
-  const pieces: Piece[] = [];
+  const nodes: PMNode[] = [];
   doc.forEach((node) => {
-    if (isEmptyParagraph(node)) return;
-    const canonical = blockMarkdown(node);
-    let index: number | null = null;
+    if (!isEmptyParagraph(node)) nodes.push(node);
+  });
+  // Untouched nodes keep their own block first, so that no look-alike can take it.
+  const used = new Set<number>();
+  const indexes = nodes.map((node) => {
     const same = known.get(node);
-    const next = last + 1;
-    if (same !== undefined && !used.has(same)) {
-      index = same;
-    } else if (next < sources.length && !used.has(next) && sources[next]!.canonical === canonical) {
-      index = next;
-    } else {
-      const found = sources.findIndex((source, i) => !used.has(i) && source.canonical === canonical);
-      if (found !== -1) index = found;
+    if (same === undefined || used.has(same)) return null;
+    used.add(same);
+    return same;
+  });
+  let last = -1;
+  const pieces: Piece[] = nodes.map((node, position) => {
+    const canonical = blockMarkdown(node);
+    let index = indexes[position] ?? null;
+    if (index === null) {
+      const next = last + 1;
+      if (next < sources.length && !used.has(next) && sources[next]!.canonical === canonical) {
+        index = next;
+      } else {
+        const found = sources.findIndex((source, i) => !used.has(i) && source.canonical === canonical);
+        if (found !== -1) index = found;
+      }
+      if (index !== null) used.add(index);
     }
-    if (index !== null) {
-      used.add(index);
-      last = index;
-    }
-    pieces.push({ text: index !== null ? sources[index]!.source : canonical, index, node });
+    if (index !== null) last = index;
+    return { text: index !== null ? sources[index]!.source : canonical, index, node };
   });
   if (pieces.length === 0) return "";
   const body = origin?.body ?? "";
   const adjacent = (a: Piece, b: Piece) => a.index !== null && b.index === a.index + 1;
 
+  // A code block left open at the end of the text would swallow what now follows it: close it.
+  pieces.forEach((piece, position) => {
+    if (position < pieces.length - 1 && piece.index !== null && isUnclosedFence(piece.text)) {
+      piece.text = blockMarkdown(piece.node);
+      piece.index = null;
+    }
+  });
+
   // Two lists of one kind with the same marker, newly next to each other, would read as one
-  // list: give one of them other markers, the changed one when only one changed.
+  // list: give one of them other markers, the changed one when only one changed, or (no marker
+  // left) put an empty HTML comment between them.
+  const separated = new Set<number>();
   for (let i = 1; i < pieces.length; i++) {
     const previous = pieces[i - 1]!;
     const piece = pieces[i]!;
@@ -561,7 +591,12 @@ export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
     const neighbor = pieces[target === i ? i + 1 : i - 2];
     const avoid = new Set([listMarker(previous.text), listMarker(piece.text)]);
     if (neighbor && listFamily(neighbor.node) === family) avoid.add(listMarker(neighbor.text));
-    pieces[target]!.text = blockMarkdown(pieces[target]!.node, markersAvoiding(family, avoid));
+    const markers = markersAvoiding(family, avoid);
+    if (!markers) {
+      separated.add(i);
+      continue;
+    }
+    pieces[target]!.text = blockMarkdown(pieces[target]!.node, markers);
     pieces[target]!.index = null;
   }
 
@@ -573,7 +608,7 @@ export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
     } else if (adjacent(previous, piece)) {
       result += body.slice(sources[previous.index!]!.end, sources[piece.index!]!.start);
     } else {
-      result += "\n\n";
+      result += separated.has(position) ? "\n\n<!-- -->\n\n" : "\n\n";
     }
     result += piece.text;
   });

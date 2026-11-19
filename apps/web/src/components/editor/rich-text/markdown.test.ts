@@ -288,6 +288,24 @@ describe("parseBody and serializeBody", () => {
     expect(serializeBody(schema.node("doc", null, children), origin)).toBe("_same_\n");
   });
 
+  it("does not let a new look-alike block take an unchanged block's source", () => {
+    const { doc: parsed, origin } = parseBody("*same*\n\n_same_\n", schema);
+    const children: PMNode[] = [
+      schema.nodeFromJSON(p(text("same", "italic"))),
+      parsed.child(0),
+      parsed.child(1),
+    ];
+    expect(serializeBody(schema.node("doc", null, children), origin)).toBe("_same_\n\n*same*\n\n_same_\n");
+  });
+
+  it("closes a code block left open at the end when something now follows it", () => {
+    const { doc: parsed, origin } = parseBody("Intro.\n\n```sh\nnpm ci\n", schema);
+    const children: PMNode[] = [parsed.child(0), parsed.child(1), schema.nodeFromJSON(p(text("After.")))];
+    const written = serializeBody(schema.node("doc", null, children), origin);
+    expect(written).toBe("Intro.\n\n```sh\nnpm ci\n```\n\nAfter.\n");
+    expect(parseBody(written, schema).doc.childCount).toBe(3);
+  });
+
   it("keeps the indentation of a block after a changed one", () => {
     const body = "Intro.\n\n  ```\n  code\n    more\n  ```\n";
     const { doc: parsed, origin } = parseBody(body, schema);
@@ -302,6 +320,19 @@ describe("parseBody and serializeBody", () => {
       content: [{ type: "listItem", content: [p(text("One!"))] }],
     });
     expect(serializeBody(edited, origin)).toBe("* One!\n\n- Two\n");
+  });
+
+  it("separates a new list from neighbors that use both ordered markers", () => {
+    const { doc: parsed, origin } = parseBody("1) Left\n\nText\n\n1. Right\n", schema);
+    const edited = replaceBlock(parsed, 1, {
+      type: "orderedList",
+      content: [{ type: "listItem", content: [p(text("Edited"))] }],
+    });
+    const written = serializeBody(edited, origin);
+    expect(written).toBe("1) Left\n\n1. Edited\n\n<!-- -->\n\n1. Right\n");
+    const lists: string[] = [];
+    parseBody(written, schema).doc.forEach((node) => lists.push(node.type.name));
+    expect(lists).toEqual(["orderedList", "orderedList", "rawMarkdown", "orderedList"]);
   });
 
   it("gives the inline content of an uploaded file's Markdown", () => {

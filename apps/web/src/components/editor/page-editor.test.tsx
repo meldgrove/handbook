@@ -75,6 +75,12 @@ describe("PageEditor", () => {
     expect(await screen.findByLabelText("Whole page file: frontmatter and Markdown")).toBeInTheDocument();
   });
 
+  it("shows text too complex for rich text as Markdown, naming the line of the file", async () => {
+    renderEditor(`---\ntitle: VPN\n---\n\nOK.\n\n${"*a* ".repeat(600)}\n`);
+    expect(screen.getByRole("button", { name: "Rich text" })).toBeDisabled();
+    expect(screen.getByText(/Line 7: this paragraph has more than/)).toBeInTheDocument();
+  });
+
   it("shows the Markdown file while the text has conflict blocks", async () => {
     renderEditor("---\ntitle: VPN\n---\n\n<<<<<<< yours\nA\n=======\nB\n>>>>>>> current\n");
     expect(screen.getByRole("button", { name: "Rich text" })).toBeDisabled();
