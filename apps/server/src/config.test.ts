@@ -40,6 +40,16 @@ describe("config", () => {
     ).toThrow(/OAUTH_ALLOW_PRIVATE_CLIENT_URLS/);
   });
 
+  it("reads UPDATER_URL: the Compose service by default, empty switches it off", () => {
+    delete process.env.UPDATER_URL;
+    expect(configWith({})().UPDATER_URL).toBe("http://updater:8080");
+    expect(configWith({ UPDATER_URL: "" })().UPDATER_URL).toBe("");
+    expect(configWith({ UPDATER_URL: " http://127.0.0.1:18088/ " })().UPDATER_URL).toBe(
+      "http://127.0.0.1:18088",
+    );
+    expect(configWith({ UPDATER_URL: "file:///etc/passwd" })).toThrow(/UPDATER_URL/);
+  });
+
   it("reads the session and agent limits", () => {
     const defaults = configWith({})();
     expect(defaults).toMatchObject({

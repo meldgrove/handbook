@@ -113,6 +113,14 @@ const schema = z
     WORKER_HEARTBEAT_FILE: optional(z.string()),
     /** Version of a release image, set by the release workflow; unset in images built from source. */
     APP_VERSION: optional(z.string().max(100)),
+    /**
+     * The Meldgrove Updater's API, for the update button of admins. Unlike
+     * other settings, an empty value is not unset: it switches the button off.
+     */
+    UPDATER_URL: z.preprocess(
+      (value) => (typeof value === "string" ? value.trim().replace(/\/+$/, "") : "http://updater:8080"),
+      z.union([z.literal(""), z.url({ protocol: /^https?$/ })]),
+    ),
     /** Error reports and performance data to Sentry or a compatible service; off when unset. */
     SENTRY_DSN: optional(z.url()),
     SENTRY_ENVIRONMENT: optional(z.string().max(64)),
