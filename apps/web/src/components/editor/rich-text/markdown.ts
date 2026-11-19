@@ -521,14 +521,15 @@ function markersAvoiding(family: "bullet" | "ordered", avoid: Set<string | null>
   return bullet ? { bullet, bulletOther: bullet === "-" ? "*" : "-" } : null;
 }
 
-/** A fenced code block without its closing fence: it runs to the end of the text. */
+/** A fenced code block without its closing fence (CommonMark: fences are indented 0–3 spaces). */
 function isUnclosedFence(source: string): boolean {
   const lines = source.split("\n");
-  const open = /^[ \t]*(`{3,}|~{3,})/.exec(lines[0] ?? "");
+  const open = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(lines[0] ?? "");
   if (!open) return false;
   const fence = open[1]!;
+  if (fence.startsWith("`") && open[2]!.includes("`")) return false;
   return (
-    lines.length < 2 || !new RegExp(`^[ \\t]*[${fence[0]}]{${fence.length},}[ \\t]*$`).test(lines.at(-1)!)
+    lines.length < 2 || !new RegExp(`^ {0,3}[${fence[0]}]{${fence.length},}[ \\t]*$`).test(lines.at(-1)!)
   );
 }
 
@@ -570,16 +571,18 @@ export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
   const adjacent = (a: Piece, b: Piece) => a.index !== null && b.index === a.index + 1;
 
   // A code block left open at the end of the text would swallow what now follows it: close it.
+  // (Only the text's last block can be one: it runs to the end.)
   pieces.forEach((piece, position) => {
-    if (position < pieces.length - 1 && piece.index !== null && isUnclosedFence(piece.text)) {
+    const lastBlock = piece.index !== null && piece.index === sources.length - 1;
+    if (position < pieces.length - 1 && lastBlock && isUnclosedFence(piece.text)) {
       piece.text = blockMarkdown(piece.node);
       piece.index = null;
     }
   });
 
   // Two lists of one kind with the same marker, newly next to each other, would read as one
-  // list: give one of them other markers, the changed one when only one changed, or (no marker
-  // left) put an empty HTML comment between them.
+  // list: give the changed one other markers, or put an empty HTML comment between them when
+  // both are unchanged (rewriting one would change more than its markers) or no marker is left.
   const separated = new Set<number>();
   for (let i = 1; i < pieces.length; i++) {
     const previous = pieces[i - 1]!;
@@ -587,6 +590,10 @@ export function serializeBody(doc: PMNode, origin: BodyOrigin | null): string {
     const family = listFamily(piece.node);
     if (adjacent(previous, piece) || !family || family !== listFamily(previous.node)) continue;
     if (listMarker(previous.text) !== listMarker(piece.text)) continue;
+    if (previous.index !== null && piece.index !== null) {
+      separated.add(i);
+      continue;
+    }
     const target = previous.index === null && piece.index !== null ? i - 1 : i;
     const neighbor = pieces[target === i ? i + 1 : i - 2];
     const avoid = new Set([listMarker(previous.text), listMarker(piece.text)]);

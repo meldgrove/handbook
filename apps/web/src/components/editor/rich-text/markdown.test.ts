@@ -277,9 +277,12 @@ describe("parseBody and serializeBody", () => {
       content: [{ type: "listItem", content: [p(text("Item"))] }],
     };
     expect(serializeBody(doc(list, list), null)).toBe("- Item\n\n* Item\n");
-    const { doc: parsed, origin } = parseBody("- One\n\nText\n\n- Two\n", schema);
+    // Both unchanged: a separator, so neither list is rewritten (numbers, spacing, emphasis).
+    const { doc: parsed, origin } = parseBody("1) One\n\nText\n\n3)   *Two*\n7)   Next\n", schema);
     const children: PMNode[] = [parsed.child(0), parsed.child(2)];
-    expect(serializeBody(schema.node("doc", null, children), origin)).toBe("- One\n\n* Two\n");
+    expect(serializeBody(schema.node("doc", null, children), origin)).toBe(
+      "1) One\n\n<!-- -->\n\n3)   *Two*\n7)   Next\n",
+    );
   });
 
   it("keeps each unchanged block's own source when two blocks look the same", () => {
@@ -304,6 +307,21 @@ describe("parseBody and serializeBody", () => {
     const written = serializeBody(schema.node("doc", null, children), origin);
     expect(written).toBe("Intro.\n\n```sh\nnpm ci\n```\n\nAfter.\n");
     expect(parseBody(written, schema).doc.childCount).toBe(3);
+  });
+
+  it("tells an open fence from code that only contains fences", () => {
+    // Indented code that starts with backticks is no fence: kept as written.
+    const indented = parseBody("Para.\n\n    ```\n    literal\n\nLast.\n", schema);
+    expect(serializeBody(replaceBlock(indented.doc, 2, p(text("Last!"))), indented.origin)).toBe(
+      "Para.\n\n    ```\n    literal\n\nLast!\n",
+    );
+    // A line of 4 spaces and backticks does not close a fence: still open, so it is closed.
+    const open = parseBody("Intro.\n\n```\ncode\n    ```", schema);
+    const children: PMNode[] = [open.doc.child(0), open.doc.child(1), schema.nodeFromJSON(p(text("After.")))];
+    const written = serializeBody(schema.node("doc", null, children), open.origin);
+    const reread: string[] = [];
+    parseBody(written, schema).doc.forEach((node) => reread.push(node.type.name));
+    expect(reread).toEqual(["paragraph", "codeBlock", "paragraph"]);
   });
 
   it("keeps the indentation of a block after a changed one", () => {

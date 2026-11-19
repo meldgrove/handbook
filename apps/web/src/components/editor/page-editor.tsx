@@ -181,11 +181,11 @@ export function PageEditor(props: PageEditorProps) {
   const read = valuesOf(props.file);
   const hasFrontmatter = splitFrontmatter(props.file) !== null;
   const values = "values" in read ? read.values : null;
-  const body = bodyOf(props.file);
+  const normalized = props.file.replace(/\r\n?/g, "\n");
+  const body = bodyOf(normalized);
   const conflicts = hasConflictMarkers(props.file);
   // Only text can show conflict blocks, a file without readable frontmatter, and Markdown
   // the parser would take too long on (the page view checks the same before showing it).
-  const normalized = props.file.replace(/\r\n?/g, "\n");
   // Line numbers of the whole file, as the Markdown view shows it.
   const problem = markdownProblem(
     body,
