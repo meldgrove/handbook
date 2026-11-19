@@ -373,6 +373,7 @@ helps.
 | Change sets | `GET /change-sets`, `POST /change-sets`, `GET /change-sets/:number`, `PATCH /change-sets/:number`, `GET /change-sets/:number/pages/:pageId`, `GET /change-sets/:number/pages/by-path?path=`, `PUT /change-sets/:number/pages`, `POST /change-sets/:number/pages/:pageId/edit`, `/move`, `/delete`, `/rebase`, `DELETE /change-sets/:number/pages/:pageId`, `POST /change-sets/:number/comments`, `/submit`, `/request-changes`, `/merge`, `/close`, `/reopen`, `/revert` |
 | Tokens      | `GET`/`POST /tokens`, `DELETE /tokens/:id`, `GET /connected-apps`, `DELETE /connected-apps/:id`, `GET /connect-info`, `GET /oauth/requests/:id`, `POST /oauth/requests/:id/approve`, `/deny`                                                                                                                                                                                                                                                                             |
 | Admin       | `GET /admin/people`, `PATCH`/`DELETE /admin/people/:id`, `GET`/`POST /admin/service-tokens`, `DELETE /admin/service-tokens/:id`, `POST /admin/tags/rename`, `GET /admin/audit`                                                                                                                                                                                                                                                                                           |
+| Updates     | `GET /admin/updates`, `POST /admin/updates/check`, `/install`, `/channel` (admins in the web app; they ask the updater at `UPDATER_URL` and answer `UpdatesResponse`, a refusal of the updater as 409 with `error`, an updater's 5xx as that 5xx)                                                                                                                                                                                                                        |
 
 ## Web app
 
@@ -389,6 +390,7 @@ helps.
 | `/settings`: personal tokens, connected apps, how to connect agents                                                                   | settings     |
 | `/oauth/consent` (outside the app layout)                                                                                             | oauth        |
 | `/admin/spaces`, `/admin/people`, `/admin/service-tokens`, `/admin/audit`                                                             | admin, audit |
+| `/admin/updates`: installed version, update channel; the update button in the header (admins)                                         | updates      |
 
 `components/markdown.tsx` (`MarkdownView`) renders bodies everywhere:
 react-markdown with remark-gfm, no HTML, callouts, heading anchors from

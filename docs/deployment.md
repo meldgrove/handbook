@@ -25,7 +25,9 @@ Each [release](https://github.com/meldgrove/handbook/releases) publishes the
 image `ghcr.io/meldgrove/handbook` for linux/amd64 and linux/arm64, tagged
 with its version (`0.1.0`), its series (`0.1`; from 1.0.0 the major version,
 `1`) and `latest`. A release that needs manual steps starts a new series, so
-the releases within a series install without anyone acting.
+the releases within a series install without anyone acting. Every change on
+`main` whose checks pass is published as a preview, tagged `0.1.1-preview.3`
+(three changes after 0.1.0) and `preview`.
 
 | File                    | Contains                                                                           |
 | ----------------------- | ---------------------------------------------------------------------------------- |
@@ -153,23 +155,45 @@ hears when the app is down.
      which is at the newest release.
    - **Debian:** in `/srv/handbook`, run `git pull` (the newest release's
      `compose.yaml`), change `HANDBOOK_VERSION` in `.env`, and run
-     `docker compose up -d --pull always`.
+     `docker compose up -d --pull always`. With automatic updates, the
+     update button installs it instead (**Install anyway…**).
 
 The `migrate` service applies database migrations before `web` and `worker`
 start.
 
 ## Automatic updates
 
-The `updater` service installs new releases of the tag in
-`HANDBOOK_VERSION`: with a series such as `0.1`, every release that
-installs without steps; with `latest`, every release, also those with
-upgrade steps. A release installs once the updater has seen it for three
-days (`UPDATE_COOLDOWN`: `0` installs within the hour, `7d` waits a week), and
-with `UPDATE_WINDOW` (such as `02:00-05:00`, in the time zone `TZ`) only
-then. Set up [backups](#backups) first: migrations run without anyone
-watching. Details: [meldgrove/updater](https://github.com/meldgrove/updater).
+The `updater` service ([meldgrove/updater](https://github.com/meldgrove/updater))
+keeps Handbook current, in one of two channels:
+
+- **Stable** (default): releases. A release in the running series installs
+  automatically once it has been out for three days (`UPDATE_COOLDOWN`: `0`
+  installs within the hour, `7d` waits a week). A release with upgrade steps
+  starts a new series: the app shows it, but it never installs on its own.
+- **Preview**: every change on `main` as soon as its checks pass, before it
+  is released, and every release. Previews install within the hour. New
+  features first, and now and then a new bug; previews have no release notes.
+
+With `UPDATE_WINDOW` (such as `02:00-05:00`, in the time zone `TZ`),
+automatic installs happen only then. Switching from Preview back to Stable
+installs nothing: the preview runs until a release is newer.
+
+**The update button:** admins see an update icon in the header. It checks on
+click, shows an available update with its changes, installs it on request
+(**Install now**), shows the progress, reloads the page when the new version
+runs, and says why an installation failed. With automatic updates off on
+the server, it still shows new releases, but nothing installs from the app.
+Admins choose the channel under **Administration → Updates**. The app reaches the updater at `UPDATER_URL`
+(`http://updater:8080` in `compose.yaml`); never publish the updater's port.
+
+Set up [backups](#backups) first: migrations run without anyone watching.
 
 ### On Coolify
+
+On Coolify, the image tag in `HANDBOOK_VERSION` decides what installs: a
+series such as `0.1` gets its releases, `latest` every release (also those
+with upgrade steps), `preview` every preview (the unstable channel). Admins
+cannot switch the channel in the app.
 
 1. Under Settings > Advanced, turn on API Access if it is off.
 2. Under Keys & Tokens > API Tokens, create a token with only the `deploy`
@@ -190,13 +214,33 @@ docker compose run --rm -T --pull always updater host-setup > updater-setup.sh
 sh updater-setup.sh
 ```
 
-The first command starts the image the tag points to now, which the updater
-takes as installed. The second writes the setup script from the updater's
-image; read it before you run it. The script installs a systemd unit that
-waits for the updater's request, then pulls the new image and runs
-`docker compose up -d`, migrations first. `docker compose logs updater` names
-the tag it watches, and `journalctl -u meldgrove-updater-handbook.service`
-shows each installation. `sh updater-setup.sh remove` switches it off.
+The first command starts the version in `HANDBOOK_VERSION`, which the
+updater takes as installed. The second writes the setup script from the
+updater's image; read it before you run it. The script installs a systemd
+unit that waits for the updater's requests. For each installation, it writes
+the exact version into `HANDBOOK_VERSION` in `.env`, pulls the image, runs
+`docker compose up -d --wait` (migrations first), and goes back to the
+version before when the app does not become healthy. It installs images,
+not files: when a release changes `compose.yaml`, its upgrade steps say so.
+`journalctl -u meldgrove-updater-handbook.service` shows each installation;
+`sh updater-setup.sh remove` switches it off.
+
+**Installations with updater 0.1** followed the tag in `HANDBOOK_VERSION`
+and have no channels or update button. To get them, in `/srv/handbook`:
+take the new `compose.yaml`, set `HANDBOOK_VERSION` in `.env` to the release
+that brings the update button (or a newer one), and start it, so that the app
+runs the new version too, not only the `updater` service. Then run the host
+setup again:
+
+```sh
+git pull
+# in .env: HANDBOOK_VERSION=<the release that brings the update button, or newer>
+docker compose up -d --pull always
+docker compose run --rm -T --pull always updater host-setup > updater-setup.sh && sudo sh updater-setup.sh
+```
+
+Until the host setup runs again, the updater follows the tag as before, and
+the app says that the channel needs it.
 
 ## Backups
 

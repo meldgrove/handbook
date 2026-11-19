@@ -153,3 +153,14 @@ Built-in properties every page may have: `title` (required), `description`,
 `type`, `status`, `tags`, `owner` (an email address), `reviewed` (a date),
 `replaced_by` (a page path) and `search_terms` (other words people search
 for, e.g. in another language).
+
+## Admins: updates
+
+Admins see an update icon in the header. A dot on it means a new version is
+available: click it for the changes and **Install now**. Handbook restarts
+for a moment, and the page reloads when the new version runs. A warning
+triangle means an installation failed; the icon says why, and the version
+before keeps running. **Administration → Updates** shows the installed
+version and the channel: **Stable** (releases, recommended) or **Preview**
+(every change before it is released). The server must run the updater
+([Deployment](deployment.md#automatic-updates)).

@@ -1,6 +1,7 @@
 # Configuration
 
-Every setting that comes from the environment. Blank values count as unset.
+Every setting that comes from the environment. Blank values count as unset,
+except for `UPDATER_URL` (below).
 Spaces, editors, properties and page types are set up in the app.
 
 ## Required
@@ -64,10 +65,16 @@ See [Agents and MCP](agents.md).
 | `AUDIT_LOG_DAYS`                     | `365`                            | Days the audit log keeps entries; the worker deletes older ones. `0` keeps them all.                               |
 | `WORKER_HEARTBEAT_FILE`              | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds while no job hangs, for health checks.                                     |
 | `WEB_DIST_DIR`, `MIGRATIONS_DIR`     | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
+| `UPDATER_URL`                        | `http://updater:8080`            | The updater's API for the update button of admins ([Deployment](deployment.md#automatic-updates)). Empty: below.   |
 
 Behind a reverse proxy, set `TRUST_PROXY`: the rate limits of sign-in and of
 connected apps (OAuth) count per client address, and without it every
 request seems to come from the proxy.
+
+An empty `UPDATER_URL` switches the update button off only where the app
+reads its environment directly (`npm run dev`, one container without
+Compose). `compose.yaml` passes `${UPDATER_URL:-http://updater:8080}`, so an
+empty value there falls back to the default.
 
 ## Error reports (Sentry)
 
@@ -80,10 +87,10 @@ request seems to come from the proxy.
 
 ## Docker Compose only
 
-| Variable                                                                                       | Meaning                                                                           |
-| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `HANDBOOK_VERSION`                                                                             | The image tag to run, e.g. `0.1.0`, or a series like `0.1`.                       |
-| `HANDBOOK_PORT`                                                                                | Host port of `web` (default 3000).                                                |
-| `PULL_POLICY`                                                                                  | `always` makes every start pull the image (platforms that do not pull on deploy). |
-| `POSTGRES_PASSWORD`                                                                            | With `compose.postgres.yaml`.                                                     |
-| `UPDATE_DEPLOY_HOOK_URL`, `UPDATE_DEPLOY_HOOK_TOKEN`, `UPDATE_COOLDOWN`, `UPDATE_WINDOW`, `TZ` | The optional updater ([Deployment](deployment.md#automatic-updates)).             |
+| Variable                                                                                       | Meaning                                                                                                                  |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `HANDBOOK_VERSION`                                                                             | The image tag to run, e.g. `0.1.0`, or a series like `0.1`. On Debian, the updater writes each version it installs here. |
+| `HANDBOOK_PORT`                                                                                | Host port of `web` (default 3000).                                                                                       |
+| `PULL_POLICY`                                                                                  | `always` makes every start pull the image (platforms that do not pull on deploy).                                        |
+| `POSTGRES_PASSWORD`                                                                            | With `compose.postgres.yaml`.                                                                                            |
+| `UPDATE_DEPLOY_HOOK_URL`, `UPDATE_DEPLOY_HOOK_TOKEN`, `UPDATE_COOLDOWN`, `UPDATE_WINDOW`, `TZ` | The optional updater ([Deployment](deployment.md#automatic-updates)).                                                    |

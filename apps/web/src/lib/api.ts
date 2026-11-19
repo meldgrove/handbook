@@ -8,6 +8,8 @@ export class ApiError extends Error {
     message: string,
     /** Messages by field path, e.g. `{ "config.url": "Enter a URL" }`. */
     readonly fields?: Record<string, string>,
+    /** The whole response body, for routes that answer errors with more (e.g. a 409 with the current state). */
+    readonly body?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -34,7 +36,8 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;
 }
 
-async function parse<T>(response: Response): Promise<T> {
+/** Reads an answer of the API: its JSON (null when unreadable), or an ApiError for an error status. */
+export async function parseResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   let data: unknown;
@@ -51,6 +54,7 @@ async function parse<T>(response: Response): Promise<T> {
       body?.error?.code ?? "internal_error",
       body?.error?.message ?? `Request failed (${response.status})`,
       body?.error?.fields,
+      data,
     );
   }
   return data as T;
@@ -71,7 +75,7 @@ async function request<T>(
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: options.signal,
   });
-  return parse<T>(response);
+  return parseResponse<T>(response);
 }
 
 /** Uploads one file as multipart form data (field `file`). */
@@ -85,7 +89,7 @@ async function upload<T>(path: string, file: File, signal?: AbortSignal): Promis
     body,
     signal,
   });
-  return parse<T>(response);
+  return parseResponse<T>(response);
 }
 
 /** Typed calls to the REST API. Types come from @handbook/shared/api/*. */

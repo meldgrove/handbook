@@ -6,6 +6,7 @@ import pages from "./pages";
 import search from "./search";
 import spaces from "./spaces";
 import tokens from "./tokens";
+import updates from "./updates";
 
 /** Routers mounted under /api/v1. */
-export const API_MODULES = [meta, spaces, pages, search, files, changes, tokens, admin];
+export const API_MODULES = [meta, spaces, pages, search, files, changes, tokens, admin, updates];
