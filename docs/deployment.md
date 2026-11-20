@@ -207,6 +207,29 @@ the app says that the channel needs it.
 
 ## Backups
 
+### With Meldgrove Backups
+
+The `backup-agent` service in `compose.yaml` sends the database and the
+`files` volume to [Meldgrove Backups](https://github.com/meldgrove/backups)
+when Backups asks. While `BACKUP_URL` is empty, it idles.
+
+1. In Backups, add a source of the kind **Meldgrove app**, and put the two
+   lines it shows (`BACKUP_URL`, `BACKUP_TOKEN`) into `.env`.
+2. Run `docker compose up -d`, then check the agent:
+   `docker compose exec backup-agent backup-agent check`.
+3. Let the backup end before the update window (`UPDATE_WINDOW`): automatic
+   updates run migrations without anyone present.
+
+With [automatic updates](#automatic-updates), run the updater's host setup
+again once the app's folder has updater 0.2.2 or later (`git pull`): its
+deploy script then pulls the agent's image with each update. Without it:
+`docker compose pull backup-agent && docker compose up -d`.
+
+To restore, follow the
+[agent's guide](https://github.com/meldgrove/backup-agent#restore).
+
+### By hand
+
 Back up together:
 
 - the PostgreSQL database (`pg_dump`, or the `postgres` volume): pages,
