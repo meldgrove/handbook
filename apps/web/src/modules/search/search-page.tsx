@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight, Search, X } from "lucide-react";
 import { HIGHLIGHT_END, HIGHLIGHT_START, type SearchResult } from "@handbook/shared/api/search";
 import { spacesQuery } from "@/components/layout/app-layout";
-import { Page as PageLayout, PageHeader } from "@/components/layout/page";
+import { Page as PageLayout, PageHeader } from "@meldgrove/ui/page";
 import { searchQuery } from "@/components/page/queries";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Badge } from "@meldgrove/ui/badge";

@@ -10,7 +10,7 @@ import {
   Settings,
   Trash2,
 } from "lucide-react";
-import { Page as PageLayout, PageHeader } from "@/components/layout/page";
+import { Page as PageLayout, PageHeader } from "@meldgrove/ui/page";
 import { PageTree } from "@/components/page/tree-view";
 import { spaceQuery, treeQuery } from "@/components/page/queries";
 import { RecentChanges } from "@/components/page/recent-changes";

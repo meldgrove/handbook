@@ -34,7 +34,11 @@ async function mcp(token: string, method: string, params: unknown) {
 test("an admin creates a space and names an editor", async ({ browser }) => {
   const ada = await signIn(browser, "ada");
   await home(ada);
-  await ada.getByRole("link", { name: "Spaces" }).last().click();
+  // The sidebar's "Spaces" under Administration (the spaces themselves are a group, not a link).
+  await ada
+    .getByRole("navigation", { name: "Main" })
+    .getByRole("link", { name: "Spaces", exact: true })
+    .click();
   await ada.getByRole("button", { name: "New space" }).first().click();
   const dialog = ada.getByRole("dialog");
   await dialog.getByLabel(/^Name/).fill("IT and devices");

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { UpdateButton, UpdatesProvider } from "@meldgrove/ui/updates";
+import { UpdatesProvider } from "@meldgrove/ui/updates";
 import { useIsAdmin } from "@/hooks/use-me";
 import { apiUrl, sessionEnded } from "@/lib/api";
 
@@ -32,9 +32,4 @@ export function AdminUpdates({ appName, children }: { appName: string; children:
       {children}
     </UpdatesProvider>
   );
-}
-
-/** The update icon in the header: admins only. */
-export function AdminUpdateButton() {
-  return useIsAdmin() ? <UpdateButton /> : null;
 }

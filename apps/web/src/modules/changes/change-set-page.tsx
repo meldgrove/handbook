@@ -17,7 +17,7 @@ import {
 import type { ChangeSet } from "@handbook/shared/api/changes";
 import { ChangeSetStatusBadge } from "@/components/changes/status-badge";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
-import { Page } from "@/components/layout/page";
+import { Page } from "@meldgrove/ui/page";
 import { MarkdownView } from "@/components/markdown";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";

@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
-import { Page as PageLayout, PageHeader } from "@/components/layout/page";
+import { Page as PageLayout, PageHeader } from "@meldgrove/ui/page";
 import { spaceQuery } from "@/components/page/queries";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Button } from "@meldgrove/ui/button";

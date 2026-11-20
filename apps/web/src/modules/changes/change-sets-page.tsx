@@ -4,7 +4,7 @@ import { GitPullRequestArrow } from "lucide-react";
 import type { ChangeSetSummary } from "@handbook/shared/api/changes";
 import { ChangeSetStatusBadge } from "@/components/changes/status-badge";
 import { spacesQuery } from "@/components/layout/app-layout";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Card } from "@meldgrove/ui/card";
 import { Label } from "@meldgrove/ui/label";

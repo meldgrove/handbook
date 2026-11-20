@@ -4,15 +4,18 @@ import { Bot, KeyRound, Plug, Plus } from "lucide-react";
 import type { ConnectedApp, Token } from "@handbook/shared/api/tokens";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { CopyButton } from "@meldgrove/ui/copy-button";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";
 import { Button } from "@meldgrove/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { AboutCard, AppearanceCard, KeyboardShortcutsCard } from "@meldgrove/ui/settings-cards";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useFormatter } from "@/lib/format";
+import { REPOSITORY_URL } from "@/lib/repository";
+import { useTheme } from "@/lib/theme";
 import {
   useConnectedApps,
   useConnectInfo,
@@ -289,6 +292,7 @@ function AppsCard() {
 
 export function SettingsPage() {
   const t = useT(messages);
+  const { theme, setTheme } = useTheme();
   return (
     <Page className="max-w-5xl">
       <PageHeader title={t("title")} description={t("description")} />
@@ -300,6 +304,10 @@ export function SettingsPage() {
       <ConnectCard />
       <AppsCard />
       <TokensCard />
+      <AppearanceCard value={theme} onChange={setTheme} />
+      <KeyboardShortcutsCard />
+      {/* The software's name, also when an installation renames the app. */}
+      <AboutCard appName="Handbook" repositoryUrl={REPOSITORY_URL} />
     </Page>
   );
 }
