@@ -33,7 +33,7 @@ agents.
 
 | Who                                             | May                                                                                                                 |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Everyone signed in                              | Read every space (drafts only when editor); suggest changes (change sets); comment.                                 |
+| Everyone signed in                              | Read every space (drafts and the pages below them only when editor); suggest changes (change sets); comment.        |
 | Space editor                                    | Also edit pages live; review, merge, close and revert change sets.                                                  |
 | Space owner                                     | Also: space settings, editors, properties, page types.                                                              |
 | Admin (`ADMIN_EMAILS` or made admin in the app) | Everything in every space; create and archive spaces; choose owners; people, service tokens, audit log.             |
@@ -43,9 +43,15 @@ agents.
 Archived spaces are read-only: no page changes, change sets, comments or
 status changes.
 
-Drafts, the trash and change sets that change a draft are only for those
-whose abilities in the space include `seeDrafts`.
-`apps/server/src/spaces/visibility.ts` applies this to every list and read:
+Drafts, the pages below them, the trash, and change sets that change a
+draft or a page below one (live or in the trash) or put a page below a
+draft are only for those whose abilities in the space include `seeDrafts`: a draft hides its whole subtree
+until it is published (the tree, the space index, search, tags, backlinks,
+the recent feed, export and every read of a page, its history or its
+Markdown file). For the others, a path below such a draft does not exist:
+change sets cannot put a page there.
+`apps/server/src/spaces/visibility.ts` applies this to every list and read,
+and to what a space counts (its pages, open change sets and last change):
 `visibilityOf` reads a person's memberships once per request and asks
 `spaceAbilities` about each space (admins and service tokens need no
 query); `spaceVisibility` uses the abilities of one space's context.
@@ -245,7 +251,8 @@ Statuses: `open → in_review → merged`, or `closed` (and back to `open`).
   words between `HIGHLIGHT_START` and `HIGHLIGHT_END`. With fewer results
   than asked for, titles also match by trigram similarity (`pg_trgm`'s `%`
   through the title index, threshold 0.3 set per transaction) for typos.
-- Drafts only appear for editors of their space; deleted pages never.
+- Drafts and the pages below them only appear for editors of their space;
+  deleted pages never.
 
 ## Files
 
@@ -270,10 +277,10 @@ zip with one file per live page (`<path>.md`, sub-pages in folders named
 like the page), `_space.yaml` (name, description, properties, page types,
 page order) and every upload these texts mention (`/files/<id>`) as
 `files/<id>/<name>`, so the pages' links resolve from the zip's folder.
-Readers get no drafts, nor uploads only drafts use. The database is read
-before the answer starts; the zip then streams, packing the next file only
-when the client took the previous ones (texts deflated, uploads stored as
-they are). An upload missing on disk is left out and logged.
+Readers get no drafts or pages below them, nor uploads only those use. The
+database is read before the answer starts; the zip then streams, packing
+the next file only when the client took the previous ones (texts deflated,
+uploads stored as they are). An upload missing on disk is left out and logged.
 
 There is no import: agents bring existing content in by writing pages
 into a change set (MCP), which editors review like any other.

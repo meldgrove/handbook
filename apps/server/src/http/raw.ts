@@ -67,7 +67,6 @@ async function spaceIndex(principal: Principal, slug: string): Promise<string | 
     `Pages of this space. Each link is the page's Markdown file; add it to ${config().APP_URL}.`,
     "",
   );
-  const known = new Set(rows.map((row) => row.id));
   const walk = (parentId: string | null, depth: number) => {
     for (const row of byParent.get(parentId) ?? []) {
       const description = row.description ? `: ${row.description}` : "";
@@ -77,14 +76,8 @@ async function spaceIndex(principal: Principal, slug: string): Promise<string | 
       walk(row.id, depth + 1);
     }
   };
+  // A draft hides the pages below it: every listed page's parent is listed.
   walk(null, 0);
-  // Pages below a draft the reader cannot see.
-  for (const row of rows) {
-    if (row.parentId && !known.has(row.parentId)) {
-      lines.push(`- [${row.title}](${pageMarkdownUrl(space.slug, row.path)})`);
-      walk(row.id, 1);
-    }
-  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -166,7 +159,7 @@ export function rawRoutes() {
     if (!space) return notFoundText(c);
     const context = await spaceContext(getDb(), principal, space);
     const page = await findPageByPathOrRedirect(getDb(), space.id, path);
-    if (!page || !spaceVisibility(context).canSeePage(page)) return notFoundText(c);
+    if (!page || !(await spaceVisibility(context).canSeePage(getDb(), page))) return notFoundText(c);
     if (page.path !== path) {
       // The destination is only visible while this principal has access.
       c.header("cache-control", "no-store");

@@ -84,6 +84,7 @@ export async function searchPages(
     spaceId: sql`p.space_id`,
     status: sql`p.status`,
     deletedAt: sql`p.deleted_at`,
+    path: sql`p.path`,
   });
   const headlineLanguage = config().searchConfigs[0]!;
   // Only pages whose own search data or one of whose sections matches are

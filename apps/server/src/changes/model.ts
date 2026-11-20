@@ -79,16 +79,20 @@ export async function loadChangeSet(
   if (!changeSet) throw notFound("No such change set");
   const space = await getSpaceById(db, changeSet.spaceId);
   const context = await spaceContext(db, principal, space);
-  // Draft pages are only for the space's editors: so are change sets that change them.
+  // Drafts and the pages below them are only for the space's editors: so are change sets that change them.
   if (!(await spaceVisibility(context).canSeeChangeSet(db, changeSet))) {
     throw notFound("No such change set");
   }
   return accessOf(principal, changeSet, context);
 }
 
-/** A live page the principal may not see (a draft, for readers) counts as missing. */
-export function visibleLive(access: ChangeSetAccess, live: PageRow | null): PageRow | null {
-  return live && !spaceVisibility(access.context).canSeePage(live) ? null : live;
+/** A live page the principal may not see (for readers a draft or a page below one) counts as missing. */
+export async function visibleLive(
+  db: DbOrTx,
+  access: ChangeSetAccess,
+  live: PageRow | null,
+): Promise<PageRow | null> {
+  return live && !(await spaceVisibility(access.context).canSeePage(db, live)) ? null : live;
 }
 
 export function requireAccess(

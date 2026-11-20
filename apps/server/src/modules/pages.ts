@@ -51,7 +51,7 @@ function revisionParam(c: Context<AppEnv>): number {
   return Number(value);
 }
 
-/** A page and its space context; drafts 404 for readers; deleted pages 404 unless asked for. */
+/** A page and its space context; drafts and the pages below them 404 for readers; deleted pages 404 unless asked for. */
 async function loadPage(
   tx: DbOrTx,
   principal: Principal,
@@ -63,7 +63,7 @@ async function loadPage(
     : (await tx.select().from(pages).where(eq(pages.id, pageId)))[0];
   if (!page || (page.deletedAt !== null) !== (options.deleted ?? false)) throw notFound("No such page");
   const context = await spaceContext(tx, principal, await getSpaceById(tx, page.spaceId));
-  spaceVisibility(context).assertPage(page);
+  await spaceVisibility(context).assertPage(tx, page);
   return { page, context };
 }
 
@@ -73,7 +73,7 @@ router.get("/spaces/:space/pages/by-path", async (c) => {
   const context = await spaceContext(getDb(), principal, c.req.param("space"));
   const page = await findPageByPathOrRedirect(getDb(), context.space.id, path);
   if (!page) throw notFound("No such page");
-  spaceVisibility(context).assertPage(page);
+  await spaceVisibility(context).assertPage(getDb(), page);
   return c.json(await pageView(getDb(), principal, context, page));
 });
 
@@ -180,7 +180,7 @@ async function pageForHistory(principal: Principal, pageId: string) {
   if (!page) throw notFound("No such page");
   const context = await spaceContext(getDb(), principal, await getSpaceById(getDb(), page.spaceId));
   const visibility = spaceVisibility(context);
-  visibility.assertPage(page);
+  await visibility.assertPage(getDb(), page);
   if (page.deletedAt && !visibility.seesTrash(page.spaceId)) throw notFound("No such page");
   return { page, context };
 }

@@ -94,19 +94,27 @@ export async function mergeChangeSet(number: number): Promise<ChangeSet> {
   throw new ApiError(response.status, error?.code ?? "internal_error", message, error?.fields);
 }
 
-/** Runs a change set action and refreshes everything it may have changed (lists, pages, spaces). */
+/**
+ * Runs a change set action and refreshes everything it may have changed:
+ * change sets (lists, this page, the editor's), pages (by id and by path),
+ * spaces (counts, trees) and the recent feed.
+ */
 export function useChangeSetAction<TInput, TResult>(run: (input: TInput) => Promise<TResult>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: run,
     onSettled: () =>
-      Promise.all([
-        client.invalidateQueries({ queryKey: changeSetKeys.all }),
-        client.invalidateQueries({ queryKey: ["pages"] }),
-        client.invalidateQueries({ queryKey: ["page"] }),
-        client.invalidateQueries({ queryKey: ["spaces"] }),
-        client.invalidateQueries({ queryKey: ["recent"] }),
-      ]),
+      Promise.all(
+        [
+          changeSetKeys.all,
+          ["change-set"],
+          ["page"],
+          ["page-by-path"],
+          ["spaces"],
+          ["space"],
+          ["recent"],
+        ].map((queryKey) => client.invalidateQueries({ queryKey })),
+      ),
   });
 }
 

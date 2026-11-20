@@ -10,6 +10,7 @@ import type {
 } from "@handbook/shared/api/pages";
 import { LOCK_EXPIRE_SECONDS, LOCK_IDLE_SECONDS } from "@handbook/shared/limits";
 import { pageStatusSchema } from "@handbook/shared/page";
+import { ancestorPaths } from "@handbook/shared/paths";
 import { viaSchema } from "@handbook/shared/roles";
 import type { DbOrTx } from "../db/client";
 import {
@@ -101,19 +102,13 @@ export async function currentLock(
 /** The pages of a path's ancestors, top first. */
 async function breadcrumbs(tx: DbOrTx, context: SpaceContext, path: string): Promise<PageRef[]> {
   const { space } = context;
-  const segments = path.split("/");
-  const prefixes = segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"));
+  const prefixes = ancestorPaths(path);
   if (prefixes.length === 0) return [];
   const rows = await tx
     .select({ id: pages.id, path: pages.path, title: pages.title })
     .from(pages)
     .where(
-      and(
-        eq(pages.spaceId, space.id),
-        inArray(pages.path, prefixes),
-        // An active child can still have a draft ancestor.
-        spaceVisibility(context).livePages(),
-      ),
+      and(eq(pages.spaceId, space.id), inArray(pages.path, prefixes), spaceVisibility(context).livePages()),
     );
   return rows
     .sort((a, b) => a.path.length - b.path.length)

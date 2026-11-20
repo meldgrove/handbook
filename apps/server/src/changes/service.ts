@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { ChangeSetCreate } from "@handbook/shared/api/changes";
 import { applyEdits, lineStats, mergeText, type TextEdit } from "@handbook/shared/merge";
-import { pathProblem } from "@handbook/shared/paths";
+import { parentPath, pathProblem } from "@handbook/shared/paths";
 import type { Db, DbOrTx } from "../db/client";
 import { changeSetItems, changeSets, pages } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
 import { conflict, notFound, validationError } from "../http/errors";
 import { markFilesUsed } from "../files/storage";
 import { requireAbility, spaceContext } from "../spaces/access";
+import { spaceVisibility } from "../spaces/visibility";
 import { canonicalize, revisionMarkdown, type PageRow } from "../pages/core";
 import {
   addEvent,
@@ -93,7 +94,7 @@ async function itemOf(tx: DbOrTx, changeSetId: string, pageId: string): Promise<
 /** The item (if any) and live page (if any) a page id names in this change set; 404 when neither. */
 async function targetById(tx: DbOrTx, access: ChangeSetAccess, pageId: string) {
   const item = await itemOf(tx, access.changeSet.id, pageId);
-  const live = visibleLive(access, await livePageById(tx, access.changeSet.spaceId, pageId));
+  const live = await visibleLive(tx, access, await livePageById(tx, access.changeSet.spaceId, pageId));
   if (!item && !live) throw notFound("No such page in this space");
   return { item, live };
 }
@@ -101,6 +102,13 @@ async function targetById(tx: DbOrTx, access: ChangeSetAccess, pageId: string) {
 function checkPathSyntax(path: string) {
   const problem = pathProblem(path);
   if (problem) throw validationError({ path: problem }, problem);
+}
+
+/** 422 below a draft the principal may not see: for it, that parent does not exist. */
+async function checkPathVisible(tx: DbOrTx, access: ChangeSetAccess, path: string) {
+  if (await spaceVisibility(access.context).canSeePath(tx, access.changeSet.spaceId, path)) return;
+  const message = `The parent page “${parentPath(path)}” does not exist`;
+  throw validationError({ path: message }, message);
 }
 
 /** 409 when another page has `path` after this change set (another item, or an untouched live page). */
@@ -202,8 +210,12 @@ export async function putPage(
       target = await targetById(tx, access, input.pageId);
     } else {
       checkPathSyntax(input.path!);
+      // Before resolving: below a hidden draft, taken and free paths answer alike.
+      await checkPathVisible(tx, access, input.path!);
       target = await resolveInChangeSet(tx, access.changeSet, input.path!);
-      if (target.live && !visibleLive(access, target.live)) throw notFound("No such page in this space");
+      if (target.live && !(await visibleLive(tx, access, target.live))) {
+        throw notFound("No such page in this space");
+      }
     }
     const { item, live } = target;
     if (input.pageId && input.path) checkPathSyntax(input.path);
@@ -223,7 +235,10 @@ export async function putPage(
     }
     if (item?.action === "create") {
       const path = input.pageId && input.path ? input.path : item.path;
-      if (path !== item.path) await checkPathFree(tx, access.changeSet, item.pageId, path);
+      if (path !== item.path) {
+        await checkPathVisible(tx, access, path);
+        await checkPathFree(tx, access.changeSet, item.pageId, path);
+      }
       return saveItem(
         tx,
         access,
@@ -238,7 +253,10 @@ export async function putPage(
     const currentPath = item ? (await effectivePaths(tx, [item])).get(item.pageId)! : live.path;
     const requested = input.pageId && input.path ? input.path : null;
     const moving = requested !== null && requested !== currentPath;
-    if (moving) await checkPathFree(tx, access.changeSet, live.id, requested);
+    if (moving) {
+      await checkPathVisible(tx, access, requested);
+      await checkPathFree(tx, access.changeSet, live.id, requested);
+    }
     const path = moving ? requested : (item?.path ?? live.path);
     const before = item?.markdown ?? live.markdown;
     // A new item starts from the revision the file was written from.
@@ -322,6 +340,7 @@ export async function movePage(
     if (target.item?.action === "delete") {
       throw conflict("This change set deletes the page; undo the deletion first", "page_deleted");
     }
+    await checkPathVisible(tx, access, path);
     await checkPathFree(tx, access.changeSet, pageId, path);
     const action = target.item?.action === "create" ? "create" : "update";
     return saveItem(
