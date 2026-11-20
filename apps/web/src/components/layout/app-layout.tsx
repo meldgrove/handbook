@@ -38,7 +38,11 @@ export const spacesQuery = {
 const DEFAULT_APP_NAME = "Handbook";
 
 /** TanStack Router's link for the frame: every other prop goes on to the <a>. */
-const AppLink: FrameLink = ({ href, ...props }) => <Link to={href} {...props} />;
+// `exact`: otherwise TanStack marks every link the address starts with as the current page
+// (breadcrumb parents, the sidebar's sections).
+const AppLink: FrameLink = ({ href, ...props }) => (
+  <Link to={href} activeOptions={{ exact: true }} {...props} />
+);
 
 /** Pages of every space the person may read; the server leaves out what they may not see. */
 async function findPages(query: string, signal: AbortSignal): Promise<SearchResult[]> {
