@@ -1,6 +1,6 @@
 import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BookOpen } from "lucide-react";
 import type { SearchResponse } from "@handbook/shared/api/search";
 import type { SpaceSummary } from "@handbook/shared/api/spaces";
@@ -36,6 +36,35 @@ export const spacesQuery = {
 };
 
 const DEFAULT_APP_NAME = "Handbook";
+
+const SIDEBAR_KEY = "handbook.sidebar";
+export type SidebarPreference = { page?: boolean; app?: boolean };
+
+/** On pages the sidebar starts hidden, so the text gets the room; elsewhere it starts open. */
+export function sidebarOpenOn(pathname: string, preference: SidebarPreference): boolean {
+  return placeOf(pathname)?.kind === "page" ? (preference.page ?? false) : (preference.app ?? true);
+}
+
+/** Whether the sidebar is open; each person's choice is remembered for pages and for the rest, in this browser. */
+function useSidebarOpen(pathname: string): [boolean, (open: boolean) => void] {
+  const [preference, setPreference] = useState<SidebarPreference>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(SIDEBAR_KEY) ?? "{}") as SidebarPreference;
+    } catch {
+      return {};
+    }
+  });
+  const setOpen = (open: boolean) => {
+    const next = { ...preference, [placeOf(pathname)?.kind === "page" ? "page" : "app"]: open };
+    setPreference(next);
+    try {
+      window.localStorage.setItem(SIDEBAR_KEY, JSON.stringify(next));
+    } catch {
+      // Private windows may refuse storage; the choice then lasts until reload.
+    }
+  };
+  return [sidebarOpenOn(pathname, preference), setOpen];
+}
 
 /** TanStack Router's link for the frame: every other prop goes on to the <a>. */
 // `exact`: otherwise TanStack marks every link the address starts with as the current page
@@ -87,6 +116,7 @@ export function AppLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const spaces = useQuery(spacesQuery).data?.items ?? [];
   const place = usePlaceData(pathname);
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpen(pathname);
   const { theme, setTheme } = useTheme();
   const appName = useAuthConfig()?.appName || DEFAULT_APP_NAME;
   useEffect(() => {
@@ -142,6 +172,8 @@ export function AppLayout() {
         settingsHref="/settings"
         onSignOut={() => void signOut()}
         breadcrumbs={breadcrumbs}
+        sidebarOpen={sidebarOpen}
+        onSidebarOpenChange={setSidebarOpen}
         headerEnd={me.isAdmin ? <UpdateButton /> : null}
         search={{
           find: findPages,
