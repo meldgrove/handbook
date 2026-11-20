@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { TriangleAlert } from "lucide-react";
-import { CopyButton } from "@meldgrove/ui/copy-button";
 import { Alert, AlertDescription } from "@meldgrove/ui/alert";
 import { Button } from "@meldgrove/ui/button";
 import {
@@ -13,6 +12,7 @@ import {
 } from "@meldgrove/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
 import { Input } from "@meldgrove/ui/input";
+import { SecretInput } from "@meldgrove/ui/secret-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@meldgrove/ui/select";
 import { Spinner } from "@meldgrove/ui/spinner";
 import { defineMessages, useT } from "@/i18n";
@@ -137,7 +137,7 @@ export function CreateTokenDialog(props: {
   );
 }
 
-/** Shows a new token's secret once. Closing the dialog forgets it. */
+/** Shows a new token's secret once, hidden until shown. Closing the dialog forgets it. */
 export function TokenSecretDialog(props: { secret: string | null; onClose: () => void }) {
   const t = useT(messages);
   return (
@@ -152,16 +152,14 @@ export function TokenSecretDialog(props: { secret: string | null; onClose: () =>
         </Alert>
         <Field>
           <FieldLabel htmlFor="token-secret">{t("secretLabel")}</FieldLabel>
-          <div className="flex gap-2">
-            <Input
-              id="token-secret"
-              readOnly
-              value={props.secret ?? ""}
-              className="font-mono text-xs"
-              onFocus={(event) => event.target.select()}
-            />
-            {props.secret ? <CopyButton text={props.secret} /> : null}
-          </div>
+          <SecretInput
+            id="token-secret"
+            readOnly
+            copyable
+            value={props.secret ?? ""}
+            inputClassName="font-mono text-xs"
+            onFocus={(event) => event.target.select()}
+          />
         </Field>
         <DialogFooter>
           <Button type="button" onClick={props.onClose}>

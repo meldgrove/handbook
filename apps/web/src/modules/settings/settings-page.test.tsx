@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TokenCreated } from "@handbook/shared/api/tokens";
@@ -36,7 +36,7 @@ const created: TokenCreated = {
 };
 
 describe("settings page", () => {
-  it("shows the MCP address and a new token's secret once", async () => {
+  it("shows the MCP address and a new token's secret once, hidden", async () => {
     let tokens: unknown[] = [];
     const fetch = routeFetch({
       "GET /api/v1/connect-info": {
@@ -60,8 +60,18 @@ describe("settings page", () => {
     await user.type(screen.getByLabelText("Name"), "Claude Code");
     await user.click(screen.getByRole("button", { name: "Create token" }));
 
-    expect(await screen.findByDisplayValue(created.secret)).toBeInTheDocument();
-    expect(screen.getByText(/You won't see it again/)).toBeInTheDocument();
+    // Hidden until shown; the copy button copies it without showing it.
+    const dialog = await screen.findByRole("dialog");
+    const secret = within(dialog).getByLabelText("Token");
+    expect(secret).toHaveValue(created.secret);
+    expect(secret).toHaveAttribute("type", "password");
+    expect(within(dialog).getByText(/You won't see it again/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Copy" }));
+    expect(await navigator.clipboard.readText()).toBe(created.secret);
+    expect(secret).toHaveAttribute("type", "password");
+    await user.click(within(dialog).getByRole("button", { name: "Show" }));
+    expect(secret).toHaveAttribute("type", "text");
+    expect(within(dialog).getByRole("button", { name: "Hide" })).toBeInTheDocument();
     const post = fetch.mock.calls.find(([, init]) => init?.method === "POST");
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({ name: "Claude Code", expiresInDays: 90 });
 
