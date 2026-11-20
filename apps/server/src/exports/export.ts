@@ -1,16 +1,15 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { Zip, ZipDeflate, ZipPassThrough, strToU8 } from "fflate";
 import { stringify as stringifyYaml } from "yaml";
 import type { DbOrTx } from "../db/client";
 import { files, pages } from "../db/schema";
-import type { Principal } from "../auth/principal";
 import { mentionedFileIds, storedFilePath } from "../files/storage";
 import { logger } from "../logger";
-import { visibleStatus } from "../pages/views";
 import type { SpaceContext } from "../spaces/access";
+import { spaceVisibility } from "../spaces/visibility";
 
 type Entry =
   { kind: "text"; name: string; text: string } | { kind: "file"; name: string; fileId: string; path: string };
@@ -25,16 +24,12 @@ type Entry =
  * Reads the database before it answers; the zip itself streams, one file
  * after another, as the client takes it.
  */
-export async function exportSpace(
-  db: DbOrTx,
-  principal: Principal,
-  context: SpaceContext,
-): Promise<ReadableStream<Uint8Array>> {
+export async function exportSpace(db: DbOrTx, context: SpaceContext): Promise<ReadableStream<Uint8Array>> {
   const { space } = context;
   const rows = await db
     .select({ path: pages.path, title: pages.title, position: pages.position, markdown: pages.markdown })
     .from(pages)
-    .where(and(eq(pages.spaceId, space.id), isNull(pages.deletedAt), visibleStatus(principal)))
+    .where(and(eq(pages.spaceId, space.id), spaceVisibility(context).livePages()))
     .orderBy(asc(pages.path));
   const entries: Entry[] = rows.map((row) => ({ kind: "text", name: `${row.path}.md`, text: row.markdown }));
   const order = [...rows]

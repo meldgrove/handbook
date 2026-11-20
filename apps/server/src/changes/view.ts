@@ -13,12 +13,12 @@ import type { DbOrTx } from "../db/client";
 import { changeSetEvents, changeSets, pages, redirects, spaces } from "../db/schema";
 import type { UserPrincipal } from "../auth/principal";
 import { schemaOf, type SpaceRow } from "../spaces/access";
+import { visibilityOf } from "../spaces/visibility";
 import { bodyOf, revisionMarkdown, type PageRow } from "../pages/core";
 import { pageLinksOf } from "../pages/analyze";
 import {
   actorOf,
   actorsOf,
-  changeSetVisible,
   itemsOf,
   moveConflictOf,
   pagesOf,
@@ -256,7 +256,7 @@ export async function listChangeSets(
   if (query.status === "active") filters.push(inArray(changeSets.status, ["open", "in_review"]));
   else if (query.status !== "all") filters.push(eq(changeSets.status, query.status));
   if (query.mine) filters.push(eq(changeSets.authorId, principal.id));
-  filters.push(changeSetVisible(principal));
+  filters.push((await visibilityOf(db, principal)).changeSets());
   const rows = await db
     .select({
       changeSet: changeSets,

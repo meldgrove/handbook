@@ -10,6 +10,7 @@ import { pageUrl } from "@handbook/shared/paths";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
 import type { Principal } from "../auth/principal";
+import { visibilityOf } from "../spaces/visibility";
 
 /**
  * Full-text search over live pages (docs/architecture.md, "Search"). Ranks
@@ -25,15 +26,9 @@ function tsQuery(text: string): SQL {
   );
 }
 
-/** Drafts only for admins and the space's owners and editors. */
-function draftFilter(principal: Principal): SQL {
-  if (principal.kind === "service") return sql`p.status <> 'draft'`;
-  if (principal.isAdmin) return sql`true`;
-  return sql`(p.status <> 'draft' or exists (select 1 from space_members m where m.space_id = p.space_id and m.user_id = ${principal.id}))`;
-}
-
-function filters(query: SearchQuery): SQL {
-  const parts: SQL[] = [sql`p.deleted_at is null`];
+/** The live pages (alias p) the viewer may see, and the query's filters. */
+function filters(query: SearchQuery, visible: SQL): SQL {
+  const parts: SQL[] = [visible];
   if (query.space) parts.push(sql`sp.slug = ${query.space}`);
   // @> (not = any) so the GIN index on tags can find the pages.
   if (query.tag) parts.push(sql`p.tags @> array[${normalizeTag(query.tag)}]::text[]`);
@@ -85,6 +80,11 @@ export async function searchPages(
   query: SearchQuery,
 ): Promise<SearchResult[]> {
   const q = tsQuery(query.q);
+  const visible = (await visibilityOf(db, principal)).livePages({
+    spaceId: sql`p.space_id`,
+    status: sql`p.status`,
+    deletedAt: sql`p.deleted_at`,
+  });
   const headlineLanguage = config().searchConfigs[0]!;
   // Only pages whose own search data or one of whose sections matches are
   // ranked; both come from the GIN indexes. `sections` keeps the best
@@ -113,7 +113,7 @@ export async function searchPages(
       join spaces sp on sp.id = p.space_id
       cross join q
       left join sections best on best.page_id = p.id
-      where ${filters(query)} and ${draftFilter(principal)}
+      where ${filters(query, visible)}
       order by score desc, p.title
       limit ${query.limit}
     )
@@ -147,7 +147,7 @@ export async function searchPages(
         similarity(p.title, ${query.q}) * 0.5 as score
       from pages p
       join spaces sp on sp.id = p.space_id
-      where ${filters(query)} and ${draftFilter(principal)}
+      where ${filters(query, visible)}
         and p.title % ${query.q}
         ${
           seen.length > 0

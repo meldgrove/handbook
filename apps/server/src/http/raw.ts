@@ -1,12 +1,13 @@
 import { Readable } from "node:stream";
 import { Hono, type Context } from "hono";
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { isValidPath, isValidSpaceSlug, pageMarkdownUrl } from "@handbook/shared/paths";
 import { config } from "../config";
 import { getDb } from "../db/client";
 import { files, pages, spaces } from "../db/schema";
 import { readStoredFile, isInlineImage } from "../files/storage";
 import { getSpace, spaceContext } from "../spaces/access";
+import { spaceVisibility } from "../spaces/visibility";
 import { findPageByPathOrRedirect } from "../pages/core";
 import type { Principal } from "../auth/principal";
 import type { AppEnv } from "./env";
@@ -56,13 +57,7 @@ async function spaceIndex(principal: Principal, slug: string): Promise<string | 
       description: pages.description,
     })
     .from(pages)
-    .where(
-      and(
-        eq(pages.spaceId, space.id),
-        isNull(pages.deletedAt),
-        context.abilities.seeDrafts ? sql`true` : ne(pages.status, "draft"),
-      ),
-    )
+    .where(and(eq(pages.spaceId, space.id), spaceVisibility(context).livePages()))
     .orderBy(asc(pages.position), asc(pages.title));
   const byParent = new Map<string | null, typeof rows>();
   for (const row of rows) byParent.set(row.parentId, [...(byParent.get(row.parentId) ?? []), row]);
@@ -171,7 +166,7 @@ export function rawRoutes() {
     if (!space) return notFoundText(c);
     const context = await spaceContext(getDb(), principal, space);
     const page = await findPageByPathOrRedirect(getDb(), space.id, path);
-    if (!page || (page.status === "draft" && !context.abilities.seeDrafts)) return notFoundText(c);
+    if (!page || !spaceVisibility(context).canSeePage(page)) return notFoundText(c);
     if (page.path !== path) {
       // The destination is only visible while this principal has access.
       c.header("cache-control", "no-store");
