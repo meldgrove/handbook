@@ -17,6 +17,7 @@ import {
   testApp,
 } from "../test/helpers";
 import { spaceContext } from "./access";
+import { listSpaces, spaceView } from "./service";
 import { spaceVisibility, visibilityOf, type Visibility } from "./visibility";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
@@ -175,21 +176,35 @@ describe("page visibility", () => {
       principal.kind === "user" ? (roles.get(principal.id)?.get(space.id) ?? null) : null;
     const seesDrafts = (principal: Principal, space: SpaceRow) =>
       seesDraftsBySpaceAbilities(principal, roleOf(principal, space), fresh(space).archivedAt !== null);
+    /** The principal sees the page among the live pages. */
+    const seesPage = (principal: Principal, fixture: Fixture) =>
+      fixture.live && (fixture.status !== "draft" || seesDrafts(principal, fixture.space));
+    const seesChangeSet = (principal: Principal, changeSet: (typeof changeSetFixtures)[number]) =>
+      !changeSet.touchesDraft || seesDrafts(principal, changeSet.space);
     return {
       spaces: [main, archived, other].map(fresh),
       fixtures: fixtures.map((fixture) => ({ ...fixture, space: fresh(fixture.space) })),
       changeSetFixtures,
       principals,
       seesDrafts,
+      seesPage,
+      seesChangeSet,
     };
   }
 
   it("matches spaceAbilities for every kind of principal, role and page status", async () => {
-    const { spaces: allSpaces, fixtures, changeSetFixtures, principals, seesDrafts } = await world();
+    const {
+      spaces: allSpaces,
+      fixtures,
+      changeSetFixtures,
+      principals,
+      seesDrafts,
+      seesPage,
+      seesChangeSet,
+    } = await world();
     const db = getDb();
     for (const [name, principal] of principals) {
-      const visible = (fixture: (typeof fixtures)[number]) =>
-        fixture.live && (fixture.status !== "draft" || seesDrafts(principal, fixture.space));
+      const visible = (fixture: (typeof fixtures)[number]) => seesPage(principal, fixture);
       const expected = new Set(fixtures.filter(visible).map((fixture) => fixture.page.id));
       const everywhere = await visibilityOf(db, principal);
 
@@ -216,6 +231,17 @@ describe("page visibility", () => {
         expect(await ids(db, and(eq(pages.spaceId, space.id), inSpace.livePages())!), name).toEqual(
           expectedHere,
         );
+        // The trash of the space.
+        const expectedTrash = new Set(
+          fixtures
+            .filter((fixture) => fixture.space.id === space.id && !fixture.live && sees)
+            .map((fixture) => fixture.page.id),
+        );
+        for (const visibility of [everywhere, inSpace]) {
+          expect(await ids(db, and(eq(pages.spaceId, space.id), visibility.trashedPages())!), name).toEqual(
+            expectedTrash,
+          );
+        }
         for (const visibility of [everywhere, inSpace]) {
           expect(visibility.seesDrafts(space.id), `${name} in ${space.slug}`).toBe(sees);
           expect(visibility.seesTrash(space.id), `${name} in ${space.slug}`).toBe(sees);
@@ -240,9 +266,78 @@ describe("page visibility", () => {
       // Change set lists across spaces.
       const listed = await db.select({ id: changeSets.id }).from(changeSets).where(everywhere.changeSets());
       const expectedChangeSets = changeSetFixtures
-        .filter((changeSet) => !changeSet.touchesDraft || seesDrafts(principal, changeSet.space))
+        .filter((changeSet) => seesChangeSet(principal, changeSet))
         .map((changeSet) => changeSet.id);
       expect(new Set(listed.map((row) => row.id)), name).toEqual(new Set(expectedChangeSets));
+    }
+  });
+
+  it("counts and dates spaces by the pages and change sets the viewer sees", async () => {
+    const {
+      spaces: allSpaces,
+      fixtures,
+      changeSetFixtures,
+      principals,
+      seesDrafts,
+      seesPage,
+      seesChangeSet,
+    } = await world();
+    const db = getDb();
+    // Pages everyone sees changed long ago; the others (drafts, the trash)
+    // recently, so counting one of them would show in the date.
+    const hour = 3_600_000;
+    const start = Date.parse("2026-01-01T00:00:00.000Z");
+    const changedAt = new Map(
+      fixtures.map((fixture, index) => [
+        fixture.page.id,
+        start + (seesPage(service, fixture) ? 0 : 1000 * hour) + index * hour,
+      ]),
+    );
+    for (const [id, at] of changedAt) {
+      await db
+        .update(pages)
+        .set({ updatedAt: new Date(at) })
+        .where(eq(pages.id, id));
+    }
+    await db.update(spaces).set({ updatedAt: new Date(start - hour) });
+
+    for (const [name, principal] of principals) {
+      const expected = (space: SpaceRow) => {
+        const here = fixtures.filter((fixture) => fixture.space.id === space.id);
+        const live = here.filter((fixture) => seesPage(principal, fixture));
+        // The trash is for those who see drafts (seesTrash).
+        const trashed = here.filter((fixture) => !fixture.live && seesDrafts(principal, space));
+        const times = [...live, ...trashed].map((fixture) => changedAt.get(fixture.page.id)!);
+        return {
+          pageCount: live.length,
+          updatedAt: new Date(Math.max(start - hour, ...times)).toISOString(),
+          openChangeSets: changeSetFixtures.filter(
+            (changeSet) => changeSet.space.id === space.id && seesChangeSet(principal, changeSet),
+          ).length,
+        };
+      };
+      // GET /spaces
+      const listed = await listSpaces(db, principal, "include");
+      expect(listed.length, name).toBeGreaterThan(0);
+      for (const summary of listed) {
+        const space = allSpaces.find((candidate) => candidate.id === summary.id)!;
+        const { pageCount, updatedAt } = expected(space);
+        expect(
+          { pageCount: summary.pageCount, updatedAt: summary.updatedAt },
+          `${name}: ${space.slug}`,
+        ).toEqual({
+          pageCount,
+          updatedAt,
+        });
+      }
+      // GET /spaces/:space
+      for (const space of allSpaces) {
+        const view = await spaceView(db, principal, await spaceContext(db, principal, space));
+        expect(
+          { pageCount: view.pageCount, updatedAt: view.updatedAt, openChangeSets: view.openChangeSets },
+          `${name}: ${space.slug}`,
+        ).toEqual(expected(space));
+      }
     }
   });
 

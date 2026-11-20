@@ -28,9 +28,11 @@ export const spaceSummarySchema = z.object({
   name: z.string(),
   description: z.string(),
   archived: z.boolean(),
+  /** The live pages the viewer may see. */
   pageCount: z.number().int(),
   /** The signed-in person's role here; null for readers. */
   myRole: spaceRoleSchema.nullable(),
+  /** The latest change of the space or of a page the viewer may see (live, or in the trash for editors). */
   updatedAt: z.string(),
 });
 export type SpaceSummary = z.infer<typeof spaceSummarySchema>;
@@ -44,7 +46,7 @@ export const spaceSchema = spaceSummarySchema.extend({
   properties: z.array(propertyDefinitionSchema),
   pageTypes: z.array(pageTypeDefinitionSchema),
   abilities: abilitiesSchema,
-  /** Open change sets of this space (open or in review). */
+  /** Open change sets of this space (open or in review) the viewer may see. */
   openChangeSets: z.number().int(),
   createdAt: z.string(),
 });

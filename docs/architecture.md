@@ -45,7 +45,8 @@ status changes.
 
 Drafts, the trash and change sets that change a draft are only for those
 whose abilities in the space include `seeDrafts`.
-`apps/server/src/spaces/visibility.ts` applies this to every list and read:
+`apps/server/src/spaces/visibility.ts` applies this to every list and read,
+and to what a space counts (its pages, open change sets and last change):
 `visibilityOf` reads a person's memberships once per request and asks
 `spaceAbilities` about each space (admins and service tokens need no
 query); `spaceVisibility` uses the abilities of one space's context.

@@ -18,14 +18,27 @@ import { conflict, forbidden, notFound, validationError } from "../http/errors";
 import { markFilesUsed } from "../files/storage";
 import { authorOf, createLivePage } from "../pages/core";
 import { abilitiesOf, requireAbility, type SpaceContext, type SpaceRow } from "./access";
+import { spaceVisibility, visibilityOf, type Visibility } from "./visibility";
 
 const iso = (value: Date) => value.toISOString();
 
-/** The latest change of a space: itself or one of its pages. */
-// Written with the table name: Drizzle leaves column names unqualified in
-// single-table selects, and inside the subquery "id" would mean p.id.
-const lastChange = sql<Date>`greatest("spaces"."updated_at", coalesce((select max(p.updated_at) from pages p where p.space_id = "spaces"."id"), "spaces"."updated_at"))`;
-const livePageCount = sql<number>`(select count(*) from pages p where p.space_id = "spaces"."id" and p.deleted_at is null)::int`;
+/** The columns of `pages p` for the visibility conditions. */
+// The subqueries below write "spaces" out: Drizzle leaves column names
+// unqualified in single-table selects, and inside them "id" would mean p.id.
+const pageAlias = { spaceId: sql`p.space_id`, status: sql`p.status`, deletedAt: sql`p.deleted_at` };
+
+/** The latest change of a space as the viewer sees it: itself, or a page it may see (live or in the trash). */
+function lastChange(visibility: Visibility) {
+  // greatest() skips the nulls of spaces without such pages.
+  return sql<Date>`greatest("spaces"."updated_at",
+    (select max(p.updated_at) from pages p where p.space_id = "spaces"."id" and ${visibility.livePages(pageAlias)}),
+    (select max(p.updated_at) from pages p where p.space_id = "spaces"."id" and ${visibility.trashedPages(pageAlias)}))`;
+}
+
+/** The live pages of a space the viewer may see. */
+function livePageCount(visibility: Visibility) {
+  return sql<number>`(select count(*) from pages p where p.space_id = "spaces"."id" and ${visibility.livePages(pageAlias)})::int`;
+}
 
 export async function listSpaces(
   db: DbOrTx,
@@ -39,8 +52,9 @@ export async function listSpaces(
       : archived === "only"
         ? isNotNull(spaces.archivedAt)
         : sql`true`;
+  const visibility = await visibilityOf(db, principal);
   const rows = await db
-    .select({ space: spaces, pageCount: livePageCount, updatedAt: lastChange })
+    .select({ space: spaces, pageCount: livePageCount(visibility), updatedAt: lastChange(visibility) })
     .from(spaces)
     .where(filter)
     .orderBy(asc(spaces.name));
@@ -70,14 +84,21 @@ async function membershipRoles(db: DbOrTx, principal: Principal) {
 
 export async function spaceView(db: DbOrTx, principal: Principal, context: SpaceContext): Promise<Space> {
   const { space } = context;
+  const visibility = spaceVisibility(context);
   const [counts] = await db
-    .select({ pageCount: livePageCount, updatedAt: lastChange })
+    .select({ pageCount: livePageCount(visibility), updatedAt: lastChange(visibility) })
     .from(spaces)
     .where(eq(spaces.id, space.id));
   const [open] = await db
     .select({ value: count() })
     .from(changeSets)
-    .where(and(eq(changeSets.spaceId, space.id), inArray(changeSets.status, ["open", "in_review"])));
+    .where(
+      and(
+        eq(changeSets.spaceId, space.id),
+        inArray(changeSets.status, ["open", "in_review"]),
+        visibility.changeSets(),
+      ),
+    );
   return {
     id: space.id,
     slug: space.slug,

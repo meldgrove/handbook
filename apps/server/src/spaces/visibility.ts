@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, or, sql, type Column, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or, sql, type Column, type SQL } from "drizzle-orm";
 import type { DbOrTx } from "../db/client";
 import { changeSetItems, pages, spaceMembers, spaces } from "../db/schema";
 import type { Principal } from "../auth/principal";
@@ -9,12 +9,14 @@ import { abilitiesOf, roleFrom, type SpaceContext } from "./access";
  * What a principal may see of pages and change sets. Drafts, the trash and
  * change sets that change a draft are only for those whose abilities in the
  * space include `seeDrafts` (`spaceAbilities`, the only source of that
- * rule); every other live page is for everyone signed in. Lists and reads
- * of pages and change sets filter through here.
+ * rule); every other live page is for everyone signed in. Lists, counts
+ * and reads of pages and change sets filter through here.
  */
 export type Visibility = {
   /** SQL condition: the page is live (not in the trash) and the viewer may see it. */
   livePages(columns?: PageColumns): SQL;
+  /** SQL condition: the page is in the trash and the viewer sees the trash of its space. */
+  trashedPages(columns?: PageColumns): SQL;
   /** SQL condition on `change_sets`: it changes no draft the viewer may not see. */
   changeSets(): SQL;
   /** The viewer may see this page's status: drafts only where it sees drafts. */
@@ -51,6 +53,11 @@ function visibility(draftSpaces: DraftSpaces): Visibility {
       if (draftSpaces === "all") return live;
       const notDraft = ne(sql`${columns.status}`, "draft");
       return and(live, ids.length > 0 ? or(notDraft, inArray(sql`${columns.spaceId}`, ids)) : notDraft)!;
+    },
+    trashedPages(columns = PAGES) {
+      const trashed = isNotNull(columns.deletedAt);
+      if (draftSpaces === "all") return trashed;
+      return ids.length > 0 ? and(trashed, inArray(sql`${columns.spaceId}`, ids))! : sql`false`;
     },
     changeSets() {
       if (draftSpaces === "all") return sql`true`;
