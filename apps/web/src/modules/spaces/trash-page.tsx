@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Page as PageLayout, PageHeader } from "@/components/layout/page";
+import { Page as PageLayout, PageHeader } from "@meldgrove/ui/page";
 import { spaceQuery, trashQuery } from "@/components/page/queries";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Button } from "@meldgrove/ui/button";

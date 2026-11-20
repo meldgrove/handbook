@@ -10,7 +10,7 @@ import { newPageFile } from "@handbook/shared/page";
 import { joinPath, slugify } from "@handbook/shared/paths";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { bodyOf, valuesOf, withBody, withValues } from "@/components/editor/file";
-import { Page as PageLayout } from "@/components/layout/page";
+import { Page as PageLayout } from "@meldgrove/ui/page";
 import { PageEditor } from "@/components/editor/page-editor";
 import { ChangeSetDialog, submitSuggestion } from "@/components/page/change-set-dialog";
 import { changeSetQuery, spaceQuery, treeQuery } from "@/components/page/queries";

@@ -15,9 +15,11 @@ moves.
 
 ## Reading
 
-- **Search** in the top bar finds words in titles, search terms, tags and
-  text, also in other word forms (e.g. "laptops" finds "laptop") and with
-  small typos in titles. Results jump to the matching section.
+- **Search** at the top of the sidebar (Ctrl+K or ⌘K, or `/`) finds words
+  in titles, search terms, tags and text, also in other word forms (e.g.
+  "laptops" finds "laptop") and with small typos in titles. Results jump to
+  the matching section. **Show all results** opens the search page, which
+  can narrow the results to one space.
 - **Tags** group pages across spaces.
 - A page reads like an article: its type, title and description, who owns
   it and when it was last reviewed, then the text. On wide screens its
@@ -27,9 +29,11 @@ moves.
 - The bar above the text has **Edit** or **Suggest an edit**, **History**
   (every version, who changed it and how), **Copy link**, **View Markdown
   file** and a menu with more.
-- On pages the sidebar folds to icons, so the text has room; the button in
-  the top bar (or Ctrl+B) opens it. The app remembers your choice, for pages
-  and for the rest of the app.
+- The button in the top bar (or Ctrl+B or ⌘B) hides the sidebar, so the
+  text has room, and shows it again. The app remembers your choice.
+- **Keys:** G then O opens the overview, G then C the change sets, G then T
+  the tags. Ctrl+/ lists every shortcut. Shortcuts with single letters can
+  be turned off under **Settings**.
 
 ## Writing
 

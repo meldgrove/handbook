@@ -23,7 +23,7 @@ import type { Space } from "@handbook/shared/api/spaces";
 import { BUILT_IN_KEYS, BUILT_IN_PROPERTIES, splitFrontmatter, type PageStatus } from "@handbook/shared/page";
 import { pageMarkdownUrl, parentPath, resolveLink } from "@handbook/shared/paths";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
-import { Page as PageLayout } from "@/components/layout/page";
+import { Page as PageLayout } from "@meldgrove/ui/page";
 import { MarkdownView } from "@/components/markdown";
 import { pageByPathQuery, spaceQuery } from "@/components/page/queries";
 import { StatusBadge } from "@/components/page/status-badge";

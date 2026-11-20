@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@meldgrove/ui/card";
 import { UpdatesSettings, useUpdatesController } from "@meldgrove/ui/updates";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { useIsAdmin } from "@/hooks/use-me";
 
 /** Admins: the installed version, the update channel and automatic installs. */

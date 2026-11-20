@@ -13,7 +13,7 @@ import { lockToken, readLockHolder } from "@/components/editor/lock";
 import { apiErrorOf, rawRequest } from "@/components/editor/raw-api";
 import { useEditLock } from "@/components/editor/use-edit-lock";
 import { discardDraft, useDraftAutosave } from "@/components/editor/use-draft";
-import { Page as PageLayout } from "@/components/layout/page";
+import { Page as PageLayout } from "@meldgrove/ui/page";
 import { EditorBanner, PageEditor } from "@/components/editor/page-editor";
 import { ChangeSetDialog, submitSuggestion } from "@/components/page/change-set-dialog";
 import { changeSetPageQuery, changeSetQuery, pageQuery, spaceQuery } from "@/components/page/queries";

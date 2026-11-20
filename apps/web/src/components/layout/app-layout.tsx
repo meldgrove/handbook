@@ -1,63 +1,30 @@
-import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
-import { BookOpen, ChevronsUpDown, FolderClosed, LogOut, Search, Settings, SunMoon } from "lucide-react";
+import { useEffect } from "react";
+import { BookOpen } from "lucide-react";
+import type { SearchResponse } from "@handbook/shared/api/search";
 import type { SpaceSummary } from "@handbook/shared/api/spaces";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarRail,
-  SidebarTrigger,
-} from "@meldgrove/ui/sidebar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@meldgrove/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@meldgrove/ui/avatar";
-import { Separator } from "@meldgrove/ui/separator";
-import { TooltipProvider } from "@meldgrove/ui/tooltip";
+import { pageUrl } from "@handbook/shared/paths";
+import { AppFrame, type FrameLink, type NavGroup, type SearchResult } from "@meldgrove/ui/app-frame";
+import { UpdateButton } from "@meldgrove/ui/updates";
 import { useMe } from "@/hooks/use-me";
-import { THEMES, useTheme, type Theme } from "@/lib/theme";
+import { useTheme } from "@/lib/theme";
 import { authClient } from "@/lib/auth-client";
 import { useAuthConfig } from "@/lib/auth-config";
 import { queryClient } from "@/lib/query";
 import { defineMessages, useT } from "@/i18n";
-import { NAVIGATION, navMessages } from "@/app/navigation";
-import { Input } from "@meldgrove/ui/input";
-import { initials } from "@/lib/utils";
+import { breadcrumbsFor, NAVIGATION, navMessages, placeOf } from "@/app/navigation";
+import { pageByPathQuery, pageQuery, spaceQuery } from "@/components/page/queries";
 import { api } from "@/lib/api";
-import { AdminUpdateButton, AdminUpdates } from "@/modules/updates/updates";
+import { messages as pageMessages } from "@/modules/pages/messages";
+import { messages as searchMessages } from "@/modules/search/messages";
+import { messages as settingsMessages } from "@/modules/settings/messages";
+import { messages as spaceMessages } from "@/modules/spaces/messages";
+import { AdminUpdates } from "@/modules/updates/updates";
 
 const messages = defineMessages({
   en: {
-    signOut: "Sign out",
-    skip: "Skip to content",
-    theme: "Appearance",
-    system: "Device setting",
-    light: "Light",
-    dark: "Dark",
-    settings: "Settings and agents",
     admin: "Admin",
-    search: "Search pages",
   },
 });
 
@@ -70,11 +37,81 @@ export const spacesQuery = {
 
 const DEFAULT_APP_NAME = "Handbook";
 
-function UserMenu() {
+/** TanStack Router's link for the frame: every other prop goes on to the <a>. */
+const AppLink: FrameLink = ({ href, ...props }) => <Link to={href} {...props} />;
+
+/** Pages of every space the person may read; the server leaves out what they may not see. */
+async function findPages(query: string, signal: AbortSignal): Promise<SearchResult[]> {
+  const { results } = await api.get<SearchResponse>("/search", { q: query, limit: 8 }, signal);
+  return results.map((result) => ({
+    href: pageUrl(result.space.slug, result.path, result.anchor),
+    title: result.title,
+    kind: result.space.name,
+  }));
+}
+
+/**
+ * The data of the current path that its breadcrumbs name: the space, and
+ * the page of a page or its history. The pages load the same queries, so
+ * this asks for nothing more.
+ */
+function usePlaceData(pathname: string) {
+  const place = placeOf(pathname);
+  const spaceSlug = place?.kind === "space" || place?.kind === "page" ? place.space : "";
+  const space = useQuery({ ...spaceQuery(spaceSlug), enabled: spaceSlug !== "" }).data;
+  const byPath = useQuery({
+    ...pageByPathQuery(place?.kind === "page" ? place.space : "", place?.kind === "page" ? place.path : ""),
+    enabled: place?.kind === "page",
+  }).data;
+  const byId = useQuery({
+    ...pageQuery(place?.kind === "history" ? place.pageId : ""),
+    enabled: place?.kind === "history",
+  }).data;
+  return { space, page: place?.kind === "page" ? byPath : byId };
+}
+
+/** The signed-in application frame: @meldgrove/ui's AppFrame with Handbook's navigation and spaces. */
+export function AppLayout() {
   const me = useMe();
   const m = useT(messages);
+  const t = useT(navMessages);
+  const tPage = useT(pageMessages);
+  const tSearch = useT(searchMessages);
+  const tSettings = useT(settingsMessages);
+  const tSpace = useT(spaceMessages);
+  const router = useRouter();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const spaces = useQuery(spacesQuery).data?.items ?? [];
+  const place = usePlaceData(pathname);
   const { theme, setTheme } = useTheme();
-  const label = me.name || me.email;
+  const appName = useAuthConfig()?.appName || DEFAULT_APP_NAME;
+  useEffect(() => {
+    document.title = appName;
+  }, [appName]);
+
+  const groups: NavGroup[] = NAVIGATION.filter((group) => !group.adminOnly || me.isAdmin).map((group) => ({
+    label: t(group.key),
+    items: group.items.map((item) => ({ label: t(item.key), href: item.to, shortcut: item.shortcut })),
+  }));
+  // The spaces follow the first group; they get no shortcuts.
+  const spaceGroup: NavGroup = {
+    label: t("spaces"),
+    items: spaces.map((space) => ({ label: space.name, href: `/s/${space.slug}` })),
+  };
+  const nav = spaceGroup.items.length > 0 ? [groups[0]!, spaceGroup, ...groups.slice(1)] : groups;
+
+  const breadcrumbs = breadcrumbsFor(pathname, {
+    items: nav.flatMap((group) => group.items),
+    labels: {
+      search: tSearch("title"),
+      settings: tSettings("title"),
+      spaceScreens: { settings: tSpace("settings"), trash: tSpace("trash") },
+      history: tPage("history"),
+      revision: (number) => tPage("revision", { number }),
+    },
+    space: place.space,
+    page: place.page,
+  });
 
   const signOut = async () => {
     await authClient.signOut();
@@ -83,241 +120,33 @@ function UserMenu() {
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <SidebarMenuButton size="lg">
-          <Avatar className="size-8 rounded-lg">
-            {me.image ? <AvatarImage src={me.image} alt="" /> : null}
-            <AvatarFallback className="rounded-lg">{initials(label)}</AvatarFallback>
-          </Avatar>
-          <div className="grid flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-medium">{label}</span>
-            <span className="text-muted-foreground truncate text-xs">{me.email}</span>
-          </div>
-          <ChevronsUpDown className="ml-auto size-4" />
-        </SidebarMenuButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-60">
-        <DropdownMenuLabel className="font-normal">
-          <div className="truncate text-sm font-medium">{label}</div>
-          <div className="text-muted-foreground truncate text-xs">
-            {me.email}
-            {me.isAdmin ? ` · ${m("admin")}` : ""}
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <SunMoon />
-            {m("theme")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as Theme)}>
-              {THEMES.map((option) => (
-                <DropdownMenuRadioItem key={option} value={option}>
-                  {m(option)}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuItem asChild>
-          <Link to="/settings">
-            <Settings />
-            {m("settings")}
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => void signOut()}>
-          <LogOut />
-          {m("signOut")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function AppSidebar({ appName }: { appName: string }) {
-  const me = useMe();
-  const t = useT(navMessages);
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const spaces = useQuery(spacesQuery).data?.items ?? [];
-  const isActive = (to: string) =>
-    to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`);
-
-  return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/">
-                <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <BookOpen className="size-4" />
-                </div>
-                <span className="truncate font-semibold">{appName}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-      <SidebarContent>
-        {NAVIGATION.filter((group) => !group.adminOnly || me.isAdmin)
-          .map((group) => (
-            <SidebarGroup key={group.key}>
-              <SidebarGroupLabel>{t(group.key)}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {group.items.map((item) => (
-                    <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton asChild isActive={isActive(item.to)} tooltip={t(item.key)}>
-                        <Link to={item.to}>
-                          <item.icon />
-                          <span>{t(item.key)}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ))
-          .flatMap((group, index) =>
-            index === 0
-              ? [
-                  group,
-                  <SidebarGroup key="spaces">
-                    <SidebarGroupLabel>{t("spaces")}</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                      <SidebarMenu>
-                        {spaces.map((space) => (
-                          <SidebarMenuItem key={space.slug}>
-                            <SidebarMenuButton
-                              asChild
-                              isActive={isActive(`/s/${space.slug}`)}
-                              tooltip={space.name}
-                            >
-                              <Link to="/s/$space" params={{ space: space.slug }}>
-                                <FolderClosed />
-                                <span>{space.name}</span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        ))}
-                      </SidebarMenu>
-                    </SidebarGroupContent>
-                  </SidebarGroup>,
-                ]
-              : [group],
-          )}
-      </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <UserMenu />
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
-  );
-}
-
-function HeaderSearch() {
-  const m = useT(messages);
-  const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const q = query.trim();
-    if (q) void navigate({ to: "/search", search: { q } });
-  };
-  return (
-    <form role="search" onSubmit={submit} className="relative w-full max-w-md">
-      <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-      <Input
-        type="search"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder={m("search")}
-        aria-label={m("search")}
-        className="h-9 pl-8"
-      />
-    </form>
-  );
-}
-
-const SIDEBAR_KEY = "handbook.sidebar";
-type SidebarPreference = { page?: boolean; app?: boolean };
-
-/** A page of a space (/s/<space>/<path>), not the space itself or its own screens (/s/<space>/-/…). */
-export function isPagePath(pathname: string): boolean {
-  return /^\/s\/[^/]+\/(?!-\/)[^/]/.test(pathname);
-}
-
-/**
- * Whether the sidebar is open: on pages it starts folded, so the text gets
- * the room; elsewhere it starts open. Each person's choice is remembered
- * for both, in this browser.
- */
-function useSidebarOpen(): [boolean, (open: boolean) => void] {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const onPage = isPagePath(pathname);
-  const [preference, setPreference] = useState<SidebarPreference>(() => {
-    try {
-      return JSON.parse(window.localStorage.getItem(SIDEBAR_KEY) ?? "{}") as SidebarPreference;
-    } catch {
-      return {};
-    }
-  });
-  const open = onPage ? (preference.page ?? false) : (preference.app ?? true);
-  const setOpen = (value: boolean) => {
-    const next = { ...preference, [onPage ? "page" : "app"]: value };
-    setPreference(next);
-    try {
-      window.localStorage.setItem(SIDEBAR_KEY, JSON.stringify(next));
-    } catch {
-      // Private windows may refuse storage; the choice then lasts until reload.
-    }
-  };
-  return [open, setOpen];
-}
-
-/** The signed-in application frame: sidebar, header and the page. */
-export function AppLayout() {
-  const m = useT(messages);
-  const appName = useAuthConfig()?.appName || DEFAULT_APP_NAME;
-  const [sidebarOpen, setSidebarOpen] = useSidebarOpen();
-  useEffect(() => {
-    document.title = appName;
-  }, [appName]);
-
-  return (
     <AdminUpdates appName={appName}>
-      <TooltipProvider delayDuration={300}>
-        <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
-          <a
-            href="#main"
-            className="bg-background sr-only z-50 rounded-md px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
-          >
-            {m("skip")}
-          </a>
-          <AppSidebar appName={appName} />
-          <SidebarInset className="min-w-0">
-            <header className="bg-background/95 sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur">
-              <SidebarTrigger className="-ml-1" />
-              <Separator orientation="vertical" className="mr-2 h-4" />
-              <HeaderSearch />
-              <div className="ml-auto flex shrink-0 items-center">
-                <AdminUpdateButton />
-              </div>
-            </header>
-            <main id="main" className="flex-1">
-              <Outlet />
-            </main>
-          </SidebarInset>
-        </SidebarProvider>
-      </TooltipProvider>
+      <AppFrame
+        app={{ name: appName, icon: <BookOpen /> }}
+        nav={nav}
+        pathname={pathname}
+        link={AppLink}
+        navigate={(href) => void router.navigate({ href })}
+        user={{
+          name: me.name || me.email,
+          email: me.email,
+          detail: me.isAdmin ? m("admin") : undefined,
+          image: me.image,
+        }}
+        theme={theme}
+        onThemeChange={setTheme}
+        settingsHref="/settings"
+        onSignOut={() => void signOut()}
+        breadcrumbs={breadcrumbs}
+        headerEnd={me.isAdmin ? <UpdateButton /> : null}
+        search={{
+          find: findPages,
+          // The router's own encoding: it reads query values as JSON, so "123" must stay a string.
+          allResultsHref: (q) => router.buildLocation({ to: "/search", search: { q } }).href,
+        }}
+      >
+        <Outlet />
+      </AppFrame>
     </AdminUpdates>
   );
 }

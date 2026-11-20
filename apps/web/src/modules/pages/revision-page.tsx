@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { Page } from "@handbook/shared/api/pages";
 import { splitFrontmatter } from "@handbook/shared/page";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
-import { Page as PageLayout, PageHeader } from "@/components/layout/page";
+import { Page as PageLayout, PageHeader } from "@meldgrove/ui/page";
 import { MarkdownView } from "@/components/markdown";
 import { DiffView } from "@/components/page/diff-view";
 import { pageQuery, revisionQuery } from "@/components/page/queries";

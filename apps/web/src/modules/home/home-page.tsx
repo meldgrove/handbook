@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { FolderClosed, Plus } from "lucide-react";
 import type { ChangeSetSummary } from "@handbook/shared/api/changes";
 import { spacesQuery } from "@/components/layout/app-layout";
-import { Page as PageLayout, PageHeader } from "@/components/layout/page";
+import { Page as PageLayout, PageHeader } from "@meldgrove/ui/page";
 import { changeSetListQuery } from "@/components/page/queries";
 import { RecentChanges } from "@/components/page/recent-changes";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";

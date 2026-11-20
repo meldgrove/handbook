@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Tags } from "lucide-react";
 import type { PageSummary } from "@handbook/shared/api/pages";
-import { Page as PageLayout, PageHeader } from "@/components/layout/page";
+import { Page as PageLayout, PageHeader } from "@meldgrove/ui/page";
 import { StatusBadge } from "@/components/page/status-badge";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Badge } from "@meldgrove/ui/badge";
