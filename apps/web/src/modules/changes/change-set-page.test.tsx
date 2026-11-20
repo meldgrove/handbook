@@ -6,7 +6,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChangeSet } from "@handbook/shared/api/changes";
@@ -81,7 +81,9 @@ function routeFetch(routes: Record<string, Reply>) {
   return mock;
 }
 
-function renderPage() {
+function renderPage(
+  client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }),
+) {
   const rootRoute = createRootRoute();
   const route = createRoute({
     getParentRoute: () => rootRoute,
@@ -91,9 +93,6 @@ function renderPage() {
   const router = createRouter({
     routeTree: rootRoute.addChildren([route]),
     history: createMemoryHistory({ initialEntries: ["/changes/12"] }),
-  });
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
@@ -171,6 +170,39 @@ describe("change set page", () => {
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/change-sets/12/merge",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it.each([
+    { action: "Merge", path: "merge", result: { status: "merged" as const } },
+    { action: "Close", path: "close", result: { status: "closed" as const } },
+  ])("refreshes the pages, the space and the editor after $action", async ({ action, path, result }) => {
+    routeFetch({
+      "GET /api/v1/change-sets/12": { body: changeSet() },
+      [`POST /api/v1/change-sets/12/${path}`]: { body: changeSet(result) },
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    // What other screens cached before: the page view, the space with its tree, the editor of this change set.
+    const cached = [
+      ["page-by-path", "it", "network/vpn"],
+      ["page", PAGE_ID],
+      ["space", "it"],
+      ["space", "it", "tree"],
+      ["change-set", 12],
+      ["change-set", 12, "page", PAGE_ID],
+    ];
+    for (const key of cached) client.setQueryData(key, { cached: true });
+    const user = userEvent.setup();
+    renderPage(client);
+    await user.click(await screen.findByRole("button", { name: action }));
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: action }));
+    await waitFor(() =>
+      expect(
+        cached.filter((key) => !client.getQueryState(key)?.isInvalidated).map((key) => key.join("/")),
+      ).toEqual([]),
     );
   });
 
