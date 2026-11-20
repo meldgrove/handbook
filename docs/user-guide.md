@@ -29,8 +29,9 @@ moves.
 - The bar above the text has **Edit** or **Suggest an edit**, **History**
   (every version, who changed it and how), **Copy link**, **View Markdown
   file** and a menu with more.
-- The button in the top bar (or Ctrl+B or ⌘B) hides the sidebar, so the
-  text has room, and shows it again. The app remembers your choice.
+- On pages the sidebar starts hidden, so the text has room; the button in
+  the top bar (or Ctrl+B or ⌘B) shows it and hides it again. The app
+  remembers your choice, for pages and for the rest of the app.
 - **Keys:** G then O opens the overview, G then C the change sets, G then T
   the tags. Ctrl+/ lists every shortcut. Shortcuts with single letters can
   be turned off under **Settings**.
