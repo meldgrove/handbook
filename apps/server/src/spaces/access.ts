@@ -26,6 +26,11 @@ export async function getSpaceById(db: DbOrTx, id: string): Promise<SpaceRow> {
   return space;
 }
 
+/** A stored membership role; null for anything that is not one (a reader). */
+export function roleFrom(value: unknown): SpaceRole | null {
+  return spaceRoleSchema.safeParse(value).data ?? null;
+}
+
 /** The principal's role in a space: owner, editor, or null (reader). */
 export async function spaceRoleOf(
   db: DbOrTx,
@@ -37,10 +42,14 @@ export async function spaceRoleOf(
     .select({ role: spaceMembers.role })
     .from(spaceMembers)
     .where(and(eq(spaceMembers.spaceId, spaceId), eq(spaceMembers.userId, principal.id)));
-  return spaceRoleSchema.safeParse(row?.role).data ?? null;
+  return roleFrom(row?.role);
 }
 
-export function abilitiesOf(principal: Principal, role: SpaceRole | null, space: SpaceRow): Abilities {
+export function abilitiesOf(
+  principal: Principal,
+  role: SpaceRole | null,
+  space: Pick<SpaceRow, "archivedAt">,
+): Abilities {
   if (principal.kind === "service") {
     return spaceAbilities({ isAdmin: false, role: null, agent: true, readOnly: true });
   }

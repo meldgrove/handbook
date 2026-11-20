@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { readFrontmatterValues, splitFrontmatter } from "@handbook/shared/page";
 import type { ChangeSetEventKind, ChangeSetStatus } from "@handbook/shared/api/changes";
 import type { DbOrTx } from "../db/client";
@@ -7,6 +7,7 @@ import type { Principal, UserPrincipal } from "../auth/principal";
 import { forbidden, notFound } from "../http/errors";
 import { markFilesUsed } from "../files/storage";
 import { getSpaceById, spaceContext, type SpaceContext } from "../spaces/access";
+import { spaceVisibility } from "../spaces/visibility";
 import type { PageRow } from "../pages/core";
 
 /**
@@ -79,39 +80,15 @@ export async function loadChangeSet(
   const space = await getSpaceById(db, changeSet.spaceId);
   const context = await spaceContext(db, principal, space);
   // Draft pages are only for the space's editors: so are change sets that change them.
-  if (!context.abilities.seeDrafts && (await changesDraft(db, changeSet.id))) {
+  if (!(await spaceVisibility(context).canSeeChangeSet(db, changeSet))) {
     throw notFound("No such change set");
   }
   return accessOf(principal, changeSet, context);
 }
 
-/** True when a change set changes a page whose status is draft (live or in the trash). */
-async function changesDraft(db: DbOrTx, changeSetId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: pages.id })
-    .from(changeSetItems)
-    .innerJoin(pages, eq(pages.id, changeSetItems.pageId))
-    .where(and(eq(changeSetItems.changeSetId, changeSetId), eq(pages.status, "draft")))
-    .limit(1);
-  return Boolean(row);
-}
-
-/**
- * SQL condition for change set lists: the change set changes no draft page,
- * or the principal edits its space (and so sees drafts).
- */
-export function changeSetVisible(principal: Principal): SQL {
-  if (principal.kind === "user" && principal.isAdmin) return sql`true`;
-  const noDrafts = sql`not exists (select 1 from change_set_items i join pages p on p.id = i.page_id
-      where i.change_set_id = "change_sets"."id" and p.status = 'draft')`;
-  if (principal.kind === "service") return noDrafts;
-  return sql`(${noDrafts}
-    or exists (select 1 from space_members m where m.space_id = "change_sets"."space_id" and m.user_id = ${principal.id}))`;
-}
-
 /** A live page the principal may not see (a draft, for readers) counts as missing. */
 export function visibleLive(access: ChangeSetAccess, live: PageRow | null): PageRow | null {
-  return live && live.status === "draft" && !access.context.abilities.seeDrafts ? null : live;
+  return live && !spaceVisibility(access.context).canSeePage(live) ? null : live;
 }
 
 export function requireAccess(

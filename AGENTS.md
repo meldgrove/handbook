@@ -36,7 +36,7 @@ apps/server/src/
   auth/            Better Auth, sign-in access check, credentials (tokens), principals
   pages/           the page core (core.ts: the one write path), locks, views, Markdown analysis
   changes/         change sets: items, checks, merge, revert
-  spaces/          spaces, members, abilities (access.ts)
+  spaces/          spaces, members, abilities (access.ts), what each principal sees (visibility.ts)
   search/          search queries and the index
   exports/         export of spaces (zip of pages and their uploads)
   files/           uploaded files on disk
@@ -60,6 +60,10 @@ packages/shared/src/  contracts, page model, paths, merge, roles
   `spaceAbilities` in `packages/shared/src/roles.ts`. Agents (personal
   tokens, connected apps) never edit live, never merge and never administer;
   service tokens only read.
+- **Drafts and the trash:** every list and read of pages or change sets
+  filters through `apps/server/src/spaces/visibility.ts` (`visibilityOf`
+  across spaces, `spaceVisibility` in one); never test `seeDrafts` or a
+  page's status for access elsewhere.
 - **Pages change only through `apps/server/src/pages/core.ts`** inside a
   transaction (`lockPage` first). It validates the file, merges with changes
   saved meanwhile, stores the revision and rebuilds sections, links and

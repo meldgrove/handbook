@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import {
   spaceCreateSchema,
   spaceListQuerySchema,
@@ -12,6 +12,7 @@ import type { AppEnv } from "../http/env";
 import { forbidden } from "../http/errors";
 import { idParam, jsonBody, queryOf, requireAdmin, requirePrincipal, requireUser } from "../http/middleware";
 import { getSpace, spaceContext } from "../spaces/access";
+import { spaceVisibility } from "../spaces/visibility";
 import {
   createSpace,
   listMembers,
@@ -87,17 +88,12 @@ router.delete("/spaces/:space/members/:userId", async (c) => {
 
 router.get("/spaces/:space/tree", async (c) => {
   const principal = requirePrincipal(c);
-  const { space, abilities } = await spaceContext(getDb(), principal, c.req.param("space"));
+  const context = await spaceContext(getDb(), principal, c.req.param("space"));
+  const { space } = context;
   const rows = await getDb()
     .select(pageSummaryColumns)
     .from(pages)
-    .where(
-      and(
-        eq(pages.spaceId, space.id),
-        isNull(pages.deletedAt),
-        abilities.seeDrafts ? sql`true` : ne(pages.status, "draft"),
-      ),
-    )
+    .where(and(eq(pages.spaceId, space.id), spaceVisibility(context).livePages()))
     .orderBy(asc(pages.position), asc(pages.title));
   return c.json({ items: rows.map((row) => pageSummary(row, space.slug)) });
 });
@@ -105,7 +101,9 @@ router.get("/spaces/:space/tree", async (c) => {
 router.get("/spaces/:space/trash", async (c) => {
   const principal = requirePrincipal(c);
   const context = await spaceContext(getDb(), principal, c.req.param("space"));
-  if (!context.abilities.seeDrafts) throw forbidden("Only editors of this space see its trash");
+  if (!spaceVisibility(context).seesTrash(context.space.id)) {
+    throw forbidden("Only editors of this space see its trash");
+  }
   const rows = await getDb()
     .select({
       page: pageSummaryColumns,
@@ -128,7 +126,7 @@ router.get("/spaces/:space/trash", async (c) => {
 router.get("/spaces/:space/export", async (c) => {
   const principal = requirePrincipal(c);
   const context = await spaceContext(getDb(), principal, c.req.param("space"));
-  const zip = await exportSpace(getDb(), principal, context);
+  const zip = await exportSpace(getDb(), context);
   c.header("content-type", "application/zip");
   c.header("content-disposition", `attachment; filename="${context.space.slug}.zip"`);
   c.header("cache-control", "private, no-store");

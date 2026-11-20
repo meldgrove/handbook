@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Actor } from "@handbook/shared/api/common";
 import type {
   LockHolder,
@@ -20,14 +20,13 @@ import {
   pageLinks,
   pageRevisions,
   pages,
-  spaceMembers,
   spaces,
   users,
 } from "../db/schema";
 import type { Principal } from "../auth/principal";
-import { changeSetVisible } from "../changes/model";
 import { notFound } from "../http/errors";
 import type { SpaceContext } from "../spaces/access";
+import { spaceVisibility, visibilityOf, type Visibility } from "../spaces/visibility";
 import { bodyOf, type PageRow } from "./core";
 
 export const iso = (value: Date) => value.toISOString();
@@ -73,27 +72,6 @@ export function pageSummary(row: PageSummaryRow, spaceSlug: string): PageSummary
   };
 }
 
-/**
- * SQL condition: the principal may see this page's status. Drafts only for
- * admins and the owners and editors of the page's space.
- */
-export function visibleStatus(principal: Principal): SQL {
-  if (principal.kind === "service") return ne(pages.status, "draft");
-  if (principal.isAdmin) return sql`true`;
-  // "pages"."space_id" with the table name: Drizzle leaves column names
-  // unqualified in single-table selects, and inside the subquery an
-  // unqualified space_id would mean m.space_id (true for any membership).
-  return or(
-    ne(pages.status, "draft"),
-    sql`exists (select 1 from ${spaceMembers} m where m.space_id = "pages"."space_id" and m.user_id = ${principal.id})`,
-  )!;
-}
-
-/** 404 for a draft the principal may not see. */
-export function assertVisible(context: SpaceContext, page: PageRow) {
-  if (page.status === "draft" && !context.abilities.seeDrafts) throw notFound("No such page");
-}
-
 /** SQL condition: an edit lock is still valid (renewed recently, typed recently). */
 export function lockIsValid(): SQL {
   return sql`${editLocks.renewedAt} > now() - make_interval(secs => ${LOCK_EXPIRE_SECONDS}) and ${editLocks.activityAt} > now() - make_interval(secs => ${LOCK_IDLE_SECONDS})`;
@@ -122,7 +100,7 @@ export async function currentLock(
 
 /** The pages of a path's ancestors, top first. */
 async function breadcrumbs(tx: DbOrTx, context: SpaceContext, path: string): Promise<PageRef[]> {
-  const { space, abilities } = context;
+  const { space } = context;
   const segments = path.split("/");
   const prefixes = segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"));
   if (prefixes.length === 0) return [];
@@ -133,9 +111,8 @@ async function breadcrumbs(tx: DbOrTx, context: SpaceContext, path: string): Pro
       and(
         eq(pages.spaceId, space.id),
         inArray(pages.path, prefixes),
-        isNull(pages.deletedAt),
         // An active child can still have a draft ancestor.
-        abilities.seeDrafts ? undefined : ne(pages.status, "draft"),
+        spaceVisibility(context).livePages(),
       ),
     );
   return rows
@@ -152,23 +129,18 @@ export async function pageView(
 ): Promise<Page> {
   const { space, abilities } = context;
   const viewerId = principal.kind === "user" ? principal.id : null;
+  const visibility = await visibilityOf(tx, principal);
   const children = await tx
     .select(pageSummaryColumns)
     .from(pages)
-    .where(
-      and(
-        eq(pages.parentId, page.id),
-        isNull(pages.deletedAt),
-        abilities.seeDrafts ? sql`true` : ne(pages.status, "draft"),
-      ),
-    )
+    .where(and(eq(pages.parentId, page.id), spaceVisibility(context).livePages()))
     .orderBy(asc(pages.position), asc(pages.title));
   const backlinkRows = await tx
     .selectDistinct({ id: pages.id, path: pages.path, title: pages.title, space: spaces.slug })
     .from(pageLinks)
     .innerJoin(pages, eq(pages.id, pageLinks.fromPageId))
     .innerJoin(spaces, eq(spaces.id, pages.spaceId))
-    .where(and(eq(pageLinks.toPageId, page.id), isNull(pages.deletedAt), visibleStatus(principal)))
+    .where(and(eq(pageLinks.toPageId, page.id), visibility.livePages()))
     .orderBy(asc(pages.title));
   const [updatedBy] = page.updatedById
     ? await tx
@@ -191,7 +163,7 @@ export async function pageView(
         eq(changeSetItems.pageId, page.id),
         inArray(changeSets.status, ["open", "in_review"]),
         // A change set on this page may also touch a draft.
-        changeSetVisible(principal),
+        visibility.changeSets(),
       ),
     )
     .orderBy(desc(changeSets.number));
@@ -260,17 +232,17 @@ export function revisionSummary(row: RevisionRow): RevisionSummary {
   };
 }
 
-/** The change set of a revision, when the principal may see it (it may also touch a draft). */
-function visibleChangeSetOf(principal: Principal): SQL | undefined {
-  return and(eq(changeSets.id, pageRevisions.changeSetId), changeSetVisible(principal));
+/** The change set of a revision, when the viewer may see it (it may also touch a draft). */
+function visibleChangeSetOf(visibility: Visibility): SQL | undefined {
+  return and(eq(changeSets.id, pageRevisions.changeSetId), visibility.changeSets());
 }
 
-function revisionQuery(tx: DbOrTx, principal: Principal) {
+function revisionQuery(tx: DbOrTx, visibility: Visibility) {
   return tx
     .select(revisionColumns)
     .from(pageRevisions)
     .leftJoin(users, eq(users.id, pageRevisions.authorId))
-    .leftJoin(changeSets, visibleChangeSetOf(principal));
+    .leftJoin(changeSets, visibleChangeSetOf(visibility));
 }
 
 /** A page's revisions, newest first, one page of the list at a time. */
@@ -280,8 +252,9 @@ export async function listRevisions(
   pageId: string,
   options: { limit: number; offset: number },
 ): Promise<{ items: RevisionSummary[]; total: number }> {
+  const visibility = await visibilityOf(tx, principal);
   const [rows, [total]] = await Promise.all([
-    revisionQuery(tx, principal)
+    revisionQuery(tx, visibility)
       .where(eq(pageRevisions.pageId, pageId))
       .orderBy(desc(pageRevisions.number))
       .limit(options.limit)
@@ -297,7 +270,8 @@ export async function getRevision(
   pageId: string,
   number: number,
 ): Promise<Revision> {
-  const [row] = await revisionQuery(tx, principal).where(
+  const visibility = await visibilityOf(tx, principal);
+  const [row] = await revisionQuery(tx, visibility).where(
     and(eq(pageRevisions.pageId, pageId), eq(pageRevisions.number, number)),
   );
   if (!row) throw notFound("No such revision");
@@ -320,6 +294,7 @@ export async function recentRevisions(
   principal: Principal,
   options: { spaceId?: string; limit: number },
 ) {
+  const visibility = await visibilityOf(tx, principal);
   const rows = await tx
     .select({
       ...revisionColumns,
@@ -330,14 +305,8 @@ export async function recentRevisions(
     .innerJoin(pages, eq(pages.id, pageRevisions.pageId))
     .innerJoin(spaces, eq(spaces.id, pages.spaceId))
     .leftJoin(users, eq(users.id, pageRevisions.authorId))
-    .leftJoin(changeSets, visibleChangeSetOf(principal))
-    .where(
-      and(
-        isNull(pages.deletedAt),
-        visibleStatus(principal),
-        options.spaceId ? eq(pages.spaceId, options.spaceId) : sql`true`,
-      ),
-    )
+    .leftJoin(changeSets, visibleChangeSetOf(visibility))
+    .where(and(visibility.livePages(), options.spaceId ? eq(pages.spaceId, options.spaceId) : undefined))
     .orderBy(desc(pageRevisions.createdAt), desc(pageRevisions.number))
     .limit(options.limit);
   return rows.map((row) => ({

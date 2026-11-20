@@ -43,6 +43,13 @@ agents.
 Archived spaces are read-only: no page changes, change sets, comments or
 status changes.
 
+Drafts, the trash and change sets that change a draft are only for those
+whose abilities in the space include `seeDrafts`.
+`apps/server/src/spaces/visibility.ts` applies this to every list and read:
+`visibilityOf` reads a person's memberships once per request and asks
+`spaceAbilities` about each space (admins and service tokens need no
+query); `spaceVisibility` uses the abilities of one space's context.
+
 ## Processes
 
 One Docker image, one Node.js entry point (`apps/server/src/main.ts`);

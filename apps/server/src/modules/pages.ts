@@ -26,6 +26,7 @@ import {
 } from "../http/middleware";
 import type { Principal, UserPrincipal } from "../auth/principal";
 import { getSpaceById, requireAbility, spaceContext, type SpaceContext } from "../spaces/access";
+import { spaceVisibility } from "../spaces/visibility";
 import {
   authorOf,
   createLivePage,
@@ -38,7 +39,7 @@ import {
   saveLivePage,
   type PageRow,
 } from "../pages/core";
-import { assertVisible, getRevision, iso, listRevisions, pageView } from "../pages/views";
+import { getRevision, iso, listRevisions, pageView } from "../pages/views";
 import { acquireLock, checkLockForSave, releaseLock, renewLock, takeOverLock } from "../pages/locks";
 
 const router = new Hono<AppEnv>();
@@ -62,7 +63,7 @@ async function loadPage(
     : (await tx.select().from(pages).where(eq(pages.id, pageId)))[0];
   if (!page || (page.deletedAt !== null) !== (options.deleted ?? false)) throw notFound("No such page");
   const context = await spaceContext(tx, principal, await getSpaceById(tx, page.spaceId));
-  assertVisible(context, page);
+  spaceVisibility(context).assertPage(page);
   return { page, context };
 }
 
@@ -72,7 +73,7 @@ router.get("/spaces/:space/pages/by-path", async (c) => {
   const context = await spaceContext(getDb(), principal, c.req.param("space"));
   const page = await findPageByPathOrRedirect(getDb(), context.space.id, path);
   if (!page) throw notFound("No such page");
-  assertVisible(context, page);
+  spaceVisibility(context).assertPage(page);
   return c.json(await pageView(getDb(), principal, context, page));
 });
 
@@ -178,8 +179,9 @@ async function pageForHistory(principal: Principal, pageId: string) {
   const [page] = await getDb().select().from(pages).where(eq(pages.id, pageId));
   if (!page) throw notFound("No such page");
   const context = await spaceContext(getDb(), principal, await getSpaceById(getDb(), page.spaceId));
-  assertVisible(context, page);
-  if (page.deletedAt && !context.abilities.seeDrafts) throw notFound("No such page");
+  const visibility = spaceVisibility(context);
+  visibility.assertPage(page);
+  if (page.deletedAt && !visibility.seesTrash(page.spaceId)) throw notFound("No such page");
   return { page, context };
 }
 
