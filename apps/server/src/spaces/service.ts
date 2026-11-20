@@ -25,7 +25,12 @@ const iso = (value: Date) => value.toISOString();
 /** The columns of `pages p` for the visibility conditions. */
 // The subqueries below write "spaces" out: Drizzle leaves column names
 // unqualified in single-table selects, and inside them "id" would mean p.id.
-const pageAlias = { spaceId: sql`p.space_id`, status: sql`p.status`, deletedAt: sql`p.deleted_at` };
+const pageAlias = {
+  spaceId: sql`p.space_id`,
+  status: sql`p.status`,
+  deletedAt: sql`p.deleted_at`,
+  path: sql`p.path`,
+};
 
 /** The latest change of a space as the viewer sees it: itself, or a page it may see (live or in the trash). */
 function lastChange(visibility: Visibility) {

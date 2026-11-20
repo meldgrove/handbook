@@ -128,6 +128,10 @@ export const pages = pgTable(
       .where(sql`${table.deletedAt} is null`),
     index("idx_pages_parent").on(table.parentId),
     index("idx_pages_space").on(table.spaceId),
+    // Live drafts, which hide the pages below them (spaces/visibility.ts).
+    index("idx_pages_live_drafts")
+      .on(table.spaceId, table.path)
+      .where(sql`${table.status} = 'draft' and ${table.deletedAt} is null`),
     index("idx_pages_tags").using("gin", table.tags),
     index("idx_pages_search").using("gin", table.searchVector),
     index("idx_pages_title_trgm").using("gin", sql`${table.title} gin_trgm_ops`),

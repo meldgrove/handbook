@@ -79,7 +79,7 @@ describe("pages API", () => {
     expect(editorTree.body.items).toHaveLength(2);
   });
 
-  it("shows readers only visible ancestors of an active page", async () => {
+  it("hides an active page below a draft from readers, with its ancestors", async () => {
     const { editor, reader, space } = await setup();
     const parent = await createPage(space, {
       title: "Draft parent",
@@ -92,8 +92,7 @@ describe("pages API", () => {
     expect(child.status).toBe(201);
     expect(child.body.breadcrumbs).toMatchObject([{ id: parent.id }]);
     const view = await request("GET", `/api/v1/pages/${child.body.id}`, { userId: reader.id });
-    expect(view.status).toBe(200);
-    expect(view.body.breadcrumbs).toEqual([]);
+    expect(view.status).toBe(404);
   });
 
   it("merges or answers 409 page_changed with the current file and conflict blocks", async () => {

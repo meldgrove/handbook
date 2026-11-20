@@ -60,10 +60,11 @@ packages/shared/src/  contracts, page model, paths, merge, roles
   `spaceAbilities` in `packages/shared/src/roles.ts`. Agents (personal
   tokens, connected apps) never edit live, never merge and never administer;
   service tokens only read.
-- **Drafts and the trash:** every list, count and read of pages or change
-  sets filters through `apps/server/src/spaces/visibility.ts` (`visibilityOf`
-  across spaces, `spaceVisibility` in one); never test `seeDrafts` or a
-  page's status for access elsewhere.
+- **Drafts and the trash:** a draft hides itself and every page below it
+  from those without `seeDrafts`. Every list, count and read of pages or
+  change sets filters through `apps/server/src/spaces/visibility.ts`
+  (`visibilityOf` across spaces, `spaceVisibility` in one); never test
+  `seeDrafts`, a page's status or its ancestors for access elsewhere.
 - **Pages change only through `apps/server/src/pages/core.ts`** inside a
   transaction (`lockPage` first). It validates the file, merges with changes
   saved meanwhile, stores the revision and rebuilds sections, links and

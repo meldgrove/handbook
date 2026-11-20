@@ -89,9 +89,10 @@ the text where they appear.
   **Policy** (rules people must follow; needs an owner and the date it was
   last reviewed) and **Reference** (facts to look up). Owners can change
   them and add more.
-- **Status:** `draft` pages are only visible to the space's editors;
-  `deprecated` pages show a notice, with "Replaced by" pointing to the newer
-  page.
+- **Status:** `draft` pages, and every page below a draft, are only
+  visible to the space's editors until the draft is published (set to
+  `active`); `deprecated` pages show a notice, with "Replaced by" pointing
+  to the newer page.
 
 ### When someone else edits the same page
 

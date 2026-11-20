@@ -83,6 +83,12 @@ export function parentPath(path: string): string | null {
   return index === -1 ? null : path.slice(0, index);
 }
 
+/** The paths of a page's ancestors, top first: "a/b/c" has "a" and "a/b". */
+export function ancestorPaths(path: string): string[] {
+  const segments = path.split("/");
+  return segments.slice(1).map((_, index) => segments.slice(0, index + 1).join("/"));
+}
+
 export function joinPath(parent: string | null | undefined, slug: string): string {
   return parent ? `${parent}/${slug}` : slug;
 }

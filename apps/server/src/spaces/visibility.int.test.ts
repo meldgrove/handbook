@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import { unzipSync } from "fflate";
@@ -85,9 +86,11 @@ describe("page visibility", () => {
 
   /**
    * Spaces: an active one, an archived one (same members) and another active
-   * one. Each has an active, a deprecated and a draft page, and a draft and
-   * an active page in the trash; each has a change set that changes a draft
-   * and one that does not.
+   * one. Each has an active, a deprecated and a draft page, two pages below
+   * the draft and one below the active page, and a draft, an active page and
+   * a page below the draft in the trash. Each has change sets that change a
+   * draft, a page below it, add or move a page below it, and two that touch
+   * only pages everyone sees.
    */
   async function world() {
     const admin = await createUser({ isAdmin: true });
@@ -119,43 +122,69 @@ describe("page visibility", () => {
       [otherEditor.id, new Map([[other.id, "editor" as const]])],
     ]);
 
-    type Fixture = { page: PageRow; space: SpaceRow; status: string; live: boolean };
+    /** `belowDraft`: a draft is one of its ancestors. */
+    type Fixture = { page: PageRow; space: SpaceRow; status: string; live: boolean; belowDraft: boolean };
     const fixtures: Fixture[] = [];
-    const changeSetFixtures: { id: string; space: SpaceRow; touchesDraft: boolean }[] = [];
+    /** `hidden`: only for those who see drafts. */
+    const changeSetFixtures: { id: string; space: SpaceRow; title: string; hidden: boolean }[] = [];
     for (const space of [main, archived, other]) {
-      for (const status of ["active", "deprecated", "draft"]) {
+      const add = async (
+        title: string,
+        status: string,
+        options: { parent?: PageRow; live?: boolean; belowDraft?: boolean } = {},
+      ) => {
         const page = await createPage(space, {
-          title: `${status} page`,
-          markdown: file(`${status} page`, "Text.\n", `status: ${status}\n`),
+          title,
+          parentPath: options.parent?.path ?? null,
+          markdown: file(title, "Text.\n", `status: ${status}\n`),
         });
-        fixtures.push({ page, space, status, live: true });
-      }
-      for (const status of ["active", "draft"]) {
-        const page = await createPage(space, {
-          title: `trashed ${status}`,
-          markdown: file(`trashed ${status}`, "", `status: ${status}\n`),
-        });
-        await trash(page, space);
-        fixtures.push({ page, space, status, live: false });
-      }
-      for (const status of ["active", "draft"]) {
-        const target = fixtures.find(
-          (fixture) => fixture.space.id === space.id && fixture.status === status,
-        )!;
-        const [changeSet] = await getDb()
+        if (options.live === false) await trash(page, space);
+        const fixture = {
+          page,
+          space,
+          status,
+          live: options.live ?? true,
+          belowDraft: options.belowDraft ?? false,
+        };
+        fixtures.push(fixture);
+        return page;
+      };
+      const active = await add("active page", "active");
+      await add("deprecated page", "deprecated");
+      const draft = await add("draft page", "draft");
+      const below = await add("below draft", "active", { parent: draft, belowDraft: true });
+      await add("further below draft", "deprecated", { parent: below, belowDraft: true });
+      const belowActive = await add("below active", "active", { parent: active });
+      await add("trashed active", "active", { live: false });
+      await add("trashed draft", "draft", { live: false });
+      await add("trashed below draft", "active", { parent: draft, live: false, belowDraft: true });
+
+      const changeSet = async (title: string, hidden: boolean, item: { page?: PageRow; path: string }) => {
+        const [row] = await getDb()
           .insert(changeSets)
-          .values({ spaceId: space.id, title: `Change ${status}`, authorId: reader.id, channel: "web" })
+          .values({ spaceId: space.id, title, authorId: reader.id, channel: "web" })
           .returning();
-        await getDb().insert(changeSetItems).values({
-          changeSetId: changeSet!.id,
-          pageId: target.page.id,
-          action: "update",
-          path: target.page.path,
-          baseRevision: target.page.revision,
-          markdown: target.page.markdown,
-        });
-        changeSetFixtures.push({ id: changeSet!.id, space, touchesDraft: status === "draft" });
-      }
+        await getDb()
+          .insert(changeSetItems)
+          .values({
+            changeSetId: row!.id,
+            pageId: item.page?.id ?? randomUUID(),
+            action: item.page ? "update" : "create",
+            path: item.path,
+            baseRevision: item.page?.revision ?? null,
+            markdown: item.page?.markdown ?? file("new page"),
+          });
+        changeSetFixtures.push({ id: row!.id, space, title, hidden });
+      };
+      await changeSet("Change the active page", false, { page: active, path: active.path });
+      await changeSet("Add a page below the active page", false, { path: `${active.path}/new-page` });
+      await changeSet("Change the draft", true, { page: draft, path: draft.path });
+      await changeSet("Change a page below the draft", true, { page: below, path: below.path });
+      await changeSet("Add a page below the draft", true, { path: `${below.path}/new-page` });
+      await changeSet("Move a page below the draft", true, {
+        page: belowActive,
+        path: `${draft.path}/moved`,
+      });
     }
     await getDb().update(spaces).set({ archivedAt: new Date() }).where(eq(spaces.id, archived.id));
     const spacesNow = await getDb().select().from(spaces);
@@ -176,17 +205,20 @@ describe("page visibility", () => {
       principal.kind === "user" ? (roles.get(principal.id)?.get(space.id) ?? null) : null;
     const seesDrafts = (principal: Principal, space: SpaceRow) =>
       seesDraftsBySpaceAbilities(principal, roleOf(principal, space), fresh(space).archivedAt !== null);
+    /** The principal may see the page (by its status and ancestors), live or in the trash. */
+    const mayRead = (principal: Principal, fixture: Fixture) =>
+      (fixture.status !== "draft" && !fixture.belowDraft) || seesDrafts(principal, fixture.space);
     /** The principal sees the page among the live pages. */
-    const seesPage = (principal: Principal, fixture: Fixture) =>
-      fixture.live && (fixture.status !== "draft" || seesDrafts(principal, fixture.space));
+    const seesPage = (principal: Principal, fixture: Fixture) => fixture.live && mayRead(principal, fixture);
     const seesChangeSet = (principal: Principal, changeSet: (typeof changeSetFixtures)[number]) =>
-      !changeSet.touchesDraft || seesDrafts(principal, changeSet.space);
+      !changeSet.hidden || seesDrafts(principal, changeSet.space);
     return {
       spaces: [main, archived, other].map(fresh),
       fixtures: fixtures.map((fixture) => ({ ...fixture, space: fresh(fixture.space) })),
       changeSetFixtures,
       principals,
       seesDrafts,
+      mayRead,
       seesPage,
       seesChangeSet,
     };
@@ -199,6 +231,7 @@ describe("page visibility", () => {
       changeSetFixtures,
       principals,
       seesDrafts,
+      mayRead,
       seesPage,
       seesChangeSet,
     } = await world();
@@ -215,6 +248,7 @@ describe("page visibility", () => {
           spaceId: sql`p.space_id`,
           status: sql`p.status`,
           deletedAt: sql`p.deleted_at`,
+          path: sql`p.path`,
         })}`,
       );
       expect(new Set(aliased.rows.map((row) => row.id)), name).toEqual(expected);
@@ -246,20 +280,26 @@ describe("page visibility", () => {
           expect(visibility.seesDrafts(space.id), `${name} in ${space.slug}`).toBe(sees);
           expect(visibility.seesTrash(space.id), `${name} in ${space.slug}`).toBe(sees);
         }
-        // Single reads (live or in the trash: the status decides).
+        // Single reads (live or in the trash: the status and the ancestors decide).
         for (const fixture of fixtures.filter((candidate) => candidate.space.id === space.id)) {
-          const may = fixture.status !== "draft" || sees;
-          expect(everywhere.canSeePage(fixture.page), `${name}: ${fixture.page.title}`).toBe(may);
-          expect(inSpace.canSeePage(fixture.page), `${name}: ${fixture.page.title}`).toBe(may);
-          if (may) expect(() => inSpace.assertPage(fixture.page)).not.toThrow();
-          else expect(() => inSpace.assertPage(fixture.page)).toThrow("No such page");
+          const may = mayRead(principal, fixture);
+          const what = `${name}: ${fixture.page.title}`;
+          expect(await everywhere.canSeePage(db, fixture.page), what).toBe(may);
+          expect(await inSpace.canSeePage(db, fixture.page), what).toBe(may);
+          if (may) await expect(inSpace.assertPage(db, fixture.page), what).resolves.toBeUndefined();
+          else await expect(inSpace.assertPage(db, fixture.page), what).rejects.toThrow("No such page");
+          // A page below it (a change set adds or moves one there): live drafts hide it.
+          const below = `${fixture.page.path}/new`;
+          const draftAbove = (fixture.live && fixture.status === "draft") || fixture.belowDraft;
+          expect(await everywhere.canSeePath(db, space.id, below), `${what}/new`).toBe(!draftAbove || sees);
+          expect(await inSpace.canSeePath(db, space.id, below), `${what}/new`).toBe(!draftAbove || sees);
         }
         // One change set at a time.
         for (const changeSet of changeSetFixtures.filter((candidate) => candidate.space.id === space.id)) {
-          const may = !changeSet.touchesDraft || sees;
+          const may = seesChangeSet(principal, changeSet);
           const row = { id: changeSet.id, spaceId: space.id };
-          expect(await inSpace.canSeeChangeSet(db, row), name).toBe(may);
-          expect(await everywhere.canSeeChangeSet(db, row), name).toBe(may);
+          expect(await inSpace.canSeeChangeSet(db, row), `${name}: ${changeSet.title}`).toBe(may);
+          expect(await everywhere.canSeeChangeSet(db, row), `${name}: ${changeSet.title}`).toBe(may);
         }
       }
 
@@ -372,10 +412,10 @@ describe("read paths hide drafts from those who may not see them", () => {
       title: "Plan",
       markdown: file("Plan", "See [the laptop](laptop).\n", "status: draft\ntags: [hardware, secret]\n"),
     });
-    await createPage(it, {
+    const belowPlan = await createPage(it, {
       title: "Below plan",
       parentPath: "plan",
-      markdown: file("Below plan", "Visible below a draft.\n"),
+      markdown: file("Below plan", "Hidden with the draft above it.\n"),
     });
     await createPage(hr, {
       title: "Hiring",
@@ -392,7 +432,18 @@ describe("read paths hide drafts from those who may not see them", () => {
       expiresAt: null,
     });
     const editorAgent = await createToken(editor.id);
-    return { editor, otherEditor, reader, admin, laptop, plan, serviceToken, editorAgent };
+    return {
+      editor,
+      otherEditor,
+      reader,
+      admin,
+      itSpace: it,
+      laptop,
+      plan,
+      belowPlan,
+      serviceToken,
+      editorAgent,
+    };
   }
 
   type Viewer = { userId?: string; token?: string };
@@ -454,7 +505,7 @@ describe("read paths hide drafts from those who may not see them", () => {
         .filter((name) => name.endsWith(".md"))
         .sort();
     };
-    const withoutDrafts = ["laptop.md", "plan/below-plan.md"];
+    const withoutDrafts = ["laptop.md"];
     const withDrafts = ["laptop.md", "plan.md", "plan/below-plan.md"];
     expect(await exported({ userId: reader.id })).toEqual(withoutDrafts);
     expect(await exported({ token: serviceToken })).toEqual(withoutDrafts);
@@ -464,14 +515,14 @@ describe("read paths hide drafts from those who may not see them", () => {
     expect(await exported({ userId: admin.id })).toEqual(withDrafts);
   });
 
-  it("the space index lists drafts only to those who see them, and pages below a draft to everyone", async () => {
+  it("the space index lists drafts and the pages below them only to those who see drafts", async () => {
     const { editor, otherEditor, reader, admin, serviceToken } = await setup();
     const index = async (viewer: Viewer) => (await request("GET", "/s/it.md", viewer)).body as string;
     for (const viewer of [{ userId: reader.id }, { token: serviceToken }, { userId: otherEditor.id }]) {
       const text = await index(viewer);
+      expect(text).toContain("- [Laptop](/s/it/laptop.md)");
       expect(text).not.toContain("[Plan]");
-      // The page below the draft stays listed, at the top level.
-      expect(text).toContain("- [Below plan](/s/it/plan/below-plan.md)");
+      expect(text).not.toContain("plan/");
     }
     for (const viewer of [{ userId: editor.id }, { userId: admin.id }]) {
       expect(await index(viewer)).toContain(
@@ -499,8 +550,8 @@ describe("read paths hide drafts from those who may not see them", () => {
       (await request("GET", "/api/v1/recent?limit=50", { userId })).body.items
         .map((item: { page: { title: string } }) => item.page.title)
         .sort();
-    expect(await recent(reader.id)).toEqual(["Below plan", "Holidays", "Laptop"]);
-    expect(await recent(otherEditor.id)).toEqual(["Below plan", "Hiring", "Holidays", "Laptop"]);
+    expect(await recent(reader.id)).toEqual(["Holidays", "Laptop"]);
+    expect(await recent(otherEditor.id)).toEqual(["Hiring", "Holidays", "Laptop"]);
     expect(await recent(editor.id)).toEqual(["Below plan", "Draft child", "Holidays", "Laptop", "Plan"]);
     expect(await recent(admin.id)).toEqual([
       "Below plan",
@@ -529,5 +580,117 @@ describe("read paths hide drafts from those who may not see them", () => {
       expect((await request("GET", path, { userId: reader.id })).status, path).toBe(404);
       expect((await request("GET", path, { userId: editor.id })).status, path).toBe(200);
     }
+  });
+
+  it("hides the pages below a draft with it until it is published", async () => {
+    const {
+      editor,
+      otherEditor,
+      reader,
+      admin,
+      itSpace,
+      laptop,
+      plan,
+      belowPlan,
+      serviceToken,
+      editorAgent,
+    } = await setup();
+    const deeper = await createPage(itSpace, {
+      title: "Deeper",
+      parentPath: belowPlan.path,
+      markdown: file("Deeper", "Quokka: ask for [a laptop](/s/it/laptop).\n", "tags: [quokkas]\n"),
+    });
+    const titles = (items: { title: string }[]) => items.map((item) => item.title).sort();
+    /** What the viewer learns of the pages below the draft, on every path that lists or reads pages. */
+    const look = async (viewer: Viewer) => ({
+      tree: titles((await request("GET", "/api/v1/spaces/it/tree", viewer)).body.items),
+      search: titles((await request("GET", "/api/v1/search?q=quokka", viewer)).body.results),
+      tag: titles((await request("GET", "/api/v1/tags/quokkas/pages", viewer)).body.items),
+      backlinks: titles((await request("GET", `/api/v1/pages/${laptop.id}`, viewer)).body.backlinks).filter(
+        (title) => title === "Deeper",
+      ),
+      reads: await Promise.all(
+        [
+          `/api/v1/pages/${deeper.id}`,
+          `/api/v1/pages/${deeper.id}/revisions`,
+          `/api/v1/pages/${deeper.id}/revisions/1`,
+          "/api/v1/spaces/it/pages/by-path?path=plan/below-plan/deeper",
+          "/s/it/plan/below-plan/deeper.md",
+        ].map(async (path) => (await request("GET", path, viewer)).status),
+      ),
+    });
+    const hidden = { tree: ["Laptop"], search: [], tag: [], backlinks: [], reads: [404, 404, 404, 404, 404] };
+    const shown = {
+      tree: ["Below plan", "Deeper", "Laptop", "Plan"],
+      search: ["Deeper"],
+      tag: ["Deeper"],
+      backlinks: ["Deeper"],
+      reads: [200, 200, 200, 200, 200],
+    };
+    const readers: Viewer[] = [{ userId: reader.id }, { token: serviceToken }, { userId: otherEditor.id }];
+    const editors: Viewer[] = [{ userId: editor.id }, { token: editorAgent }, { userId: admin.id }];
+    for (const viewer of readers) expect(await look(viewer), JSON.stringify(viewer)).toEqual(hidden);
+    for (const viewer of editors) expect(await look(viewer), JSON.stringify(viewer)).toEqual(shown);
+    // Editors see the whole path in the breadcrumbs.
+    const view = await request("GET", `/api/v1/pages/${deeper.id}`, { userId: editor.id });
+    expect(view.body.breadcrumbs.map((crumb: { title: string }) => crumb.title)).toEqual([
+      "Plan",
+      "Below plan",
+    ]);
+
+    // Change sets that change a page below the draft, or add one there, are for editors only.
+    const created = await request("POST", "/api/v1/change-sets", {
+      userId: editor.id,
+      body: { space: "it", title: "Plan the details" },
+    });
+    const number = created.body.number as number;
+    const put = async (userId: string, body: object) =>
+      request("PUT", `/api/v1/change-sets/${number}/pages`, { userId, body });
+    expect((await put(editor.id, { path: "plan/below-plan/new", markdown: file("New") })).status).toBe(200);
+    const visible = async (userId: string) => ({
+      list: (await request("GET", "/api/v1/change-sets?status=all", { userId })).body.items.map(
+        (item: { number: number }) => item.number,
+      ),
+      detail: (await request("GET", `/api/v1/change-sets/${number}`, { userId })).status,
+    });
+    expect(await visible(reader.id)).toEqual({ list: [], detail: 404 });
+    expect(await visible(otherEditor.id)).toEqual({ list: [], detail: 404 });
+    expect(await visible(editor.id)).toEqual({ list: [number], detail: 200 });
+
+    // Readers cannot put pages there in their own change sets (the parent does not exist for them).
+    const own = await request("POST", "/api/v1/change-sets", {
+      userId: reader.id,
+      body: { space: "it", title: "My idea" },
+    });
+    const mine = own.body.number as number;
+    const readerPut = (body: object) =>
+      request("PUT", `/api/v1/change-sets/${mine}/pages`, { userId: reader.id, body });
+    const added = await readerPut({ path: "plan/below-plan/idea", markdown: file("Idea") });
+    expect(added.status).toBe(422);
+    expect(added.body.error.fields.path).toBe("The parent page “plan/below-plan” does not exist");
+    // A taken path there answers like a free one.
+    expect((await readerPut({ path: "plan/below-plan", markdown: file("Below plan") })).status).toBe(422);
+    const moved = await readerPut({ pageId: laptop.id, path: "plan/laptop", markdown: laptop.markdown });
+    expect(moved.status).toBe(422);
+    const move = await request("POST", `/api/v1/change-sets/${mine}/pages/${laptop.id}/move`, {
+      userId: reader.id,
+      body: { path: "plan/laptop" },
+    });
+    expect(move.status).toBe(422);
+    expect((await request("GET", `/api/v1/change-sets/${mine}`, { userId: reader.id })).body.items).toEqual(
+      [],
+    );
+
+    // Published, the draft shows its pages to everyone again.
+    const save = await request("PUT", `/api/v1/pages/${plan.id}`, {
+      userId: editor.id,
+      body: {
+        markdown: plan.markdown.replace("status: draft", "status: active"),
+        baseRevision: plan.revision,
+      },
+    });
+    expect(save.status).toBe(200);
+    for (const viewer of readers) expect(await look(viewer), JSON.stringify(viewer)).toEqual(shown);
+    expect((await visible(reader.id)).detail).toBe(200);
   });
 });

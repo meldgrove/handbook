@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidPath, resolveLink, slugify } from "./paths";
+import { ancestorPaths, isValidPath, resolveLink, slugify } from "./paths";
 
 describe("paths", () => {
   it("makes slugs", () => {
@@ -12,6 +12,11 @@ describe("paths", () => {
     expect(isValidPath("a/b-c/d1")).toBe(true);
     expect(isValidPath("a//b")).toBe(false);
     expect(isValidPath("A")).toBe(false);
+  });
+
+  it("lists the ancestors of a path, top first", () => {
+    expect(ancestorPaths("a/b/c")).toEqual(["a", "a/b"]);
+    expect(ancestorPaths("a")).toEqual([]);
   });
 
   it("resolves links like files", () => {
