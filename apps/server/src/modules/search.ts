@@ -33,7 +33,8 @@ router.get("/tags", async (c) => {
 
 router.get("/tags/:tag/pages", async (c) => {
   const visibility = await visibilityOf(getDb(), requirePrincipal(c));
-  const tag = normalizeTag(decodeURIComponent(c.req.param("tag")));
+  // The router decoded the parameter already; decoding again breaks tags with "%".
+  const tag = normalizeTag(c.req.param("tag"));
   const rows = await getDb()
     .select({ page: pageSummaryColumns, space: spaces.slug })
     .from(pages)
