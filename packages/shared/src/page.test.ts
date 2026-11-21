@@ -83,6 +83,14 @@ describe("page files", () => {
     expect(parsePageFile("---\ntitle: [unclosed\n---\n", schema).ok).toBe(false);
   });
 
+  it("ends the frontmatter only at a line of three dashes, not at a value that ends in them", () => {
+    const result = canonicalPageFile("---\ntitle: Plans ---\ntags: [roadmap]\n---\n\nText\n", schema);
+    expect(result.ok && result.page.frontmatter).toMatchObject({ title: "Plans ---", tags: ["roadmap"] });
+    expect(result.ok && result.page.body).toBe("Text\n");
+    expect(canonicalPageFile("---\n---\n", schema).ok).toBe(false);
+    expect(parsePageFile("---\ntitle: A\n---", schema).ok).toBe(true);
+  });
+
   it("replaces frontmatter and keeps the body", () => {
     expect(withFrontmatter("---\ntitle: A\n---\n\nText\n", { title: "B", tags: [] })).toBe(
       "---\ntitle: B\n---\n\nText\n",
