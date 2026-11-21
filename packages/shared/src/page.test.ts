@@ -5,6 +5,7 @@ import {
   parsePageFile,
   readFrontmatterValues,
   spaceSchemaProblems,
+  splitFrontmatter,
   validateFrontmatter,
   withFrontmatter,
   type SpaceSchema,
@@ -81,6 +82,15 @@ describe("page files", () => {
     expect(parsePageFile("# Title", schema).ok).toBe(false);
     expect(parsePageFile("---\n- a\n---\n", schema).ok).toBe(false);
     expect(parsePageFile("---\ntitle: [unclosed\n---\n", schema).ok).toBe(false);
+  });
+
+  it("ends the frontmatter only at a line of three dashes, not at a value that ends in them", () => {
+    const result = canonicalPageFile("---\ntitle: Plans ---\ntags: [roadmap]\n---\n\nText\n", schema);
+    expect(result.ok && result.page.frontmatter).toMatchObject({ title: "Plans ---", tags: ["roadmap"] });
+    expect(result.ok && result.page.body).toBe("Text\n");
+    // Empty frontmatter ends at once: a rule in the body is not its end.
+    expect(splitFrontmatter("---\n---\n\n---\nbody")).toEqual({ yaml: "", body: "\n---\nbody" });
+    expect(parsePageFile("---\ntitle: A\n---", schema).ok).toBe(true);
   });
 
   it("replaces frontmatter and keeps the body", () => {
