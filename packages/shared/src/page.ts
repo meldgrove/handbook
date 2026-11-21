@@ -168,7 +168,7 @@ export type ParsedPage = { frontmatter: PageFrontmatter; body: string };
 export type PageParseResult = { ok: true; page: ParsedPage } | { ok: false; errors: Record<string, string> };
 
 // The closing `---` is a line of its own: a value that ends in `---` does not end the frontmatter.
-const FRONTMATTER = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
+const FRONTMATTER = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)??---[ \t]*(?:\r?\n|$)/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
