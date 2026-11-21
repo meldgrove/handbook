@@ -124,6 +124,19 @@ describe("search API", () => {
     expect((await request("GET", "/api/v1/search?q=", { userId: reader.id })).status).toBe(422);
   });
 
+  it("lists the pages of a tag with a percent sign", async () => {
+    const { reader } = await setup();
+    await createPage(await getSpace(getDb(), "it"), {
+      title: "Remote work",
+      markdown: file("Remote work", "Yes.\n", "tags: ['100%']\n"),
+    });
+    const tagged = await request("GET", `/api/v1/tags/${encodeURIComponent("100%")}/pages`, {
+      userId: reader.id,
+    });
+    expect(tagged.status).toBe(200);
+    expect(tagged.body.items.map((item: { title: string }) => item.title)).toEqual(["Remote work"]);
+  });
+
   it("lists tags, pages of a tag and recent changes", async () => {
     const { reader, editor } = await setup();
     const tags = await request("GET", "/api/v1/tags", { userId: reader.id });

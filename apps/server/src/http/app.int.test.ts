@@ -79,6 +79,20 @@ describe("error responses", () => {
   });
 });
 
+it("answers text PostgreSQL cannot store (a NUL character) with 400, not 500", async () => {
+  await resetDatabase();
+  const editor = await createUser();
+  await createSpace({ slug: "it", members: { [editor.id]: "editor" } });
+  const search = await request("GET", "/api/v1/search?q=a%00b", { userId: editor.id });
+  expect(search.status).toBe(400);
+  expect(search.body.error.code).toBe("bad_request");
+  const created = await request("POST", "/api/v1/spaces/it/pages", {
+    userId: editor.id,
+    body: { markdown: "---\ntitle: Notes\n---\n\nte\u0000xt\n" },
+  });
+  expect(created.status).toBe(400);
+});
+
 it("limits the body of a sign-in request", async () => {
   const response = await testApp().request("/api/auth/sign-in/social", {
     method: "POST",
