@@ -39,10 +39,11 @@ const AUTH_ROUTES = new Set([
 const CONCURRENT_CHANGE_CODES = new Set(["23505", "40P01", "40001"]);
 
 /**
- * PostgreSQL refuses text it cannot store (SQLSTATE 22021): a NUL character
- * in a search, a path or a page. The request is wrong, not the server.
+ * PostgreSQL refuses text it cannot store: a NUL character in a search, a
+ * path or a page (SQLSTATE 22021), or in a JSON column such as a property's
+ * label (22P05). The request is wrong, not the server.
  */
-const UNSTORABLE_TEXT_CODE = "22021";
+const UNSTORABLE_TEXT_CODES = new Set(["22021", "22P05"]);
 
 /** The SQLSTATE of a database error, also when Drizzle wrapped it (`cause`). */
 function databaseErrorCode(error: unknown): string | undefined {
@@ -135,7 +136,7 @@ export function createApp() {
     }
     const concurrent = concurrentChangeResponse(error, c);
     if (concurrent) return concurrent;
-    if (databaseErrorCode(error) === UNSTORABLE_TEXT_CODE) {
+    if (UNSTORABLE_TEXT_CODES.has(databaseErrorCode(error) ?? "")) {
       return c.json(
         { error: { code: "bad_request", message: "The text has a character that cannot be saved (NUL)." } },
         400,

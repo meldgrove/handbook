@@ -91,6 +91,13 @@ it("answers text PostgreSQL cannot store (a NUL character) with 400, not 500", a
     body: { markdown: "---\ntitle: Notes\n---\n\nte\u0000xt\n" },
   });
   expect(created.status).toBe(400);
+  // In a JSON column (a property's label) PostgreSQL names it differently (22P05).
+  const admin = await createUser({ isAdmin: true });
+  const updated = await request("PATCH", "/api/v1/spaces/it", {
+    userId: admin.id,
+    body: { properties: [{ key: "team", label: "Te\u0000am", type: "text" }] },
+  });
+  expect(updated.status).toBe(400);
 });
 
 it("limits the body of a sign-in request", async () => {
