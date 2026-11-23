@@ -1,17 +1,9 @@
 @import "tailwindcss";
 @import "@meldgrove/ui/styles.css";
-/* Bundled with the app (SIL Open Font License): no font loads from a third party. */
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/inter/wght-italic.css";
-@import "@fontsource-variable/source-serif-4";
-@import "@fontsource-variable/source-serif-4/wght-italic.css";
 
+/* System fonts only: no font file is loaded. Articles use a serif from the device. */
 @theme {
-  --font-sans:
-    "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  --font-serif: "Source Serif 4 Variable", Charter, "Iowan Old Style", Georgia, serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --font-serif: Charter, "Iowan Old Style", Georgia, serif;
 }
 
 /*
