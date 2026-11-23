@@ -426,8 +426,8 @@ react-markdown with remark-gfm, no HTML, callouts, heading anchors from
 `resolveLink`.
 Pages use its `article` variant: the `.article` styles in `styles.css`
 (serif text in a reading column, sans headings), which the rich-text editor
-shares, so a page looks the same while it is written. The fonts (Inter,
-Source Serif 4) are bundled with the app.
+shares, so a page looks the same while it is written. The fonts are the
+device's own: no font file is loaded.
 
 The page editor (`/pages/$id/edit`, `/s/$space/-/new`) runs in a focused
 layout without the sidebar (`routes/focus.tsx`). `components/editor/page-editor.tsx`
