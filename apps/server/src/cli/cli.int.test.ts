@@ -285,7 +285,10 @@ function runProcess(args: string[], env: Record<string, string> = {}) {
 
 describe("the cli process", () => {
   it("prints only the token on stdout and exits", async () => {
-    const created = await runProcess(["tokens", "create", "service", "--name", "Connector"]);
+    // It logs nothing, so a level that the app refuses does not matter.
+    const created = await runProcess(["tokens", "create", "service", "--name", "Connector"], {
+      LOG_LEVEL: "loud",
+    });
     expect(created.code).toBe(0);
     expect(created.stdout).toMatch(/^kn_svc_[\w-]{43}\n$/);
     expect(created.stderr).toMatch(/^Created\. ID: [0-9a-f-]{36}, expires: \d{4}-\d{2}-\d{2}\n$/);

@@ -80,8 +80,8 @@ bundled as `dist/cli.mjs`; `/usr/local/bin/cli` in the image). `cli tokens`
 creates, lists and revokes service tokens with the functions of
 `auth/service-tokens.ts`, which the admin page's routes call too. It acts as
 the `operator` (`OperatorPrincipal`), which only it creates, with an admin's
-rights. Only its output goes to stdout (logs go to stderr). It starts no
-server or worker and reports nothing to Sentry.
+rights. It prints only its output and short messages, logs nothing, starts
+no server or worker and reports nothing to Sentry.
 
 ## Data
 

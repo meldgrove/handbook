@@ -138,9 +138,12 @@ stderr. So `> file` keeps only the token, here in a file that only the
 current user may read:
 
 ```sh
-(umask 077; docker compose run --rm -T migrate \
+(umask 077; docker compose exec -T web \
   cli tokens create service --name Connector > connector.token)
 ```
+
+Create tokens with `exec` as here, not with `run`: what a container started
+with `run` prints also goes to Docker's logging driver, which may keep it.
 
 AI with access to the server writes the token into a file like this, passes
 it on to the app that uses it (for example in the body of that app's

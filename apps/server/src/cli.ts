@@ -1,13 +1,12 @@
 /*
  * The operator command, `cli` in the image (docs/deployment.md, "Service
- * tokens from the command line"). Stdout carries only the command's output;
- * logs go to stderr. It starts no web server, no worker and no error
- * reporting, closes the database pool and exits.
+ * tokens from the command line"). It starts no web server, no worker and no
+ * error reporting, closes the database pool and exits.
  */
-import { logToStderr } from "./log-target";
 
-logToStderr();
-// Loaded only now: the logger reads the target when it loads.
+// Stdout carries only the command's output, and errors are printed without
+// their text (cli/main.ts): the logger, loaded below, writes nothing.
+process.env.LOG_LEVEL = "silent";
 const { runCli } = await import("./cli/main");
 const { closeDb } = await import("./db/client");
 

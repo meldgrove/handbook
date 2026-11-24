@@ -11,7 +11,9 @@ Commands:
   cli tokens create service --name <name> [--expires-in-days <days>|never]
                                a read-only service token (Administration > Service
                                tokens), alone on stdout, once; expires in 90 days
-                               unless you say otherwise
+                               unless you say otherwise. Run it with
+                               docker compose exec -T web cli …: Docker logs what
+                               a container started with "run" prints
   cli tokens list [--json]     the service tokens, without their secrets
   cli tokens revoke <id>       end a service token for good
   cli help                     this text
