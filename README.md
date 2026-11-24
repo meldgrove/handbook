@@ -63,3 +63,9 @@ npm run dev
 Open http://localhost:5173 and sign in as `ada@example.org` (password
 `handbook-dev`), an admin. Create a space under **Administration →
 Spaces**.
+
+## License
+
+Copyright 2026 Meldgrove
+
+Licensed under the [Apache License 2.0](LICENSE).
