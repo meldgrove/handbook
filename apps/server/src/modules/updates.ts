@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { createUpdatesHandler } from "@meldgrove/ui/updates/server";
 import { config } from "../config";
 import type { AppEnv } from "../http/env";
@@ -19,26 +19,35 @@ const updates = createUpdatesHandler(() => ({
   logger,
 }));
 
+/**
+ * The shared handler's answer through Hono's context, so the headers that
+ * middleware set before the route (x-request-id) stay on it.
+ */
+async function answer(c: Context<AppEnv>, response: Response | Promise<Response>) {
+  const result = await response;
+  return c.newResponse(result.body, result);
+}
+
 const router = new Hono<AppEnv>();
 
 router.get("/admin/updates", (c) => {
   requireAdmin(c);
-  return updates.respond("status");
+  return answer(c, updates.respond("status"));
 });
 
 router.post("/admin/updates/check", (c) => {
   requireAdmin(c);
-  return updates.respond("check");
+  return answer(c, updates.respond("check"));
 });
 
 router.post("/admin/updates/install", (c) => {
   requireAdmin(c);
-  return updates.respond("install", c.req.raw);
+  return answer(c, updates.respond("install", c.req.raw));
 });
 
 router.post("/admin/updates/channel", (c) => {
   requireAdmin(c);
-  return updates.respond("channel", c.req.raw);
+  return answer(c, updates.respond("channel", c.req.raw));
 });
 
 export default router;
