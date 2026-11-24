@@ -2,7 +2,9 @@
 
 Every setting that comes from the environment. Blank values count as unset,
 except for `UPDATER_URL` (below).
-Spaces, editors, properties and page types are set up in the app.
+Spaces, editors, properties and page types are set up in the app; service
+tokens there or on the server with `cli tokens`
+([Service tokens from the command line](deployment.md#service-tokens-from-the-command-line)).
 
 ## Required
 

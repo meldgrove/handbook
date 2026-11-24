@@ -113,6 +113,10 @@ jobs:
       - name: The image starts its processes
         run: |
           docker run --rm --entrypoint node handbook:ci --import /app/apps/server/dist/instrument.mjs -e "process.exit(0)"
+      - name: The image has the operator command
+        run: |
+          docker run --rm handbook:ci cli help | grep -q "cli tokens create service"
+          docker run --rm --entrypoint cli handbook:ci help | grep -q "cli tokens create service"
 
   # A new image must still start with the compose files that servers have:
   # those of the newest release (branch stable).

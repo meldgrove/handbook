@@ -43,7 +43,8 @@ Hono server, React web app, PostgreSQL, one Docker image.
 - [Agents and MCP](docs/agents.md): connecting Claude, ChatGPT, Langdock and
   other agents; what they may do.
 - [Deployment](docs/deployment.md): running it on a Linux server (Debian,
-  Ubuntu), upgrades, automatic updates, backups, Sentry.
+  Ubuntu), service tokens from the command line, upgrades, automatic updates,
+  backups, Sentry.
 - [Coolify](docs/coolify.md): running it on Coolify instead.
 - [Configuration](docs/configuration.md): every environment variable.
 - [Identity and access](docs/identity-and-access.md): sign-in, admins,

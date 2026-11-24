@@ -53,7 +53,8 @@ export const logger = pino({
     ],
     censor: "[redacted]",
   },
-  ...(process.env.NODE_ENV === "development" && process.stdout.isTTY
+  // The image has no pino-pretty; the operator command is silent there, also in a terminal.
+  ...(process.env.NODE_ENV === "development" && process.stdout.isTTY && process.env.LOG_LEVEL !== "silent"
     ? { transport: { target: "pino-pretty", options: { colorize: true, ignore: "pid,hostname" } } }
     : {}),
 });

@@ -75,6 +75,14 @@ One Docker image, one Node.js entry point (`apps/server/src/main.ts`);
 - **migrate**: applies the Drizzle migrations under an advisory lock.
 - **all**: web and worker in one process.
 
+The image's command `cli` runs the operator command instead (`src/cli.ts`,
+bundled as `dist/cli.mjs`; `/usr/local/bin/cli` in the image). `cli tokens`
+creates, lists and revokes service tokens with the functions of
+`auth/service-tokens.ts`, which the admin page's routes call too. It acts as
+the `operator` (`OperatorPrincipal`), which only it creates, with an admin's
+rights. It prints only its output and short messages, logs nothing, starts
+no server or worker and reports nothing to Sentry.
+
 ## Data
 
 PostgreSQL holds everything except uploaded files (`FILES_DIR`).
@@ -104,7 +112,8 @@ PostgreSQL holds everything except uploaded files (`FILES_DIR`).
   OAuth access and refresh tokens. `oauth_clients`, `oauth_grants` (a
   person's consent for an app), `oauth_requests` (pending sign-ins).
 - `settings` (app state, e.g. the search languages of the index),
-  `audit_log` (admin and owner changes).
+  `audit_log` (admin and owner changes; the operator command's with the
+  actor `operator`).
 
 ## Page files
 
@@ -296,7 +305,8 @@ request with `Authorization: Bearer` is authenticated by the token only
 
 - Personal tokens: created by a person in the web app (Settings); the agent
   acts as that person with agent limits. Optional expiry.
-- Service tokens: created by admins; read-only; tied to no person.
+- Service tokens: created by admins or with `cli tokens`; read-only; tied to
+  no person.
 - Connected apps: OAuth access tokens (60 minutes by default) and rotating
   refresh tokens (30 days), tied to a grant the person can revoke.
 - Personal tokens and connected apps act only while `agentAccess` allows

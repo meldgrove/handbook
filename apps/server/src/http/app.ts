@@ -4,7 +4,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import { ZodError } from "zod";
 import type { AppEnv } from "./env";
-import { AppError, zodFieldErrors } from "./errors";
+import { AppError, databaseErrorCode, zodFieldErrors } from "./errors";
 import { authenticate, requestId, requestLog, sameOrigin } from "./middleware";
 import { compression } from "./compression";
 import { webApp } from "./static";
@@ -44,17 +44,6 @@ const CONCURRENT_CHANGE_CODES = new Set(["23505", "40P01", "40001"]);
  * label (22P05). The request is wrong, not the server.
  */
 const UNSTORABLE_TEXT_CODES = new Set(["22021", "22P05"]);
-
-/** The SQLSTATE of a database error, also when Drizzle wrapped it (`cause`). */
-function databaseErrorCode(error: unknown): string | undefined {
-  let current = error;
-  for (let depth = 0; depth < 3 && current instanceof Error; depth += 1) {
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === "string") return code;
-    current = current.cause;
-  }
-  return undefined;
-}
 
 /**
  * A 409 for a request that ran into a concurrent change; null for other

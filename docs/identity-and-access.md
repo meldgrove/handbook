@@ -136,7 +136,10 @@ web app brings them back. `AGENT_SIGN_IN_DAYS=0` turns this off.
 
 Service tokens belong to the installation, not to a person: they keep
 working when the admin who created them leaves or is blocked.
-**Administration → Service tokens** shows who created each one.
+**Administration → Service tokens** shows who created each one. They can
+also be created on the server
+([Service tokens from the command line](deployment.md#service-tokens-from-the-command-line));
+the audit log then names the actor `operator`.
 
 ## When someone leaves
 

@@ -86,8 +86,9 @@ merges it. Images and attachments are uploaded in the web editor.
   `<APP_URL>/llms.txt`. They need a session or a bearer token.
 - `GET <APP_URL>/api/v1/search?q=…` (with `space`, `tag`, `type`, `limit`)
   returns results with title, URL, heading path and snippet; a support bot
-  can use it with a **service token** (Administration → Service tokens),
-  which only reads.
+  can use it with a **service token** (Administration → Service tokens, or
+  [on the server](deployment.md#service-tokens-from-the-command-line)), which
+  only reads.
 
 ## OAuth details
 
