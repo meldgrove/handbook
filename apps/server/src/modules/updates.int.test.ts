@@ -1,32 +1,46 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { startFakeUpdater, updaterStatus, type FakeUpdater } from "@meldgrove/ui/updates/testing";
 import { getDb } from "../db/client";
 import { issueCredential } from "../auth/credentials";
 import { resetConfigForTests } from "../config";
-import { startFakeUpdater, updaterStatus } from "../test/fake-updater";
 import { createToken, createUser, request, resetDatabase } from "../test/helpers";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
 
-let updater: Awaited<ReturnType<typeof startFakeUpdater>>;
+/*
+ * The app's side of the update routes: who may use them, the origin check and
+ * UPDATER_TOKEN. How the routes answer the updater is the shared handler's
+ * (@meldgrove/ui/updates/server), tested in that package.
+ */
+const TOKEN = "updater-test-token-0123456789abcdef";
+let updater: FakeUpdater;
+
+function useUpdater(settings: { UPDATER_URL: string; UPDATER_TOKEN?: string }) {
+  process.env.UPDATER_URL = settings.UPDATER_URL;
+  if (settings.UPDATER_TOKEN === undefined) delete process.env.UPDATER_TOKEN;
+  else process.env.UPDATER_TOKEN = settings.UPDATER_TOKEN;
+  resetConfigForTests();
+}
 
 describe("updates API", () => {
   beforeAll(async () => {
-    updater = await startFakeUpdater();
-    process.env.UPDATER_URL = updater.url;
-    resetConfigForTests();
+    // As compose.yaml sets it up: the updater requires the app's UPDATER_TOKEN.
+    updater = await startFakeUpdater({ token: TOKEN });
   });
   afterAll(async () => {
     await updater.close();
     delete process.env.UPDATER_URL;
+    delete process.env.UPDATER_TOKEN;
     resetConfigForTests();
   });
   beforeEach(async () => {
     await resetDatabase();
+    useUpdater({ UPDATER_URL: updater.url, UPDATER_TOKEN: TOKEN });
     updater.calls.length = 0;
     updater.respond(() => ({ body: updaterStatus() }));
   });
 
-  it("is only for admins in the web app", async () => {
+  it("is only for admins in the web app, and the updater gets UPDATER_TOKEN", async () => {
     const admin = await createUser({ isAdmin: true });
     const person = await createUser();
     const agent = await createToken(admin.id);
@@ -54,115 +68,68 @@ describe("updates API", () => {
 
     const status = await request("GET", "/api/v1/admin/updates", { userId: admin.id });
     expect(status.status).toBe(200);
+    expect(status.headers.get("cache-control")).toBe("no-store");
     expect(status.body).toEqual({
       app: { version: null },
       reachable: true,
       updater: updaterStatus(),
       error: null,
     });
+    expect(updater.calls).toEqual([
+      { method: "GET", path: "/v1/status", body: null, authorization: `Bearer ${TOKEN}` },
+    ]);
   });
 
-  it("protects changes against other sites", async () => {
+  it("installs the version an admin chose", async () => {
     const admin = await createUser({ isAdmin: true });
+    const installing = updaterStatus({
+      installing: {
+        version: "0.2.1",
+        startedAt: "2026-11-24T10:00:00.000Z",
+        manual: true,
+        stage: "requested",
+      },
+    });
+    updater.respond(() => ({ status: 202, body: installing }));
+
     const response = await request("POST", "/api/v1/admin/updates/install", {
+      userId: admin.id,
+      body: { version: "0.2.1" },
+    });
+    expect(response.status).toBe(202);
+    expect(response.body).toMatchObject({ reachable: true, updater: installing, error: null });
+    expect(updater.calls).toEqual([
+      {
+        method: "POST",
+        path: "/v1/install",
+        body: { version: "0.2.1" },
+        authorization: `Bearer ${TOKEN}`,
+      },
+    ]);
+  });
+
+  it("protects changes against other sites, and asks only for versions", async () => {
+    const admin = await createUser({ isAdmin: true });
+    const foreign = await request("POST", "/api/v1/admin/updates/install", {
       userId: admin.id,
       body: { version: "0.2.1" },
       headers: { origin: "https://evil.example.net" },
     });
-    expect(response.status).toBe(403);
+    expect(foreign.status).toBe(403);
+    const wrong = await request("POST", "/api/v1/admin/updates/install", {
+      userId: admin.id,
+      body: { version: "latest" },
+    });
+    expect(wrong.status).toBe(400);
     expect(updater.calls).toEqual([]);
   });
 
-  it("checks versions and channels before it asks the updater", async () => {
+  it("says that UPDATER_TOKEN is missing when the updater requires one", async () => {
     const admin = await createUser({ isAdmin: true });
-    for (const version of [
-      "latest",
-      "0.2",
-      "v0.2.1",
-      "0.2.1-rc.1",
-      "0.2.1\nversion=9.9.9",
-      "sha256:abc",
-      21,
-    ]) {
-      const response = await request("POST", "/api/v1/admin/updates/install", {
-        userId: admin.id,
-        body: { version },
-      });
-      expect(response.status).toBe(422);
-    }
-    const channel = await request("POST", "/api/v1/admin/updates/channel", {
-      userId: admin.id,
-      body: { channel: "nightly" },
-    });
-    expect(channel.status).toBe(422);
-    expect(updater.calls).toEqual([]);
-
-    for (const version of ["0.2.1", "0.2.1-preview.3", "sha256:0123456789ab"]) {
-      updater.respond(() => ({ status: 202, body: updaterStatus() }));
-      const response = await request("POST", "/api/v1/admin/updates/install", {
-        userId: admin.id,
-        body: { version },
-      });
-      expect(response.status).toBe(202);
-    }
-    expect(updater.calls.map((call) => call.body)).toEqual([
-      { version: "0.2.1" },
-      { version: "0.2.1-preview.3" },
-      { version: "sha256:0123456789ab" },
-    ]);
-  });
-
-  it("answers the updater's refusal with 409 and the latest status", async () => {
-    const admin = await createUser({ isAdmin: true });
-    updater.respond((call) =>
-      call.path === "/v1/channel"
-        ? { status: 409, body: { error: "The platform's image tag latest decides. Change it there." } }
-        : { body: updaterStatus({ mode: "platform" }) },
-    );
-    const response = await request("POST", "/api/v1/admin/updates/channel", {
-      userId: admin.id,
-      body: { channel: "preview" },
-    });
+    useUpdater({ UPDATER_URL: updater.url });
+    const response = await request("GET", "/api/v1/admin/updates", { userId: admin.id });
     expect(response.status).toBe(409);
-    expect(response.body).toEqual({
-      app: { version: null },
-      reachable: true,
-      updater: updaterStatus({ mode: "platform" }),
-      error: "The platform's image tag latest decides. Change it there.",
-    });
-  });
-
-  it("passes an error of the updater (5xx) through, never as a 409", async () => {
-    const admin = await createUser({ isAdmin: true });
-    updater.respond((call) =>
-      call.path === "/v1/install"
-        ? { status: 503, body: { error: "The updater is busy. Try again in a minute." } }
-        : { body: updaterStatus() },
-    );
-    const response = await request("POST", "/api/v1/admin/updates/install", {
-      userId: admin.id,
-      body: { version: "0.2.1" },
-    });
-    expect(response.status).toBe(503);
-    expect(response.body).toEqual({
-      app: { version: null },
-      reachable: true,
-      updater: updaterStatus(),
-      error: "The updater is busy. Try again in a minute.",
-    });
-  });
-
-  it("reports an updater that is not there", async () => {
-    const admin = await createUser({ isAdmin: true });
-    process.env.UPDATER_URL = "http://127.0.0.1:9";
-    resetConfigForTests();
-    try {
-      const response = await request("POST", "/api/v1/admin/updates/check", { userId: admin.id, body: {} });
-      expect(response.status).toBe(200);
-      expect(response.body).toMatchObject({ reachable: false, updater: null, error: expect.any(String) });
-    } finally {
-      process.env.UPDATER_URL = updater.url;
-      resetConfigForTests();
-    }
+    expect(response.body).toMatchObject({ reachable: true, error: expect.stringContaining("UPDATER_TOKEN") });
+    expect(updater.calls.map((call) => call.authorization)).toEqual([null]);
   });
 });

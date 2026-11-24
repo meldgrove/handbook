@@ -66,6 +66,7 @@ See [Agents and MCP](agents.md).
 | `WORKER_HEARTBEAT_FILE`              | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds while no job hangs, for health checks.                                     |
 | `WEB_DIST_DIR`, `MIGRATIONS_DIR`     | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
 | `UPDATER_URL`                        | `http://updater:8080`            | The updater's API for the update button of admins ([Deployment](deployment.md#automatic-updates)). Empty: below.   |
+| `UPDATER_TOKEN`                      | (none)                           | Recommended: the token the app sends to the updater, which then refuses requests without it. Below.                |
 
 Behind a reverse proxy, set `TRUST_PROXY`: the rate limits of sign-in and of
 connected apps (OAuth) count per client address, and without it every
@@ -75,6 +76,11 @@ An empty `UPDATER_URL` switches the update button off only where the app
 reads its environment directly (`npm run dev`, one container without
 Compose). `compose.yaml` passes `${UPDATER_URL:-http://updater:8080}`, so an
 empty value there falls back to the default.
+
+`compose.yaml` passes `UPDATER_TOKEN` to the app and, as `API_TOKEN`, to the
+updater; make it with `openssl rand -hex 32`. Without it, anything that
+reaches the updater on the Docker network could install an offered update
+([Protect the update service](deployment.md#protect-the-update-service)).
 
 ## Error reports (Sentry)
 

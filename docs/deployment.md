@@ -80,9 +80,11 @@ run the commands as root (`sudo -i`).
 4. **Create `.env`** from `.env.example` (`cp .env.example .env`,
    `chmod 600 .env`) and set production values: `HANDBOOK_VERSION` (a
    series such as `0.1`), `APP_URL`, `DATABASE_URL`, a new `AUTH_SECRET`
-   (`openssl rand -base64 32`), the `OIDC_*` values, your address in
-   `ADMIN_EMAILS`, and `SEARCH_LANGUAGES` for the languages your pages are
-   written in. Remove `NODE_ENV=development`, `RUN_MIGRATIONS` and
+   (`openssl rand -base64 32`), an `UPDATER_TOKEN` (`openssl rand -hex 32`,
+   recommended: [it protects the update service](#protect-the-update-service)),
+   the `OIDC_*` values, your address in `ADMIN_EMAILS`, and
+   `SEARCH_LANGUAGES` for the languages your pages are written in. Remove
+   `NODE_ENV=development`, `RUN_MIGRATIONS` and
    `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`. With an `https` `APP_URL`, the app
    does not start with the example `AUTH_SECRET` or with
    `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`. Without a database of your own, add
@@ -164,6 +166,9 @@ runs, and says why an installation failed. With automatic updates off on
 the server, it still shows new releases, but nothing installs from the app.
 Admins choose the channel under **Administration → Updates**. The app reaches the updater at `UPDATER_URL`
 (`http://updater:8080` in `compose.yaml`); never publish the updater's port.
+With `UPDATER_TOKEN` set, the app sends it with each request and the updater
+refuses requests without it; without it, anything that reaches the updater on
+the Docker network could install an offered update or switch the channel.
 
 Set up [backups](#backups) first: migrations run without anyone watching.
 
@@ -204,6 +209,27 @@ docker compose run --rm -T --pull always updater host-setup > updater-setup.sh &
 
 Until the host setup runs again, the updater follows the tag as before, and
 the app says that the channel needs it.
+
+### Protect the update service
+
+Recommended for installations set up before `UPDATER_TOKEN` existed; without
+it, everything works as before. Until it is done, **Administration →
+Updates** warns that the update service takes requests without a token
+(with updater 0.2.4 or later, which reports it). Do it once Handbook runs
+the release whose notes name this step, or a newer one: an older version
+does not send the token, and its update button would get no answer from the
+updater. As root in `/srv/handbook`:
+
+```sh
+git pull
+# in .env: UPDATER_TOKEN=<the output of: openssl rand -hex 32>
+docker compose pull updater
+docker compose up -d
+```
+
+`git pull` brings the `compose.yaml` that passes the token to the app and to
+the updater (as `API_TOKEN`); `docker compose pull updater` makes sure the
+updater is one that checks it. Then the updater answers only the app.
 
 ## Backups
 

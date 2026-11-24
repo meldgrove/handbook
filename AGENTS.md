@@ -13,7 +13,8 @@ npm workspaces, Node.js 26, strict TypeScript.
 - `apps/server`: Hono (API under `/api/v1`, MCP under `/mcp`, OAuth under
   `/.well-known` and `/oauth`), Better Auth (OIDC sign-in under `/api/auth`),
   Drizzle ORM on PostgreSQL, remark (Markdown analysis), the MCP TypeScript
-  SDK, pino logs, Sentry, Vitest.
+  SDK, pino logs, Sentry, Vitest. The update routes come from
+  `@meldgrove/ui/updates/server`.
 - `apps/web`: Vite + React 19, TanStack Router and Query, Tailwind CSS 4
   with `@meldgrove/ui` (the shared Meldgrove theme, shadcn/ui components and
   update button), Tiptap (the rich-text editor; `components/editor/rich-text/`

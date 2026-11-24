@@ -113,3 +113,14 @@ jobs:
       - name: The image starts its processes
         run: |
           docker run --rm --entrypoint node handbook:ci --import /app/apps/server/dist/instrument.mjs -e "process.exit(0)"
+
+  # A new image must still start with the compose files that servers have:
+  # those of the newest release (branch stable).
+  compose-compat:
+    name: Compose files of the newest release
+    permissions:
+      contents: read
+    uses: meldgrove/.github/.github/workflows/compose-compat.yml@401e2112820727724d7143307850eaeceac6d5f0 # v1.2.0
+    with:
+      version_variable: HANDBOOK_VERSION
+      env_file: .github/compose-compat.env

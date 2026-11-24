@@ -50,6 +50,14 @@ describe("config", () => {
     expect(configWith({ UPDATER_URL: "file:///etc/passwd" })).toThrow(/UPDATER_URL/);
   });
 
+  it("reads UPDATER_TOKEN: optional, empty means none, no spaces", () => {
+    delete process.env.UPDATER_TOKEN;
+    expect(configWith({})().UPDATER_TOKEN).toBeUndefined();
+    expect(configWith({ UPDATER_TOKEN: " " })().UPDATER_TOKEN).toBeUndefined();
+    expect(configWith({ UPDATER_TOKEN: "0123abcd" })().UPDATER_TOKEN).toBe("0123abcd");
+    expect(configWith({ UPDATER_TOKEN: "two words" })).toThrow(/UPDATER_TOKEN/);
+  });
+
   it("reads the session and agent limits", () => {
     const defaults = configWith({})();
     expect(defaults).toMatchObject({
