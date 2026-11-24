@@ -226,4 +226,6 @@ triangle means an installation failed; the icon says why, and the version
 before keeps running. **Administration → Updates** shows the installed
 version and the channel: **Stable** (releases, recommended) or **Preview**
 (every change before it is released). The server must run the updater
-([Deployment](deployment.md#automatic-updates)).
+([Deployment](deployment.md#automatic-updates)). When the page warns that
+the update service takes requests without a token, ask the person who runs
+the server to [protect it](deployment.md#protect-the-update-service).

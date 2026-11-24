@@ -26,9 +26,11 @@ logs and hardening are the same as on a server: see
 5. **Environment variables** of the resource: `HANDBOOK_VERSION` (a series
    such as `0.1`, see [Automatic updates](#automatic-updates)), `APP_URL`
    (the domain), `DATABASE_URL` (the database's internal URL), a new
-   `AUTH_SECRET` (`openssl rand -base64 32`), the `OIDC_*` values, your
-   address in `ADMIN_EMAILS`, and `SEARCH_LANGUAGES` for the languages your
-   pages are written in.
+   `AUTH_SECRET` (`openssl rand -base64 32`), an `UPDATER_TOKEN`
+   (`openssl rand -hex 32`, recommended: [it protects the update
+   service](#protect-the-update-service)), the `OIDC_*` values, your address
+   in `ADMIN_EMAILS`, and `SEARCH_LANGUAGES` for the languages your pages are
+   written in.
 6. **Deploy**, open `APP_URL`, sign in, and create the first space under
    **Administration → Spaces**.
 7. **Automatic updates:** set them up as [below](#automatic-updates).
@@ -72,6 +74,20 @@ app. `UPDATE_COOLDOWN`, `UPDATE_WINDOW` and `TZ` work as on a server
 
 The `updater` log then names the tag it watches. Set up backups first:
 migrations run without anyone watching.
+
+### Protect the update service
+
+With `UPDATER_TOKEN` set, the app sends it with each request to the updater,
+and the updater refuses requests without it. Recommended for resources set
+up before it existed; without it, everything works as before. Until it is
+done, **Administration → Updates** warns that the update service takes
+requests without a token (with updater 0.2.4 or later, which reports it).
+Do it once the tag in `HANDBOOK_VERSION` gives the release whose notes name
+this step, or a newer one: each deploy pulls that tag, and an older version
+does not send the token, so its update button would get no answer. In the
+resource's environment variables, set `UPDATER_TOKEN` to the output of
+`openssl rand -hex 32`, then redeploy: Coolify reads `compose.coolify.yaml`
+from `stable` and pulls the images again.
 
 ## Moving an existing resource
 

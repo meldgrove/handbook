@@ -2,7 +2,10 @@
 // dist/instrument.mjs (loaded first with node --import). npm dependencies stay
 // external (they are installed in the image), @sentry/node too: its tracing
 // hooks into packages such as pg as they load, which does not work from
-// inside a bundle. The workspace package (@handbook/shared) is bundled.
+// inside a bundle. The workspace package (@handbook/shared) is bundled, and so
+// is @meldgrove/ui/updates/server: @meldgrove/ui is a root devDependency, not
+// one of the server's, so the image's production install leaves out the
+// package and its React peers.
 import { build } from "esbuild";
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";

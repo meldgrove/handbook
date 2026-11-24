@@ -25,8 +25,10 @@ x-app-environment: &app-environment
   ADMIN_EMAILS: ${ADMIN_EMAILS:?Set ADMIN_EMAILS to the first admin's email address}
   # The reverse proxy in front of the app sets X-Forwarded-For.
   TRUST_PROXY: ${TRUST_PROXY:-true}
-  # The update button of admins asks the updater service below.
+  # The update button of admins asks the updater service below, with
+  # UPDATER_TOKEN (openssl rand -hex 32), which the updater then requires.
   UPDATER_URL: ${UPDATER_URL:-http://updater:8080}
+  UPDATER_TOKEN: ${UPDATER_TOKEN:-}
 
 x-app: &app
   image: *image
@@ -99,6 +101,9 @@ services:
     environment:
       IMAGE: *image
       VERSION_VARIABLE: HANDBOOK_VERSION
+      # With UPDATER_TOKEN set, the API takes only requests that carry it, as
+      # the app's do. Empty: requests from anything on the Docker network.
+      API_TOKEN: ${UPDATER_TOKEN:-}
       DEPLOY_HOOK_URL: ${UPDATE_DEPLOY_HOOK_URL:-}
       DEPLOY_HOOK_TOKEN: ${UPDATE_DEPLOY_HOOK_TOKEN:-}
       # A stable release installs once it has been out this long; every
