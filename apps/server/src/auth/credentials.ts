@@ -52,6 +52,7 @@ export async function issueCredential(
     userId: string | null;
     grantId?: string | null;
     createdById?: string | null;
+    createdByOperator?: boolean;
     expiresAt: Date | null;
   },
 ): Promise<{ id: string; secret: string }> {
@@ -66,6 +67,7 @@ export async function issueCredential(
       userId: input.userId,
       grantId: input.grantId ?? null,
       createdById: input.createdById ?? null,
+      createdByOperator: input.createdByOperator ?? false,
       expiresAt: input.expiresAt,
     })
     .returning({ id: credentials.id });

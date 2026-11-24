@@ -162,13 +162,13 @@ describe("cli tokens list", () => {
 
     const [first, second] = (await cli("tokens", "list")).stdout.trimEnd().split("\n");
     expect(first).toBe(
-      `service ${token.id}  expired  "Connector"; ${token.secret.slice(0, 11)}…; created 2026-01-03; last used never; expires 2026-04-03`,
+      `service ${token.id}  expired  "Connector"; ${token.secret.slice(0, 11)}…; created 2026-01-03 by Operator; last used never; expires 2026-04-03`,
     );
     expect(second).toBe(
       `service ${page.body.id}  active   "Support\\nbot"; ${page.body.prefix}; created 2026-01-02 by ada@example.org; last used never; expires never`,
     );
     const answer = await request("GET", "/api/v1/admin/service-tokens", { userId: admin.id });
-    expect(answer.body.items).toHaveLength(2);
+    expect(answer.body.items).toMatchObject([{ createdBy: "Operator" }, { createdBy: "ada@example.org" }]);
     expect(JSON.parse((await cli("tokens", "list", "--json")).stdout)).toEqual(answer.body.items);
   });
 });
