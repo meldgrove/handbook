@@ -32,7 +32,7 @@ the releases within a series install without anyone acting. Every change on
 
 | File                    | Contains                                                                           |
 | ----------------------- | ---------------------------------------------------------------------------------- |
-| `Dockerfile`            | The image. Its command (`all`, `web`, `worker`, `migrate`) picks the role.         |
+| `Dockerfile`            | The image. Its command (`all`, `web`, `worker`, `migrate`, `cli`) picks the role.  |
 | `compose.yaml`          | A one-off `migrate`, the web app (`web`), the `worker` and the optional `updater`. |
 | `compose.postgres.yaml` | Adds a PostgreSQL 18 container, for servers without a database of their own.       |
 | `compose.coolify.yaml`  | The same as `compose.yaml`, for [Coolify](coolify.md).                             |
@@ -110,6 +110,45 @@ run the commands as root (`sudo -i`).
 7. Open `APP_URL`, sign in, and create the first space under
    **Administration → Spaces**.
 8. **Automatic updates:** [set them up](#setup-on-the-server).
+
+## Service tokens from the command line
+
+Admins create read-only [service tokens](identity-and-access.md#agents)
+under **Administration → Service tokens**. An operator, or AI with access to
+the server, can do the same without a browser:
+
+```sh
+docker compose run --rm -T migrate cli tokens list
+```
+
+In a running container, `cli` is on the `PATH`:
+`docker compose exec web cli tokens list`. `cli help` lists every command.
+It runs the same code as the page, with an admin's rights. The audit log
+names the actor `operator` and the command; the page shows no one under
+**Created by**.
+
+| Command                                   | What it does                                                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `cli tokens create service --name <name>` | A new token. It expires after 90 days; `--expires-in-days <days>` sets 1 to 3650 days, `--expires-in-days never` no end. |
+| `cli tokens list [--json]`                | The tokens that are not revoked: ID, name, first characters, created, last used, expiry. Never the token itself.         |
+| `cli tokens revoke <id>`                  | Ends a token for good.                                                                                                   |
+
+A new token is printed once, alone on stdout; its ID and expiry go to
+stderr. So `> file` keeps only the token, here in a file that only the
+current user may read:
+
+```sh
+(umask 077; docker compose run --rm -T migrate \
+  cli tokens create service --name Connector > connector.token)
+```
+
+AI with access to the server writes the token into a file like this, passes
+it on to the app that uses it (for example in the body of that app's
+`cli settings apply`), checks the connection there and deletes the file.
+
+Exit codes: 0 done; 1 the app refuses, with the page's message on stderr;
+2 a wrong command. Handbook's settings are in `.env`
+([Configuration](configuration.md)), so there is no `cli settings`.
 
 ## Health checks
 

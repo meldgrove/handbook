@@ -1,4 +1,5 @@
-import { pino, stdSerializers } from "pino";
+import { pino, stdSerializers, type LoggerOptions } from "pino";
+import { logTarget } from "./log-target";
 
 type FailedQuery = Error & { query: string; params: unknown[] };
 
@@ -30,13 +31,11 @@ export function serializeError(error: unknown) {
   };
 }
 
-/**
- * Structured JSON logs. Never log message texts, answers, tokens or other
- * personal data; log identifiers instead.
- */
-export const logger = pino({
+const toStderr = logTarget() === "stderr";
+
+const options: LoggerOptions = {
   level: process.env.LOG_LEVEL?.trim() || (process.env.NODE_ENV === "test" ? "silent" : "info"),
-  base: { role: process.env.APP_ROLE?.trim() || "all" },
+  base: { role: toStderr ? "cli" : process.env.APP_ROLE?.trim() || "all" },
   serializers: { err: serializeError },
   redact: {
     paths: [
@@ -53,7 +52,13 @@ export const logger = pino({
     ],
     censor: "[redacted]",
   },
-  ...(process.env.NODE_ENV === "development" && process.stdout.isTTY
+  ...(process.env.NODE_ENV === "development" && process.stdout.isTTY && !toStderr
     ? { transport: { target: "pino-pretty", options: { colorize: true, ignore: "pid,hostname" } } }
     : {}),
-});
+};
+
+/**
+ * Structured JSON logs. Never log message texts, answers, tokens or other
+ * personal data; log identifiers instead. The operator command logs to stderr.
+ */
+export const logger = pino(options, toStderr ? pino.destination({ fd: 2, sync: true }) : undefined);

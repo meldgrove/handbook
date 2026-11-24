@@ -35,6 +35,12 @@ logs and hardening are the same as on a server: see
    **Administration → Spaces**.
 7. **Automatic updates:** set them up as [below](#automatic-updates).
 
+Service tokens can also be created in a terminal: in the resource, open
+**Terminal**, choose the `web` container and run
+`cli tokens create service --name <name>`. It prints the token once. The
+commands are in
+[Deployment](deployment.md#service-tokens-from-the-command-line).
+
 Coolify's proxy must pass `/mcp`, `/oauth/*` and `/.well-known/*` to the app
 unchanged, as on a server ([What runs](deployment.md#what-runs)).
 

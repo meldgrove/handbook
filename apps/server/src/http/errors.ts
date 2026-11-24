@@ -45,3 +45,14 @@ export function parseWith<T extends z.ZodType>(schema: T, value: unknown): z.inf
   if (!parsed.success) throw validationError(zodFieldErrors(parsed.error));
   return parsed.data;
 }
+
+/** The SQLSTATE of a database error, also when Drizzle wrapped it (`cause`). */
+export function databaseErrorCode(error: unknown): string | undefined {
+  let current = error;
+  for (let depth = 0; depth < 3 && current instanceof Error; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+    current = current.cause;
+  }
+  return undefined;
+}

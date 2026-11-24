@@ -25,13 +25,15 @@ npm workspaces, Node.js 26, strict TypeScript.
   (`paths.ts`), merging and edits (`merge.ts`), roles and abilities
   (`roles.ts`), limits.
 
-One Docker image runs every process: `APP_ROLE` = `all | web | worker | migrate`.
+One Docker image runs every process: `APP_ROLE` = `all | web | worker | migrate`;
+its command `cli …` runs the operator command (`cli tokens`).
 
 ## Layout
 
 ```
 apps/server/src/
   main.ts          entry; APP_ROLE selects the processes
+  cli.ts           entry of the operator command; its commands are in cli/
   config.ts        every environment variable (zod); read only via config()
   db/schema/       Drizzle schema (auth.ts, app.ts)
   auth/            Better Auth, sign-in access check, credentials (tokens), principals
@@ -60,7 +62,8 @@ packages/shared/src/  contracts, page model, paths, merge, roles
   `spaceContext` + `requireAbility`. Abilities come only from
   `spaceAbilities` in `packages/shared/src/roles.ts`. Agents (personal
   tokens, connected apps) never edit live, never merge and never administer;
-  service tokens only read.
+  service tokens only read. Only `cli/` creates the `operator` principal, with
+  an admin's rights; it calls the same service functions as the admin routes.
 - **Drafts and the trash:** a draft hides itself and every page below it
   from those without `seeDrafts`. Every list, count and read of pages or
   change sets filters through `apps/server/src/spaces/visibility.ts`

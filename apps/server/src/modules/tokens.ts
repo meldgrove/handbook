@@ -1,44 +1,22 @@
 import { Hono } from "hono";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import {
-  tokenCreateSchema,
-  type ConnectedApp,
-  type ConnectInfo,
-  type ServiceToken,
-  type Token,
-} from "@handbook/shared/api/tokens";
+import { tokenCreateSchema, type ConnectedApp, type ConnectInfo } from "@handbook/shared/api/tokens";
 import { config } from "../config";
 import { getDb } from "../db/client";
-import { credentials, oauthClients, oauthGrants, users } from "../db/schema";
+import { credentials, oauthClients, oauthGrants } from "../db/schema";
 import type { AppEnv } from "../http/env";
 import { notFound } from "../http/errors";
 import { idParam, jsonBody, requireAdmin, requireUser, requireWebUser } from "../http/middleware";
-import { issueCredential } from "../auth/credentials";
-import { audit } from "../core/audit";
+import { expiryIn, issueCredential, tokenView } from "../auth/credentials";
+import { createServiceToken, listServiceTokens, revokeServiceToken } from "../auth/service-tokens";
 import { decideRequest, describeRequest, revokeGrantTokens } from "../oauth/flow";
+import { iso } from "./util";
 
 /**
  * Credentials of agents: personal tokens, connected apps (OAuth grants),
  * the consent screen's API, and read-only service tokens (admins).
  */
 const router = new Hono<AppEnv>();
-
-const iso = (value: Date | null) => (value ? value.toISOString() : null);
-
-function tokenView(row: typeof credentials.$inferSelect): Token {
-  return {
-    id: row.id,
-    name: row.name,
-    prefix: row.prefix,
-    createdAt: row.createdAt.toISOString(),
-    lastUsedAt: iso(row.lastUsedAt),
-    expiresAt: iso(row.expiresAt),
-  };
-}
-
-function expiry(days: number | null) {
-  return days === null ? null : new Date(Date.now() + days * 86_400_000);
-}
 
 router.get("/tokens", async (c) => {
   const principal = requireWebUser(c);
@@ -64,7 +42,7 @@ router.post("/tokens", async (c) => {
     name: input.name,
     userId: principal.id,
     createdById: principal.id,
-    expiresAt: expiry(input.expiresInDays),
+    expiresAt: expiryIn(input.expiresInDays),
   });
   const [row] = await getDb().select().from(credentials).where(eq(credentials.id, id));
   return c.json({ ...tokenView(row!), secret }, 201);
@@ -151,62 +129,20 @@ router.post("/oauth/requests/:id/deny", async (c) => {
   return c.json({ redirectUrl: await decideRequest(getDb(), principal, idParam(c), false) });
 });
 
-async function serviceTokens(): Promise<ServiceToken[]> {
-  const rows = await getDb()
-    .select({ credential: credentials, createdBy: users.email })
-    .from(credentials)
-    .leftJoin(users, eq(users.id, credentials.createdById))
-    .where(and(eq(credentials.kind, "service"), isNull(credentials.revokedAt)))
-    .orderBy(desc(credentials.createdAt));
-  return rows.map((row) => ({ ...tokenView(row.credential), createdBy: row.createdBy }));
-}
-
 router.get("/admin/service-tokens", async (c) => {
   requireAdmin(c);
-  return c.json({ items: await serviceTokens() });
+  return c.json({ items: await listServiceTokens(getDb()) });
 });
 
 router.post("/admin/service-tokens", async (c) => {
   const principal = requireAdmin(c);
   const input = await jsonBody(c, tokenCreateSchema);
-  const created = await getDb().transaction(async (tx) => {
-    const issued = await issueCredential(tx, {
-      kind: "service",
-      name: input.name,
-      userId: null,
-      createdById: principal.id,
-      expiresAt: expiry(input.expiresInDays),
-    });
-    await audit(tx, principal, {
-      action: "service_token.create",
-      entityType: "service_token",
-      entityId: issued.id,
-      summary: `Created the service token “${input.name}”`,
-    });
-    return issued;
-  });
-  const [row] = await getDb().select().from(credentials).where(eq(credentials.id, created.id));
-  return c.json({ ...tokenView(row!), createdBy: principal.email, secret: created.secret }, 201);
+  return c.json(await createServiceToken(getDb(), principal, input), 201);
 });
 
 router.delete("/admin/service-tokens/:id", async (c) => {
   const principal = requireAdmin(c);
-  await getDb().transaction(async (tx) => {
-    const [row] = await tx
-      .update(credentials)
-      .set({ revokedAt: new Date() })
-      .where(
-        and(eq(credentials.id, idParam(c)), eq(credentials.kind, "service"), isNull(credentials.revokedAt)),
-      )
-      .returning({ id: credentials.id, name: credentials.name });
-    if (!row) throw notFound("No such service token");
-    await audit(tx, principal, {
-      action: "service_token.revoke",
-      entityType: "service_token",
-      entityId: row.id,
-      summary: `Revoked the service token “${row.name}”`,
-    });
-  });
+  await revokeServiceToken(getDb(), principal, idParam(c));
   return c.body(null, 204);
 });
 
