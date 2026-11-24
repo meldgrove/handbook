@@ -214,6 +214,7 @@ describe("a wrong command", () => {
     [[]],
     [["settings", "list"]],
     [[TYPED_SECRET]],
+    [["help", TYPED_SECRET]],
     [["tokens"]],
     [["tokens", TYPED_SECRET]],
     [["tokens", "create"]],
