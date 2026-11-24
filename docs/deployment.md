@@ -124,7 +124,7 @@ docker compose run --rm -T migrate cli tokens list
 In a running container, `cli` is on the `PATH`:
 `docker compose exec web cli tokens list`. `cli help` lists every command.
 It runs the same code as the page, with an admin's rights. The audit log
-names the actor `operator` and the command; the page shows no one under
+names the actor `operator` and the command; the page shows **Operator** under
 **Created by**.
 
 | Command                                   | What it does                                                                                                             |
@@ -134,11 +134,12 @@ names the actor `operator` and the command; the page shows no one under
 | `cli tokens revoke <id>`                  | Ends a token for good.                                                                                                   |
 
 A new token is printed once, alone on stdout; its ID and expiry go to
-stderr. So `> file` keeps only the token, here in a file that only the
-current user may read:
+stderr. So `> file` keeps only the token, here in a new file that only the
+current user may read (`set -C` refuses to overwrite one that is there
+already):
 
 ```sh
-(umask 077; docker compose exec -T web \
+(umask 077; set -C; docker compose exec -T web \
   cli tokens create service --name Connector > connector.token)
 ```
 

@@ -12,6 +12,9 @@ import { isOperator, type Actor } from "./principal";
  * (modules/tokens.ts) and the operator command (cli/tokens.ts) call these.
  */
 
+/** Who created a token that was made with the operator command. */
+const OPERATOR_LABEL = "Operator";
+
 /** The service tokens that are not revoked, newest first. */
 export async function listServiceTokens(db: Db): Promise<ServiceToken[]> {
   const rows = await db
@@ -20,7 +23,10 @@ export async function listServiceTokens(db: Db): Promise<ServiceToken[]> {
     .leftJoin(users, eq(users.id, credentials.createdById))
     .where(and(eq(credentials.kind, "service"), isNull(credentials.revokedAt)))
     .orderBy(desc(credentials.createdAt));
-  return rows.map((row) => ({ ...tokenView(row.credential), createdBy: row.createdBy }));
+  return rows.map((row) => ({
+    ...tokenView(row.credential),
+    createdBy: row.credential.createdByOperator ? OPERATOR_LABEL : row.createdBy,
+  }));
 }
 
 /** A new token; `secret` is shown once and never stored. */
@@ -36,6 +42,7 @@ export async function createServiceToken(
       name: input.name,
       userId: null,
       createdById: user?.id ?? null,
+      createdByOperator: isOperator(actor),
       expiresAt: expiryIn(input.expiresInDays),
     });
     await audit(tx, actor, {
@@ -47,7 +54,7 @@ export async function createServiceToken(
     return issued;
   });
   const [row] = await db.select().from(credentials).where(eq(credentials.id, created.id));
-  return { ...tokenView(row!), createdBy: user?.email ?? null, secret: created.secret };
+  return { ...tokenView(row!), createdBy: user?.email ?? OPERATOR_LABEL, secret: created.secret };
 }
 
 /** Ends a token for good; answers its name. */
