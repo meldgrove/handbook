@@ -56,7 +56,7 @@ jobs:
       description: "A self-hosted knowledge base of Markdown pages in spaces: staff edit in the browser, AI agents read everything and propose change sets over MCP, editors review and merge. Sign-in with Keycloak or any OpenID Connect provider."
       # Releases upload their source maps to this Sentry project, with the
       # SENTRY_AUTH_TOKEN secret (an organization token).
-      sentry_org: meldgrove
+      sentry_org: projecttogether
       sentry_project: handbook
     secrets:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
